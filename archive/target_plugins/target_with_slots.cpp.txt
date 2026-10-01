@@ -1,4 +1,4 @@
-#include "target.hpp"
+#include "core/auto_aim/target/target.hpp"
 
 #include <numeric>
 
@@ -7,6 +7,89 @@
 
 namespace auto_aim
 {
+namespace
+{
+// ⭐ W23/W25：默认策略 —— **严格等于同济行为**
+//   · 角速度：`EkfStateOnly`（直接透传 EKF 的 x[7]；同济没有历史差分）
+//   · 过程噪声：`FixedNoise`（同济的 v1/v2 是硬编码，不自适应）
+//   · 观测滤波：`PassthroughFilter`（同济没有这一层）
+inline std::unique_ptr<IAngularVelocityEstimator> default_ang_vel()
+{
+  return std::make_unique<EkfStateOnly>();
+}
+inline std::unique_ptr<IProcessNoiseAdapter> default_noise_adapter()
+{
+  return std::make_unique<FixedNoise>();   // ⚠️ 默认 FixedNoise = 保持同济的硬编码 v1/v2 行为
+}
+inline std::unique_ptr<IMeasurementFilter> default_meas_filter()
+{
+  return std::make_unique<PassthroughFilter>();   // ⚠️ 默认不过滤 = 同济行为
+}
+}  // namespace
+
+// ⭐⭐ W23：深拷贝（clone 插件）—— 原来靠隐式拷贝
+Target::Target(const Target & other)
+: name(other.name),
+  armor_type(other.armor_type),
+  priority(other.priority),
+  jumped(other.jumped),
+  last_id(other.last_id),
+  isinit(other.isinit),
+  armor_num_(other.armor_num_),
+  switch_count_(other.switch_count_),
+  update_count_(other.update_count_),
+  is_switch_(other.is_switch_),
+  is_converged_(other.is_converged_),
+  ekf_(other.ekf_),
+  t_(other.t_),
+  angular_velocity_estimator_(other.angular_velocity_estimator_
+                                ? other.angular_velocity_estimator_->clone()
+                                : default_ang_vel()),
+  process_noise_adapter_(other.process_noise_adapter_ ? other.process_noise_adapter_->clone()
+                                                      : default_noise_adapter()),
+  measurement_filter_(other.measurement_filter_ ? other.measurement_filter_->clone()
+                                                : default_meas_filter())
+{
+}
+
+Target & Target::operator=(const Target & other)
+{
+  if (this == &other) return *this;
+  name = other.name;
+  armor_type = other.armor_type;
+  priority = other.priority;
+  jumped = other.jumped;
+  last_id = other.last_id;
+  isinit = other.isinit;
+  armor_num_ = other.armor_num_;
+  switch_count_ = other.switch_count_;
+  update_count_ = other.update_count_;
+  is_switch_ = other.is_switch_;
+  is_converged_ = other.is_converged_;
+  ekf_ = other.ekf_;
+  t_ = other.t_;
+  angular_velocity_estimator_ =
+    other.angular_velocity_estimator_ ? other.angular_velocity_estimator_->clone() : default_ang_vel();
+  process_noise_adapter_ =
+    other.process_noise_adapter_ ? other.process_noise_adapter_->clone() : default_noise_adapter();
+  measurement_filter_ =
+    other.measurement_filter_ ? other.measurement_filter_->clone() : default_meas_filter();
+  return *this;
+}
+
+void Target::set_angular_velocity_estimator(std::unique_ptr<IAngularVelocityEstimator> e)
+{
+  angular_velocity_estimator_ = e ? std::move(e) : default_ang_vel();
+}
+void Target::set_process_noise_adapter(std::unique_ptr<IProcessNoiseAdapter> a)
+{
+  process_noise_adapter_ = a ? std::move(a) : default_noise_adapter();
+}
+void Target::set_measurement_filter(std::unique_ptr<IMeasurementFilter> f)
+{
+  measurement_filter_ = f ? std::move(f) : default_meas_filter();
+}
+
 Target::Target(
   const Armor & armor, std::chrono::steady_clock::time_point t, double radius, int armor_num,
   Eigen::VectorXd P0_dig)
@@ -46,7 +129,10 @@ Target::Target(
     return c;
   };
 
-  ekf_ = tools::ExtendedKalmanFilter(x0, P0, x_add);  //初始化滤波器（预测量、预测量协方差）
+  ekf_ = tools::ExtendedKalmanFilter(x0, P0, x_add);
+  angular_velocity_estimator_ = default_ang_vel();       // ⭐ W23
+  process_noise_adapter_ = default_noise_adapter();
+  measurement_filter_ = default_meas_filter();  //初始化滤波器（预测量、预测量协方差）
 }
 
 Target::Target(double x, double vyaw, double radius, double h) : armor_num_(4)
@@ -62,7 +148,10 @@ Target::Target(double x, double vyaw, double radius, double h) : armor_num_(4)
     return c;
   };
 
-  ekf_ = tools::ExtendedKalmanFilter(x0, P0, x_add);  //初始化滤波器（预测量、预测量协方差）
+  ekf_ = tools::ExtendedKalmanFilter(x0, P0, x_add);
+  angular_velocity_estimator_ = default_ang_vel();       // ⭐ W23
+  process_noise_adapter_ = default_noise_adapter();
+  measurement_filter_ = default_meas_filter();  //初始化滤波器（预测量、预测量协方差）
 }
 
 void Target::predict(std::chrono::steady_clock::time_point t)
@@ -93,13 +182,17 @@ void Target::predict(double dt)
 
   // Piecewise White Noise Model
   // https://github.com/rlabbe/Kalman-and-Bayesian-Filters-in-Python/blob/master/07-Kalman-Filter-Math.ipynb
-  double v1, v2;
-  if (name == ArmorName::outpost) {
-    v1 = 10;   // 前哨站加速度方差
-    v2 = 0.1;  // 前哨站角加速度方差
-  } else {
-    v1 = 100;  // 加速度方差
-    v2 = 400;  // 角加速度方差
+  // ⭐ W23：基线与同济一致（前哨站 10/0.1，其他 100/400），**再交给策略槽位调整**
+  //   同济这里是**硬编码局部变量**，没有任何自适应；`NisBasedAdapter` 会按 NIS 调 Q。
+  double v1 = (name == ArmorName::outpost) ? 10.0 : 100.0;    // 加速度方差
+  double v2 = (name == ArmorName::outpost) ? 0.1 : 400.0;     // 角加速度方差
+  if (process_noise_adapter_) {
+    double nis = 0.0;
+    const auto it = ekf_.data.find("nis");
+    if (it != ekf_.data.end()) nis = it->second;
+    process_noise_adapter_->adapt(nis, v1, v2);
+    last_q_v1_ = v1;
+    last_q_v2_ = v2;
   }
   auto a = dt * dt * dt * dt / 4;
   auto b = dt * dt * dt / 2;
@@ -137,6 +230,12 @@ void Target::predict(double dt)
 
 void Target::update(const Armor & armor)
 {
+  // ⭐ W23：把本次观测的 yaw 喂给角速度策略槽位（历史由插件自己管）
+  if (angular_velocity_estimator_) {
+    angular_velocity_estimator_->set_ekf_angular_velocity(ekf_x().size() > 7 ? ekf_x()[7] : 0.0);
+    angular_velocity_estimator_->update(armor.ypr_in_world[0], std::chrono::steady_clock::now());
+  }
+
   // 装甲板匹配
   int id;
   auto min_angle_error = 1e10;
@@ -215,9 +314,17 @@ void Target::update_ypda(const Armor & armor, int id)
     return c;
   };
 
-  const Eigen::VectorXd & ypd = armor.ypd_in_world;
+  // ⭐ W23：观测预处理策略槽位（同济**完全没有**这一层）
+  //   做法：spherical(ypd) → xyz → 策略滤波 → spherical(ypd)，保持观测量语义不变
+  Eigen::Vector3d ypd_vec = armor.ypd_in_world;
+  if (measurement_filter_) {
+    const Eigen::Vector3d xyz_raw = tools::ypd2xyz(ypd_vec);
+    const Eigen::Vector3d xyz_filt = measurement_filter_->filter(xyz_raw);
+    ypd_vec = tools::xyz2ypd(xyz_filt);
+  }
+
   const Eigen::VectorXd & ypr = armor.ypr_in_world;
-  Eigen::VectorXd z{{ypd[0], ypd[1], ypd[2], ypr[0]}};  //获得观测量
+  Eigen::VectorXd z{{ypd_vec[0], ypd_vec[1], ypd_vec[2], ypr[0]}};  //获得观测量
 
   ekf_.update(z, H, R, h, z_subtract);
 }

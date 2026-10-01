@@ -1,5 +1,4 @@
 #include "tracker.hpp"
-#include "core/auto_aim/target/target_plugins_factory.hpp"   // ⭐ W42：yaml 装配 Target 槽位
 
 #include <yaml-cpp/yaml.h>
 
@@ -44,7 +43,6 @@ std::string Tracker::state() const { return state_; }
 
 void Tracker::reload(const YAML::Node & yaml)
 {
-  yaml_ = yaml;   // ⭐ W42
   filter_.load(yaml);
   priority_mode_ = parse_priority_mode(yaml, priority_mode_);
   tools::logger()->info(
@@ -278,25 +276,21 @@ bool Tracker::set_target(std::list<Armor> & armors, std::chrono::steady_clock::t
   if (is_balance) {
     Eigen::VectorXd P0_dig{{1, 64, 1, 64, 1, 64, 0.4, 100, 1, 1, 1}};
     target_ = Target(armor, t, 0.2, 2, P0_dig);
-    apply_target_plugins_from_yaml(target_, yaml_);   // ⭐ W42：从 yaml 装配 3 个槽位（缺省 = 同济）
   }
 
   else if (armor.name == ArmorName::outpost) {
     Eigen::VectorXd P0_dig{{1, 64, 1, 64, 1, 81, 0.4, 100, 1e-4, 0, 0}};
     target_ = Target(armor, t, 0.2765, 3, P0_dig);
-    apply_target_plugins_from_yaml(target_, yaml_);   // ⭐ W42：从 yaml 装配 3 个槽位（缺省 = 同济）
   }
 
   else if (armor.name == ArmorName::base) {
     Eigen::VectorXd P0_dig{{1, 64, 1, 64, 1, 64, 0.4, 100, 1e-4, 0, 0}};
     target_ = Target(armor, t, 0.3205, 3, P0_dig);
-    apply_target_plugins_from_yaml(target_, yaml_);   // ⭐ W42：从 yaml 装配 3 个槽位（缺省 = 同济）
   }
 
   else {
     Eigen::VectorXd P0_dig{{1, 64, 1, 64, 1, 64, 0.4, 100, 1, 1, 1}};
     target_ = Target(armor, t, 0.2, 4, P0_dig);
-    apply_target_plugins_from_yaml(target_, yaml_);   // ⭐ W42：从 yaml 装配 3 个槽位（缺省 = 同济）
   }
 
   return true;

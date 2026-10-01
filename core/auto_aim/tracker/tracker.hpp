@@ -67,9 +67,6 @@ private:
   //   同济的 `tracker` 从不给 `armor.priority` 赋值，却用它排序 —— 那是 C18（未初始化 UB）。
   //   我们已把默认值固定为 `fifth`（消除 UB，见 core/types.hpp），但**排序行为仍与同济一致**
   //   （全是 fifth → 等价于不排序）。开启优先级模式才启用 4 张表。
-  // ⭐ W42：保存 yaml —— `Target` 是在 `track()` 里构造的，需要在这里装配插件槽位
-  YAML::Node yaml_;
-
   PriorityMode priority_mode_ = MODE_ONE;
   bool priority_mode_set_ = false;
   InvincibleMask invincible_;                 // 无敌掩码

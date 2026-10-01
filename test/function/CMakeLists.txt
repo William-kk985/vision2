@@ -54,9 +54,6 @@ add_executable(test_hot_reload test_hot_reload.cpp)
 target_link_libraries(test_hot_reload hzmir_utils)
 add_test(NAME test_hot_reload COMMAND test_hot_reload)
 
-add_executable(test_target_plugins test_target_plugins.cpp)
-target_link_libraries(test_target_plugins hzmir_auto_aim hzmir_utils)
-add_test(NAME test_target_plugins COMMAND test_target_plugins)
 
 add_executable(test_chi2 test_chi2.cpp)
 target_link_libraries(test_chi2 hzmir_utils)
@@ -81,6 +78,7 @@ add_executable(test_target_copy test_target_copy.cpp)
 target_link_libraries(test_target_copy hzmir_auto_aim hzmir_utils)
 add_test(NAME test_target_copy COMMAND test_target_copy)
 
-add_executable(test_target_plugins_yaml test_target_plugins_yaml.cpp)
-target_link_libraries(test_target_plugins_yaml hzmir_auto_aim hzmir_utils)
-add_test(NAME test_target_plugins_yaml COMMAND test_target_plugins_yaml)
+
+add_executable(test_wheels_estimate test_wheels_estimate.cpp)
+target_link_libraries(test_wheels_estimate hzmir_utils)
+add_test(NAME test_wheels_estimate COMMAND test_wheels_estimate)

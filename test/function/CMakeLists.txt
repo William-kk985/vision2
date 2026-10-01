@@ -82,3 +82,7 @@ add_test(NAME test_target_copy COMMAND test_target_copy)
 add_executable(test_wheels_estimate test_wheels_estimate.cpp)
 target_link_libraries(test_wheels_estimate hzmir_utils)
 add_test(NAME test_wheels_estimate COMMAND test_wheels_estimate)
+
+add_executable(test_debug_overhead test_debug_overhead.cpp)
+target_link_libraries(test_debug_overhead hzmir_core hzmir_utils ${OpenCV_LIBS})
+add_test(NAME test_debug_overhead COMMAND test_debug_overhead)

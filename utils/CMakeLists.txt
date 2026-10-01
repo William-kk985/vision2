@@ -10,7 +10,6 @@ add_library(hzmir_utils STATIC
   debug/recorder.cpp
   debug/csv_sink.cpp
   debug/plotjuggler_sink.cpp
-  debug/expense.cpp
   debug/hotkeys.cpp
   debug/window_sink.cpp
   debug/image_sink.cpp

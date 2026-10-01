@@ -38,7 +38,9 @@ int main()
     ex.end("perceive");
     ex.begin("decide");
     ex.end("decide");
-    assert(ex.us("perceive") > 0);
+    // ⚠️ W44：`Expense` 的 µs 有**向下取整** → 亚微秒的段会显示 0。
+    //   这里用 `ns()` 断言"确实计到了时间"，不再依赖"恰好 ≥1 µs"。
+    assert(ex.ns("perceive") > 0);
     ok("begin/end 累计耗时，us('perceive') > 0  ⭐（W19 修复：原来 us() 读的是上一帧→恒 0）");
 
     // ScopedExpense（RAII）
@@ -50,7 +52,7 @@ int main()
     //    us()      = 本帧（已清空）→ 0
     //    last_us() = 上一帧 → > 0
     assert(ex.us("perceive") == 0);
-    assert(ex.last_us("perceive") > 0);
+    assert(ex.last_ns("perceive") > 0);
     assert(ex.last_us("plan") >= 0);
     assert(ex.us("unknown_tag") == 0 && ex.last_us("unknown_tag") == 0);
     assert(ex.count("perceive") == 0);          // 本帧

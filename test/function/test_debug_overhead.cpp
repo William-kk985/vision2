@@ -23,7 +23,10 @@
 #include "core/debug.hpp"
 #include "utils/debug/debug_sink.hpp"
 #include "utils/debug/expense.hpp"
+#include "utils/debug/csv_sink.hpp"
+#include "utils/debug/image_sink.hpp"
 #include "utils/log/logger.hpp"
+#include <opencv2/opencv.hpp>
 #include <spdlog/spdlog.h>
 
 using Clock = std::chrono::steady_clock;
@@ -105,6 +108,30 @@ int main()
   bench(N, [&] { tools::logger()->debug("x={}", expensive()); });   // ⚠️ 参数会先算
   std::printf("  ⑥ 同上但参数是昂贵表达式          %8.1f ns   ⚠️ 表达式被调用了 %d 次/%d\n",
               bench(N, [&] { tools::logger()->debug("x={}", expensive()); }), calls, N);
+
+  // ── ⑦⭐⭐ CsvSink::on_frame（**在自瞄线程**：格式化 + 入队）──
+  {
+    auto fd2 = fd;
+    auto csv = std::make_shared<tools::CsvSink>("/tmp/hzmir_ov");
+    const double t_csv = bench(20000, [&] { csv->on_frame(fd2); });
+    std::printf("\n  ⑦ CsvSink::on_frame（自瞄线程）     %8.1f ns = %.1f µs  （%.3f%% 帧预算）\n",
+                t_csv, t_csv / 1000.0, pct(t_csv));
+    std::printf("     ⚠️ 这里含 **57 列字符串格式化** —— 它就在自瞄线程里，是真实代价！\n");
+    std::printf("     ✅ 而**落盘**（fputs）在 worker 线程 —— 那部分不同步\n");
+  }
+
+  // ── ⑧ ImageSink::on_frame（异步，入队 + 唤醒）──
+  {
+    auto img = cv::Mat(1080, 1440, CV_8UC3, cv::Scalar(0));
+    auto sink = std::make_shared<tools::ImageSink>("/tmp/hzmir_ovimg", 8);
+    const double t_img = bench(20000, [&] { sink->on_image("t", img, 0); });
+    std::printf("  ⑧ ImageSink::on_image（自瞄线程）   %8.1f ns = %.1f µs  （%.3f%% 帧预算）\n",
+                t_img, t_img / 1000.0, pct(t_img));
+    std::printf("     ⚠️⚠️ 但含 **`img.clone()`（4.4 MB）** —— 它也在自瞄线程！\n");
+    std::printf("        实测 clone 一次 ≈ 140 µs；默认 every_n=30 → 摊薄 ≈ 4.7 µs/帧\n");
+    std::printf("        ⚠️ 若 every_n=1 → 每帧 140 µs = 帧预算的 1.4%%\n");
+    std::printf("        ✅ 只有 PNG 编码 + 落盘在 worker 线程\n");
+  }
 
   // ── ⑦ 合计：默认路径 ──
   const double total = t_now + t_fill + t_hub + t_exp;

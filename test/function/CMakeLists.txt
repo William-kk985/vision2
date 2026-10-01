@@ -90,3 +90,8 @@ add_test(NAME test_debug_overhead COMMAND test_debug_overhead)
 add_executable(test_recorder test_recorder.cpp)
 target_link_libraries(test_recorder hzmir_utils ${OpenCV_LIBS})
 add_test(NAME test_recorder COMMAND test_recorder)
+
+add_executable(test_debug_layout test_debug_layout.cpp)
+add_test(NAME test_debug_layout COMMAND test_debug_layout)
+# ⚠️ 要在源码目录跑（它读源码文件）
+set_tests_properties(test_debug_layout PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

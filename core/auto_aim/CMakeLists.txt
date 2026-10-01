@@ -18,6 +18,7 @@ add_library(hzmir_auto_aim STATIC
   tracker/filter.cpp
   tracker/priority.cpp
   tracker/nav_bridge.cpp
+  target/target_plugins_factory.cpp
   # ── 估计器 ──
   target/target.cpp
   # ── 规划器（MPC + legacy 槽位）──

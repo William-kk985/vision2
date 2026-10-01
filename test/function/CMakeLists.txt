@@ -80,3 +80,7 @@ add_test(NAME test_assert_live COMMAND test_assert_live)
 add_executable(test_target_copy test_target_copy.cpp)
 target_link_libraries(test_target_copy hzmir_auto_aim hzmir_utils)
 add_test(NAME test_target_copy COMMAND test_target_copy)
+
+add_executable(test_target_plugins_yaml test_target_plugins_yaml.cpp)
+target_link_libraries(test_target_plugins_yaml hzmir_auto_aim hzmir_utils)
+add_test(NAME test_target_plugins_yaml COMMAND test_target_plugins_yaml)

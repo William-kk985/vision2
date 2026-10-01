@@ -15,6 +15,11 @@
 #   use_invincible: true
 #   use_auto_aim_target: false
 # priority_mode: 3           # 目标优先级 4 张表；同济的 tracker 从不设 priority
+# target_plugins:            # ⭐ 目标估计的 3 个策略槽位（不写 = 全是同济行为）
+#   angular_velocity: imu_fusion   # ekf_state(同济) | ekf | visual_diff | imu_fusion
+#   process_noise:    nis          # fixed(同济)     | nis
+#   measurement:      median       # passthrough(同济) | median
+#   imu_alpha: 0.7                 # ImuFusion 的短期权重
 # nis_chi2_q95: false        # EKF 一致性阈值：true=χ²(4) 95%分位(9.4877)；同济=0.711
 
 # enemy_color: "red"

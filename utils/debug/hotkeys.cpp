@@ -47,6 +47,10 @@ HotkeyConsole::~HotkeyConsole()
 char HotkeyConsole::poll()
 {
   if (!enabled_) return '\0';
+  // ⭐⭐ W46：**限频** —— 真终端下一次 `read()` 要 ~195 ns（实测），
+  //   而人手按键不需要 100 Hz 响应。每 `poll_every_` 帧才真问一次。
+  if (++poll_tick_ < poll_every_) return '\0';
+  poll_tick_ = 0;
   unsigned char c = 0;
   const ssize_t n = ::read(STDIN_FILENO, &c, 1);
   if (n != 1) return '\0';

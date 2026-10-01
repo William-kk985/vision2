@@ -24,7 +24,10 @@
 #include "utils/debug/debug_sink.hpp"
 #include "utils/debug/expense.hpp"
 #include "utils/debug/csv_sink.hpp"
+#include "utils/debug/hotkeys.hpp"
 #include "utils/debug/image_sink.hpp"
+#include "utils/debug/plotjuggler_sink.hpp"
+#include "utils/debug/recorder.hpp"
 #include "utils/log/logger.hpp"
 #include <opencv2/opencv.hpp>
 #include <spdlog/spdlog.h>
@@ -114,6 +117,33 @@ int main()
   bench(N, [&] { tools::logger()->debug("x={}", expensive()); });   // ⚠️ 参数会先算
   std::printf("  ⑥ 同上但参数是昂贵表达式          %8.1f ns   ⚠️ 表达式被调用了 %d 次/%d\n",
               bench(N, [&] { tools::logger()->debug("x={}", expensive()); }), calls, N);
+
+  // ── ⑨⭐⭐⭐ 我从没测过的三项：热键 / 录制 / PlotJuggler ──
+  {
+    tools::HotkeyConsole hk;
+    const double t_hk = bench(N, [&] { g_sink += size_t(hk.poll()); });
+    std::printf("\n  ⑨ HotkeyConsole::poll（每帧一次）  %8.1f ns = %.3f µs  （%.4f%%）\n",
+                t_hk, t_hk / 1000.0, pct(t_hk));
+    std::printf("     含一次 `read()` 系统调用（raw 非阻塞）→ 相对底噪多 %.1f ns\n", t_hk - t_floor);
+  }
+  {
+    tools::Recorder rec;
+    cv::Mat img(1080, 1440, CV_8UC3, cv::Scalar(0));
+    Eigen::Quaterniond q = Eigen::Quaterniond::Identity();
+    // ⚠️ Recorder 有 fps 节流（默认 30），所以多数帧会在第一行早退
+    const double t_rec = bench(20000, [&] {
+      rec.record(img, q, std::chrono::steady_clock::now());
+    });
+    std::printf("  ⑩ Recorder::record（fps 节流后）    %8.1f ns = %.3f µs  （%.4f%%）\n",
+                t_rec, t_rec / 1000.0, pct(t_rec));
+    std::printf("     ⭐ 未达 fps 时只做一次 delta_time 比较就返回\n");
+  }
+  {
+    auto pj = std::make_shared<tools::PlotJugglerSink>("127.0.0.1", 9870, /*enable=*/false);
+    const double t_pj = bench(20000, [&] { pj->on_frame(fd); });
+    std::printf("  ⑪ PlotJugglerSink（enable=false）   %8.1f ns = %.3f µs  （%.4f%%）\n",
+                t_pj, t_pj / 1000.0, pct(t_pj));
+  }
 
   // ── ⑦⭐⭐ CsvSink::on_frame（**在自瞄线程**：格式化 + 入队）──
   {

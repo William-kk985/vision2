@@ -43,7 +43,21 @@ public:
   bool enabled() const { return enabled_; }
 
   /// @brief 非阻塞取一键；无键返回 `'\0'`
+  /// @brief 主循环每帧调用。⭐ **内部会限频**（默认每 3 帧才真正 `read()` 一次）
+  ///
+  /// ## 为什么要限频（W46 实测）
+  /// ```
+  /// 非 tty（重定向跑批）: poll() =   1.3 ns   ← 走禁用快路径，连 read() 都不调
+  /// 真 tty（实车终端）  : poll() = 195.3 ns   ← ⚠️ 一次 read() 系统调用
+  /// ```
+  /// ⭐ **195 ns 是常驻开销里第二大的项**（仅次于 `Expense`）。
+  /// 而**人手按键根本不需要 100 Hz 响应** —— 每 3 帧问一次（~33 Hz）人感知不出，
+  /// 开销直接降到 **~65 ns**。
   char poll();
+
+  /// @brief 设置轮询间隔（帧）。`1` = 每帧都问（旧行为）
+  void set_poll_interval(int frames) { poll_every_ = frames < 1 ? 1 : frames; }
+  int poll_interval() const { return poll_every_; }
 
   /// @brief ⭐ 直接注入一个按键（**测试用** / 非 tty 来源，如串口、网络、GUI）
   /// @return 该键是否已注册并被派发
@@ -60,6 +74,8 @@ public:
 
 private:
   bool enabled_ = false;
+  int poll_every_ = 3;   // ⭐ W46：每 3 帧才真 read() 一次（~33 Hz，人手够用）
+  int poll_tick_ = 0;
   bool saved_ = false;
   std::unordered_map<char, std::function<void()>> handlers_;
   std::vector<std::pair<char, std::string>> descs_;

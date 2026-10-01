@@ -1,0 +1,56 @@
+# ══════════════════════════════════════════════════════════════
+# 构建产物 / IDE / 运行期产物
+# ══════════════════════════════════════════════════════════════
+build/
+build-*/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+compile_commands.json
+*.o
+*.a
+*.so
+*.so.*
+*.d
+
+# ⚠️ IntelliSense 数据库 —— 单个文件可达 **1.4 GB**，绝不能提交
+.vscode/browse.vc.db*
+.vscode/ipch/
+.cache/
+.mplconfig/
+__pycache__/
+*.pyc
+
+# ══════════════════════════════════════════════════════════════
+# ⚠️⚠️ 厂商私有 SDK —— **不可再分发**（许可不允许），请自行从厂商获取
+#   详见 THIRD_PARTY.md「相机 / IMU 厂商 SDK」
+# ══════════════════════════════════════════════════════════════
+drivers/hikrobot/lib/
+drivers/mindvision/lib/
+drivers/hikrobot/include/
+drivers/mindvision/include/
+
+# ══════════════════════════════════════════════════════════════
+# 模型权重（属同济 sp_vision_25 仓库，MIT；本仓库**不复制**，用脚本拉取）
+#   见 README「准备模型」
+# ══════════════════════════════════════════════════════════════
+assets
+params/ballistic_table_*.bin
+
+# ══════════════════════════════════════════════════════════════
+# 运行期产物
+# ══════════════════════════════════════════════════════════════
+logs/
+records/
+*.avi
+*.log
+ros_log/
+ros_home/
+raw/
+
+# 编辑器
+.idea/
+*.swp
+*~

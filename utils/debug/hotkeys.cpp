@@ -1,0 +1,154 @@
+#include "utils/debug/hotkeys.hpp"
+
+#include <termios.h>
+#include <unistd.h>
+
+#include <cstdio>
+#include <sstream>
+
+#include "utils/log/logger.hpp"
+
+namespace tools
+{
+namespace
+{
+// 原始终端设置（进程内单例 —— 全局只应有一个 HotkeyConsole）
+termios g_orig_termios{};
+bool g_has_orig = false;
+}  // namespace
+
+HotkeyConsole::HotkeyConsole()
+{
+  if (!::isatty(STDIN_FILENO)) return;   // 管道/重定向 → 禁用
+
+  termios raw{};
+  if (::tcgetattr(STDIN_FILENO, &raw) != 0) return;
+
+  g_orig_termios = raw;
+  g_has_orig = true;
+
+  raw.c_lflag &= static_cast<tcflag_t>(~(ICANON | ECHO));
+  raw.c_cc[VMIN] = 0;    // 不阻塞
+  raw.c_cc[VTIME] = 0;
+  if (::tcsetattr(STDIN_FILENO, TCSANOW, &raw) != 0) return;
+
+  enabled_ = true;
+  saved_ = true;
+}
+
+HotkeyConsole::~HotkeyConsole()
+{
+  if (enabled_ && g_has_orig) {
+    ::tcsetattr(STDIN_FILENO, TCSANOW, &g_orig_termios);
+    g_has_orig = false;
+  }
+}
+
+char HotkeyConsole::poll()
+{
+  if (!enabled_) return '\0';
+  unsigned char c = 0;
+  const ssize_t n = ::read(STDIN_FILENO, &c, 1);
+  if (n != 1) return '\0';
+  return feed(static_cast<char>(c)) ? static_cast<char>(c) : '\0';
+}
+
+bool HotkeyConsole::feed(char key)
+{
+  auto it = handlers_.find(key);
+  if (it == handlers_.end()) return false;   // 未注册的键不派发
+  ++dispatched_;
+  it->second();
+  return true;
+}
+
+void HotkeyConsole::on(char key, const std::string & desc, std::function<void()> fn)
+{
+  handlers_[key] = std::move(fn);
+  descs_.emplace_back(key, desc);
+}
+
+std::string HotkeyConsole::help() const
+{
+  std::ostringstream o;
+  o << "热键: ";
+  for (size_t i = 0; i < descs_.size(); ++i) {
+    if (i) o << "  ";
+    o << "[" << descs_[i].first << "] " << descs_[i].second;
+  }
+  if (!enabled_) o << "   （stdin 非 tty → 热键已禁用）";
+  return o.str();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 标准 Debug 按键绑定（doc 09 §14.6）
+// ═══════════════════════════════════════════════════════════════
+namespace
+{
+/// 统一的「开/关一个 sink」逻辑（⭐ 热插拔：关掉 = 从 sinks_ 移除 = 路径上根本没有它）
+void toggle_sink(
+  SinkHub & hub, const char * sink_name, const DebugKeyBindings::SinkFactory & factory,
+  const char * label)
+{
+  if (hub.has(sink_name)) {
+    hub.remove(sink_name);
+    tools::logger()->warn("[hotkey] {} 已移除（后续 on_frame/on_image 路径上没有它）", label);
+    return;
+  }
+  if (!factory) {
+    tools::logger()->warn("[hotkey] {} 在当前构建中不可用（宏未开或环境不支持）", label);
+    return;
+  }
+  hub.add(factory());
+  tools::logger()->warn("[hotkey] {} 已挂上", label);
+}
+}  // namespace
+
+void DebugKeyBindings::bind(
+  HotkeyConsole & hk, SinkHub & hub, const SinkFactories & f, bool * paused,
+  std::function<void()> on_reload)
+{
+  // 2 —— CSV 开/关
+  hk.on('2', "CSV 开/关", [&hub, f] { toggle_sink(hub, "csv", f.csv, "CSV sink"); });
+
+  // 3 —— PlotJuggler 开/关
+  hk.on('3', "PlotJuggler 开/关",
+        [&hub, f] { toggle_sink(hub, "plotjuggler", f.plotjuggler, "PlotJuggler sink"); });
+
+  // 1 —— ⭐ L3 可视化窗口
+  hk.on('1', "可视化窗口(L3) 开/关", [&hub, f] { toggle_sink(hub, "window", f.window, "窗口"); });
+
+  // 4 —— ⭐ L3 存图
+  hk.on('4', "存图(L3) 开/关", [&hub, f] { toggle_sink(hub, "image", f.image, "存图"); });
+
+  // d —— 日志级别循环
+  hk.on('d', "日志级别循环", [] {
+    tools::logger()->warn("[hotkey] 日志级别 -> {}", tools::log_level_name(tools::cycle_log_level()));
+  });
+
+  // p —— 暂停/继续
+  if (paused) {
+    hk.on('p', "暂停/继续", [paused] {
+      *paused = !*paused;
+      tools::logger()->warn("[hotkey] {}", *paused ? "已暂停" : "已继续");
+    });
+  }
+
+  // r —— ⭐ W21：配置热重载
+  hk.on('r', "热重载配置", [on_reload] {
+    if (!on_reload) {
+      tools::logger()->warn("[hotkey] 热重载未装配");
+      return;
+    }
+    on_reload();
+  });
+
+  // q —— 退出
+  hk.on('q', "退出", [] {
+    tools::logger()->warn("[hotkey] 请求退出");
+    Exiter::request_exit();
+  });
+
+}
+
+}  // namespace tools

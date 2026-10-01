@@ -109,6 +109,9 @@ public:
     value = queue_.back();
   }
 
+  /// @brief ⭐ W48：队列容量（诊断用，如打印丢帧警告时）
+  size_t capacity() const { return max_size_; }
+
   bool empty()
   {
     std::unique_lock<std::mutex> lock(mutex_);

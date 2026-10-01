@@ -74,6 +74,8 @@ const std::string keys =
   "{bullet-speed   | 22.0 | 录像模式下的弹速（下位机不可用时）}"
   "{shoot-mode     | 2 | ⭐ 哨兵枪口：0=left 1=right 2=both}"
   "{csv            | | ⭐ Debug CSV 输出前缀}"
+  "{record         | false | ⭐⭐ 录像到 records/（默认**不录**；录会占一个核做 MJPG 编码）}"
+  "{record         | false | ⭐⭐ 录像到 records/（默认**不录**；录会占一个核做 MJPG 编码）}"
   "{pj             | false | ⭐ 是否发 PlotJuggler UDP}"
   "{tongji         | true | ⭐⭐ 同济兼容模式（默认 true = 完全同济行为）}"
   "{strict-device  | false | ⭐ 严格设备模式（true = 设备不可用就抛异常）}";
@@ -116,7 +118,8 @@ struct ReplayCBoard
 template <typename Board>
 int run_sentry(
   io::CameraBase & camera, Board & cboard, const auto_aim::Color /*enemy_color*/,
-  const std::string & config_path, const std::string & csv_prefix, bool verbose_hotkeys)
+  const std::string & config_path, const std::string & csv_prefix, bool verbose_hotkeys,
+  bool record)
 {
   auto_aim::YOLO yolo(config_path, true);
   auto_aim::Solver solver(config_path);
@@ -131,7 +134,8 @@ int run_sentry(
 #endif
 
   tools::Exiter exiter;
-  tools::Recorder recorder;
+  // ⭐⭐ W48：录像**默认关**（录会占一个核做 MJPG 编码；要录传 --record）
+  tools::Recorder recorder(30, record);
 
   // ── ⭐ 六层调试体系（W8/W18/W27/W32）──
   tools::SinkHub hub;
@@ -285,7 +289,7 @@ int main(int argc, char * argv[])
     io::Camera camera(config_path);
     io::CBoard cboard(config_path);
     tools::logger()->info("[sentry] 真实硬件模式（CBoard/CAN）");
-    return run_sentry(camera, cboard, enemy_color, config_path, csv_prefix, true);
+    return run_sentry(camera, cboard, enemy_color, config_path, csv_prefix, true, cli.get<bool>("record"));
   }
 
   // ── 录像回放（零硬件）──
@@ -307,7 +311,7 @@ int main(int argc, char * argv[])
     (shoot_mode == io::ShootMode::left_shoot    ? "left"
      : shoot_mode == io::ShootMode::right_shoot ? "right"
                                                 : "both"));
-  const int rc = run_sentry(camera, cboard, enemy_color, config_path, csv_prefix, true);
+  const int rc = run_sentry(camera, cboard, enemy_color, config_path, csv_prefix, true, cli.get<bool>("record"));
   tools::logger()->info("[sentry] 录像播放完毕（共 {} 帧），退出", cboard.sent_count);
   return rc;
 }

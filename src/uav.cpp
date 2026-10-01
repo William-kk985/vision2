@@ -57,6 +57,8 @@ const std::string keys =
   "{force-mode     | 1 | ⭐ 录像模式档位：0=idle 1=auto_aim 2=small_buff 3=big_buff 4=outpost}"
   "{bullet-speed   | 22.0 | 录像模式下的弹速}"
   "{csv            | | ⭐ Debug CSV 输出前缀}"
+  "{record         | false | ⭐⭐ 录像到 records/（默认**不录**；录会占一个核做 MJPG 编码）}"
+  "{record         | false | ⭐⭐ 录像到 records/（默认**不录**；录会占一个核做 MJPG 编码）}"
   "{tongji         | true | ⭐⭐ 同济兼容模式（默认 true = 完全同济行为）}"
   "{strict-device  | false | ⭐ 严格设备模式}";
 
@@ -95,10 +97,11 @@ struct ReplayCBoard
 /// @brief 无人机主循环（⭐ 一份逻辑，`io::CBoard` / `ReplayCBoard` 各实例化一次）
 template <typename Board>
 int run_uav(io::CameraBase & camera, Board & cboard, const std::string & config_path,
-            const std::string & csv_prefix)
+            const std::string & csv_prefix, bool record)
 {
   tools::Exiter exiter;
-  tools::Recorder recorder;
+  // ⭐⭐ W48：录像**默认关**（录会占一个核做 MJPG 编码；要录传 --record）
+  tools::Recorder recorder(30, record);
 
   auto_aim::Detector detector(config_path);   // ⭐ uav 用**传统检测器**（同济如此）
   auto_aim::Solver solver(config_path);
@@ -240,7 +243,7 @@ int main(int argc, char * argv[])
     io::Camera camera(config_path);
     io::CBoard cboard(config_path);
     tools::logger()->info("[uav] 真实硬件模式（CBoard/CAN）");
-    return run_uav(camera, cboard, config_path, csv_prefix);
+    return run_uav(camera, cboard, config_path, csv_prefix, cli.get<bool>("record"));
   }
 
   // ── 录像回放（零硬件）──
@@ -255,7 +258,7 @@ int main(int argc, char * argv[])
   tools::logger()->info(
     "[uav] 录像回放模式: {}  mode={}({})", video_path, int(m),
     (m >= 0 && m < int(io::MODES.size())) ? io::MODES[m] : "?");
-  const int rc = run_uav(camera, cboard, config_path, csv_prefix);
+  const int rc = run_uav(camera, cboard, config_path, csv_prefix, cli.get<bool>("record"));
   tools::logger()->info("[uav] 录像播放完毕（共 {} 帧），退出", cboard.sent_count);
   return rc;
 }

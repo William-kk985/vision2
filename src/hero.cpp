@@ -126,6 +126,8 @@ const std::string keys =
   "{pcores         | true | ⭐ 绑定到高性能核}"
   "{rtprio         | true | ⭐ 提高调度优先级到 -20}"
   "{csv            |      | ⭐ Debug CSV 输出前缀（给路径才落 CSV）}"
+
+  "{record         | false | ⭐⭐ 录像到 records/（默认**不录**；录会占一个核做 MJPG 编码）}"
   "{pj             | false | ⭐ 是否发 PlotJuggler UDP}"
   "{debug-img      | false | ⭐ L3：启动就开存图（每 30 张 1 张，上限 500）}"
   "{debug-window   | false | ⭐ L3：启动就开可视化窗口（需 DISPLAY）}"
@@ -161,7 +163,8 @@ int main(int argc, char * argv[])
       "[hero] 同济兼容模式 = {}（--tongji=false 启用本项目优化）", tj ? "开" : "关");
   }
 
-  tools::Recorder recorder;
+  // ⭐⭐ W48：录像**默认关**（录会占一个核做 MJPG 编码；要录传 --record）
+  tools::Recorder recorder(30, cli.get<bool>("record"));
 
   // ⭐ W21：配置热重载（按键 `r`）
   //   ⚠️ 线程安全：`Tracker` 只被**主线程**用 → 主线程直接重载；

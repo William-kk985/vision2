@@ -26,3 +26,10 @@ target_link_libraries(ros2_diag
   rclcpp::rclcpp ${std_msgs_TARGETS} ${sp_msgs_TARGETS} ${OpenCV_LIBS})
 target_include_directories(ros2_diag PRIVATE ${sp_msgs_INCLUDE_DIRS})
 # ⚠️ **不注册成 ctest** —— 它是手动工具（无限循环），由人运行
+
+add_executable(test_ros2_overhead test_ros2_overhead.cpp)
+target_link_libraries(test_ros2_overhead hzmir_io hzmir_utils rclcpp::rclcpp ${std_msgs_TARGETS} ${sp_msgs_TARGETS})
+target_include_directories(test_ros2_overhead PRIVATE ${sp_msgs_INCLUDE_DIRS})
+add_test(NAME test_ros2_overhead COMMAND test_ros2_overhead)
+set_tests_properties(test_ros2_overhead PROPERTIES
+  ENVIRONMENT "ROS_LOG_DIR=${CMAKE_BINARY_DIR}/ros_log;ROS_HOME=${CMAKE_BINARY_DIR}/ros_home;AMENT_PREFIX_PATH=${HZMIR_AMENT_PREFIX_PATH};LD_LIBRARY_PATH=${HZMIR_ROS2_LD_PATH}")

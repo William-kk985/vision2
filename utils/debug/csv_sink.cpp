@@ -86,10 +86,10 @@ CsvSink::~CsvSink() { close(); }
 
 void CsvSink::on_frame(const auto_aim::FrameDebug & d)
 {
-  auto s = row(d);
+  // ⭐⭐ W46：**自瞄线程只做一次 400 B POD 拷贝 + 入队**；`row()` 的格式化(~7 µs)推到 worker
   std::lock_guard lk(mtx_);
   // ⭐ 安全上限：超过就丢弃（并只警告一次），避免上游空转写爆磁盘
-  if (rows_ + q_.size() >= max_rows_) {
+  if (rows_ + qf_.size() >= max_rows_) {
     ++dropped_;
     if (!capped_warned_) {
       capped_warned_ = true;
@@ -100,44 +100,52 @@ void CsvSink::on_frame(const auto_aim::FrameDebug & d)
     }
     return;
   }
-  if ((rows_ + q_.size()) % 100000 == 0 && rows_ + q_.size() > 0)
-    tools::logger()->info("[CsvSink] 已写 {} 帧...", rows_ + q_.size());
-  q_.push_back(std::move(s));
+  if ((rows_ + qf_.size()) % 100000 == 0 && rows_ + qf_.size() > 0)
+    tools::logger()->info("[CsvSink] 已写 {} 帧...", rows_ + qf_.size());
+  qf_.push_back(d);          // ⭐ 400 B POD 拷贝
   cv_.notify_one();
 }
 
 void CsvSink::on_series(std::string_view key, int64_t t_us, double v)
 {
   std::ostringstream o;
-  o << key << ',' << t_us << ',' << v << "\nseries\n";   // 尾标记：series 文件
+  o << key << ',' << t_us << ',' << v << '\n';   // ⭐⭐ W46：删掉旧的 "\nseries\n" 尾标记（现在分两个队列了，尾标记会让每行多一条 "series"）
   std::lock_guard lk(mtx_);
-  q_.push_back(std::move(o.str()));
+  qs_.push_back(std::move(o.str()));
   cv_.notify_one();
 }
 
 void CsvSink::worker()
 {
   while (true) {
-    std::string item;
+    std::string series;
+    auto_aim::FrameDebug frame{};
+    bool have_frame = false;
     {
       std::unique_lock lk(mtx_);
-      cv_.wait(lk, [this] { return quit_ || !q_.empty(); });
-      if (q_.empty()) {
+      cv_.wait(lk, [this] { return quit_ || !qf_.empty() || !qs_.empty(); });
+      // ⭐ 优先清帧队列（吞吐大），也顺手带一条曲线
+      if (!qf_.empty()) {
+        frame = qf_.front();
+        qf_.pop_front();
+        have_frame = true;
+      }
+      if (!qs_.empty()) {
+        series = std::move(qs_.front());
+        qs_.pop_front();
+      }
+      if (!have_frame && series.empty()) {
         if (quit_) break;
         continue;
       }
-      item = std::move(q_.front());
-      q_.pop_front();
     }
-    // 落盘（在 worker 线程，不在热路径）
-    bool is_series = item.size() > 7 && item.compare(item.size() - 7, 7, "series\n") == 0;
-    if (is_series) {
-      item.resize(item.size() - 7);
-      if (sf_) std::fputs(item.c_str(), sf_);
-    } else {
-      if (ff_) std::fputs(item.c_str(), ff_);
+    // ⭐⭐ 格式化 + 落盘都在 worker 线程（原来格式化在自瞄线程）
+    if (have_frame) {
+      const auto s = row(frame);
+      if (ff_) std::fputs(s.c_str(), ff_);
       ++rows_;
     }
+    if (!series.empty() && sf_) std::fputs(series.c_str(), sf_);
   }
 }
 

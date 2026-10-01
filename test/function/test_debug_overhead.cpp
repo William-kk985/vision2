@@ -49,6 +49,11 @@ int main()
 
   auto pct = [](double ns) { return ns / 1e7 * 100; };
 
+  // ── ⓪ ⭐ 先量「测量本身的底噪」—— 否则会把循环开销误当成组件开销 ──
+  const double t_floor = bench(N, [] { g_sink += 1; });
+  std::printf("  ⓪ 空 lambda（测量底噪）            %8.1f ns   ← **一切读数都不能低于它**\n",
+              t_floor);
+
   // ── ① 纯 clock::now() 的成本（一切的基准）──
   const double t_now = bench(N, [] { g_sink += size_t(Clock::now().time_since_epoch().count()); });
   std::printf("  ① clock::now()                    %8.1f ns   （%.4f%% 帧预算）\n", t_now, pct(t_now));
@@ -80,8 +85,9 @@ int main()
   // ── ③ SinkHub::on_frame（不挂 sink）──
   tools::SinkHub hub;
   const double t_hub = bench(N, [&] { hub.on_frame(fd); });
-  std::printf("  ③ SinkHub::on_frame **不挂 sink**  %8.1f ns   （%.4f%%）⚠️ 仍会 shared_lock\n",
-              t_hub, pct(t_hub));
+  std::printf("  ③ SinkHub::on_frame **不挂 sink**  %8.1f ns   （%.4f%%）\n", t_hub, pct(t_hub));
+  std::printf("     ⭐ W46 已加**原子快速路径**（无 sink 时免锁）→ 相对底噪只多 %.1f ns\n",
+              t_hub - t_floor);
 
   // ── ④ Expense：6 个段的 begin/end/us ──
   tools::Expense exp;
@@ -131,6 +137,18 @@ int main()
     std::printf("        实测 clone 一次 ≈ 140 µs；默认 every_n=30 → 摊薄 ≈ 4.7 µs/帧\n");
     std::printf("        ⚠️ 若 every_n=1 → 每帧 140 µs = 帧预算的 1.4%%\n");
     std::printf("        ✅ 只有 PNG 编码 + 落盘在 worker 线程\n");
+    // ⭐⭐ W46：对比浅拷贝（引用计数）
+    {
+      // ⚠️ `max_files` 一定要小 —— 否则 worker 会往磁盘写满 PNG（我第一版写 100000 → OOM/写爆盘）
+      auto sh = std::make_shared<tools::ImageSink>(
+        "/tmp/hzmir_ovsh", /*every_n=*/1, /*max_files=*/50, /*deep_copy=*/false);
+      const double t_sh = bench(20000, [&] { sh->on_image("t", img, 0); });
+      std::printf("  ⭐ ⑧b ImageSink（deep_copy=false）  %8.1f ns = %.2f µs  （%.3f%%）\n",
+                  t_sh, t_sh / 1000.0, pct(t_sh));
+      std::printf("       浅拷贝 = 引用计数 +1 → 从 %.1f µs 降到 %.2f µs（%.0f× 快）\n",
+                  t_img / 1000.0, t_sh / 1000.0, t_img / (t_sh > 0 ? t_sh : 1));
+      std::printf("       ⚠️ 仅当上游每帧新建 cv::Mat 时安全（MindVision/HikRobot ✅；USBCamera/Video ❌）\n");
+    }
   }
 
   // ── ⑦ 合计：默认路径 ──

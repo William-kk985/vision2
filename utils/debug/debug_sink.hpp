@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <atomic>
 #include <shared_mutex>
 #include <string>
 #include <string_view>

@@ -29,7 +29,21 @@ public:
   /// @param out_dir  输出目录（不存在会创建）
   /// @param every_n  每 N 张存一张（1 = 全存）
   /// @param max_files 上限（⭐ 安全网，超过就停并只警告一次）
-  explicit ImageSink(std::string out_dir = "debug_imgs", int every_n = 30, size_t max_files = 500);
+  /// @param deep_copy ⭐⭐ **是否在自瞄线程深拷贝图像**
+  ///   - `true`（默认，**安全**）：`img.clone()` —— 4.4 MB 拷贝，实测 ~140 µs/次
+  ///   - `false`（**快**）：只做 `cv::Mat` 浅拷贝（**引用计数 +1，~5 ns**）
+  ///
+  /// ⚠️ **什么时候能设 `false`**：上游**每帧新建 `cv::Mat`** 时（此时队列持有引用
+  ///   就能保证 buffer 不被覆写）。本项目的驱动实测：
+  ///   | 驱动 | 缓冲 | 能否 `false` |
+  ///   |---|---|---|
+  ///   | `MindVision` | ⭐ while 循环**内** `cv::Mat(...)` 新建 | ✅ 能 |
+  ///   | `HikRobot` | ⭐ `cvtColor` 到新 `dst_image` | ✅ 能 |
+  ///   | `USBCamera` | ⚠️ `cap_ >> img_` 可能复用 | ❌ 不能 |
+  ///   | `VideoCamera` | ⚠️ `cap_ >> img` 可能复用 | ❌ 不能 |
+  explicit ImageSink(
+    std::string out_dir = "debug_imgs", int every_n = 30, size_t max_files = 500,
+    bool deep_copy = true, size_t max_queue = 16);
   ~ImageSink() override;
 
   const char * name() const override { return "image"; }
@@ -48,6 +62,13 @@ private:
 
   std::string out_dir_;
   int every_n_ = 30;
+  bool deep_copy_ = true;   // ⭐ W46
+  // ⭐⭐ W46 修复：**队列深度独立上限**。
+  //   原来只有 `max_files_`（总共存几张），**队列可以积压 500 张 × 4.4 MB = 2.2 GB**
+  //   → 实测被我自己的测试 OOM kill（exit 137）。
+  //   现在队列超过 `max_queue_` 就**丢弃**（worker 跟不上说明磁盘/编码太慢，堆下去只会爆内存）。
+  size_t max_queue_ = 16;
+  size_t queue_dropped_ = 0;
   size_t max_files_ = 500;
   uint32_t frame_id_ = 0;
   size_t seen_ = 0;

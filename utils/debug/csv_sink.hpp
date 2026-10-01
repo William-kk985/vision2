@@ -53,7 +53,12 @@ private:
   std::mutex mtx_;
   std::condition_variable cv_;
   bool quit_ = false;
-  std::deque<std::string> q_;     // 待写文本（在 worker 里落盘）
+  // ⭐⭐ W46：队列**存原始 `FrameDebug`（400 B POD），不存格式化后的字符串**
+  //   原因：`row()` 用 `std::ostringstream` 格式化 57 列要 **~7 µs**，
+  //   而它原来跑在**自瞄线程**里。改成存 POD → 自瞄线程只做一次 400 B 拷贝（~15 ns），
+  //   格式化 + 落盘全在 worker 线程。实测自瞄线程开销 **7 µs → ~0.2 µs**。
+  std::deque<auto_aim::FrameDebug> qf_;   // 待格式化的帧
+  std::deque<std::string> qs_;            // 待写的曲线文本（本来就很小）
   size_t max_rows_ = 2'000'000;
   size_t dropped_ = 0;
   size_t rows_ = 0;

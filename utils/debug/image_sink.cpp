@@ -9,8 +9,9 @@
 namespace tools
 {
 
-ImageSink::ImageSink(std::string out_dir, int every_n, size_t max_files)
-: out_dir_(std::move(out_dir)), every_n_(every_n < 1 ? 1 : every_n), max_files_(max_files)
+ImageSink::ImageSink(std::string out_dir, int every_n, size_t max_files, bool deep_copy, size_t max_queue)
+: out_dir_(std::move(out_dir)), every_n_(every_n < 1 ? 1 : every_n), max_files_(max_files),
+  deep_copy_(deep_copy), max_queue_(max_queue < 1 ? 1 : max_queue)
 {
   ::mkdir(out_dir_.c_str(), 0755);   // 已存在则忽略错误
   th_ = std::thread([this] { worker(); });

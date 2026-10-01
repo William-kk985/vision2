@@ -158,7 +158,17 @@ int main()
   }
 
   // ═══ ⑤ ⭐ 拷贝成本量化（W11 的隐患）═══
-  std::printf("⑤ Target 拷贝成本（cluster 3 个插件）\n");
+  // ⚠️⚠️ W41 更正：**这个数字强依赖构建类型**！
+  //   Debug(-O0) ≈ 1240 ns   Release(-O3) ≈ 379 ns   → 差 3 倍以上
+  //   W23 曾把 **Debug 的值**（1819.8 ns）与 **Release 的同济基准**（318 ns）相比，
+  //   得出「贵 5.7 倍」的**错误结论**。真实差异只有 ~+19%（约 +25 ns 来自槽位）。
+  //   ⇒ 引用本行数字时**必须标注构建类型**。
+  std::printf("⑤ Target 拷贝成本（cluster 3 个插件）");
+#ifdef NDEBUG
+  std::printf("  [Release]\n");
+#else
+  std::printf("  [Debug —— 比 Release 慢数倍，勿与 Release 基准比较!]\n");
+#endif
   {
     Target t(4.0, 1.0, 0.2, 0.1);
     for (int i = 0; i < 50; ++i) t.predict(0.01);

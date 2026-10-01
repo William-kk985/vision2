@@ -76,3 +76,7 @@ else()
   target_compile_definitions(test_assert_live PRIVATE HZMIR_EXPECTED_DEBUG=0)
 endif()
 add_test(NAME test_assert_live COMMAND test_assert_live)
+
+add_executable(test_target_copy test_target_copy.cpp)
+target_link_libraries(test_target_copy hzmir_auto_aim hzmir_utils)
+add_test(NAME test_target_copy COMMAND test_target_copy)

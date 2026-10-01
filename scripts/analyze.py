@@ -53,6 +53,17 @@ def main():
                   f" ({100*(g == val).mean():.1f}%)")
         return
 
+    # ── ⭐⭐ 全 0 列警告：默认会**隐藏**它们，但"永远为 0"往往是【忘了填】而非【真为 0】 ──
+    zero_cols = [c for c in d.header if not np.any(d.col(c))]
+    if zero_cols and not a.all:
+        print(f"\n╔═ ⚠️ **{len(zero_cols)} 个列【全为 0】，已被隐藏** ═══════════════════════════")
+        print(f"║  请确认是【真为 0】还是【**忘了填**】（后者是静默 bug，看数据看不出来）")
+        for i in range(0, min(len(zero_cols), 24), 4):
+            print("║    " + "  ".join(f"{c:<20}" for c in zero_cols[i:i+4]))
+        if len(zero_cols) > 24:
+            print(f"║    ...（还有 {len(zero_cols)-24} 个，用 `--all` 看全部）")
+        print(f"╚═ 提示：查代码里该字段的赋值点；本项目已知的：`game_state`（TODO 没接比赛状态）")
+
     # ── 逐列统计 ──
     cols = d.header if a.all else d.nonzero_cols()
     print(f"\n── 逐列统计（{'全部' if a.all else '非全零'} {len(cols)} 列）──")

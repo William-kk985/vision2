@@ -95,3 +95,7 @@ add_executable(test_debug_layout test_debug_layout.cpp)
 add_test(NAME test_debug_layout COMMAND test_debug_layout)
 # ⚠️ 要在源码目录跑（它读源码文件）
 set_tests_properties(test_debug_layout PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_executable(test_csv_schema test_csv_schema.cpp)
+target_link_libraries(test_csv_schema hzmir_utils)
+add_test(NAME test_csv_schema COMMAND test_csv_schema)

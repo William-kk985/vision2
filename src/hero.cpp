@@ -60,7 +60,7 @@
 #include "utils/debug/image_sink.hpp"   // ⭐ W19：L3 存图
 #include "utils/debug/window_sink.hpp"  // ⭐ W19：L3 可视化窗口
 #include "utils/debug/debug_sink.hpp"
-#include "utils/debug/expense.hpp"
+#include "utils/debug/debug_setup.hpp"   // ⭐ W49：一行装配
 #include "utils/debug/plotjuggler_sink.hpp"
 
 // ═══════════════════════════════════════════════════════════════
@@ -131,7 +131,9 @@ const std::string keys =
   "{pj             | false | ⭐ 是否发 PlotJuggler UDP}"
   "{debug-img      | false | ⭐ L3：启动就开存图（每 30 张 1 张，上限 500）}"
   "{debug-window   | false | ⭐ L3：启动就开可视化窗口（需 DISPLAY）}"
-  "{tongji         | true | ⭐⭐ 同济兼容模式：true(默认)=完全同济行为；false=启用本项目优化}";
+  "{tongji         | true | ⭐⭐ 同济兼容模式：true(默认)=完全同济行为；false=启用本项目优化}"
+  "{strict-device  | false | ⭐ 严格设备模式：true=同济行为(设备不可用就抛异常)；false=回退CPU}";
+
 
 using namespace std::chrono_literals;
 
@@ -204,48 +206,25 @@ int main(int argc, char * argv[])
   auto_aim::Planner planner(config_path);
 
   // ⭐ W16：Debug 数据面（SinkHub 可热插拔；空 hub → on_frame 就是空循环，零成本）
-  tools::SinkHub hub;
-  const auto csv_prefix = cli.get<std::string>("csv");
-  if (!csv_prefix.empty()) hub.add(std::make_shared<tools::CsvSink>(csv_prefix));
-  hub.add(std::make_shared<tools::PlotJugglerSink>("127.0.0.1", 9870, cli.get<bool>("pj")));
-  tools::Expense expense;
+    // ⭐⭐ W49（方案 D）：**一行装配整个 Debug 体系**（原来手写 ~30 行）
+    tools::DebugRuntime dbg(
+      {.csv_prefix = cli.get<std::string>("csv"),
+       .pj = cli.get<bool>("pj"),
+       .img = cli.get<bool>("debug-img"),
+       .window = cli.get<bool>("debug-window"),
+       .name = "hero"},
+      [&] {
+        hot_reloader.reload_if_changed();   // 主线程：Tracker / 过滤器
+        reload_planner = true;              // 交给 plan 线程：Planner
+      });
+    auto & hub = dbg.hub;                 // ⭐ 别名：保持下游代码一字不改
+    auto & expense = dbg.expense;
+    auto & hotkeys = dbg.hotkeys;
+    bool & paused = dbg.paused;
+    const auto csv_prefix = cli.get<std::string>("csv");
 
-  // ⭐ W18：终端热键（stdin 非 tty 时自动禁用）—— doc 09 §14.6 按键表
-  tools::HotkeyConsole hotkeys;
-  bool paused = false;
-  // ⭐ W19：L3 通道**条件装配** —— `#ifdef` 只出现在这里（装配区，符合宏规范）
-  tools::DebugKeyBindings::SinkFactories factories;
-  factories.csv = [&] {
-    return std::make_shared<tools::CsvSink>(csv_prefix.empty() ? "hero_hotkey" : csv_prefix);
-  };
-  factories.plotjuggler = [&] { return std::make_shared<tools::PlotJugglerSink>("127.0.0.1", 9870, true); };
-
-#ifdef DEBUG_L3_ENABLE
-  factories.image = [] { return std::make_shared<tools::ImageSink>("debug_imgs", 30, 500); };
-  if (tools::WindowSink::available())
-    factories.window = [] { return std::make_shared<tools::WindowSink>("hero"); };
-  else
-    tools::logger()->info("[hero] 无显示环境 → 按键 1 不可用（按键 4 存图仍可用）");
-#else
-  tools::logger()->info("[hero] DEBUG_L3_ENABLE 未开 → 按键 1/4 不可用（Release 构建默认关）");
-#endif
-
-  // ⭐ W19：允许**启动就挂 L3**（否则只能靠按热键，自动化跑批里按不了）
-#ifdef DEBUG_L3_ENABLE
-  if (cli.get<bool>("debug-img") && factories.image) hub.add(factories.image());
-  if (cli.get<bool>("debug-window") && factories.window) hub.add(factories.window());
-  tools::logger()->info(
-    "[{}] L3 图像通道已编入（存图={} 窗口={}）", "hero",
-    hub.has("image") ? "开" : "关", hub.has("window") ? "开" : "关");
-#endif
-
-  tools::DebugKeyBindings::bind(
-    hotkeys, hub, factories, &paused, [&] {
-      hot_reloader.reload_if_changed();   // 主线程：Tracker / 过滤器
-      reload_planner = true;              // 交给 plan 线程：Planner
-    });
-  tools::logger()->info(
-    "[hero] 已注册 {} 个热重载组件（按键 r）", hot_reloader.size());
+    tools::logger()->info(
+      "[hero] 已注册 {} 个热重载组件（按键 r）", hot_reloader.size());
   tools::logger()->info("{}", hotkeys.help());
 
   // ⭐ 跨线程传 plan 结果（plan 在 plan_thread 里算，Debug 在主线程填）

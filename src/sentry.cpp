@@ -47,7 +47,7 @@
 #include "utils/concurrency/exiter.hpp"
 #include "utils/debug/csv_sink.hpp"
 #include "utils/debug/debug_sink.hpp"
-#include "utils/debug/expense.hpp"
+#include "utils/debug/debug_setup.hpp"   // ⭐ W49：一行装配
 #include "utils/debug/hotkeys.hpp"
 #include "utils/debug/plotjuggler_sink.hpp"
 #include "utils/debug/recorder.hpp"
@@ -137,18 +137,14 @@ int run_sentry(
   // ⭐⭐ W48：录像**默认关**（录会占一个核做 MJPG 编码；要录传 --record）
   tools::Recorder recorder(30, record);
 
-  // ── ⭐ 六层调试体系（W8/W18/W27/W32）──
-  tools::SinkHub hub;
-  if (!csv_prefix.empty()) hub.add(std::make_shared<tools::CsvSink>(csv_prefix));
-  tools::Expense expense;
-  tools::HotkeyConsole hotkeys;
-  bool paused = false;
-  tools::DebugKeyBindings::SinkFactories fac;
-  fac.csv = [&] {
-    return std::make_shared<tools::CsvSink>(csv_prefix.empty() ? "sentry" : csv_prefix);
-  };
-  fac.plotjuggler = [] { return std::make_shared<tools::PlotJugglerSink>("127.0.0.1", 9870, true); };
-  tools::DebugKeyBindings::bind(hotkeys, hub, fac, &paused);
+    // ⭐⭐ W49（方案 D）：**一行装配整个 Debug 体系**
+    tools::DebugRuntime dbg(
+      {.csv_prefix = csv_prefix, .verbose_hotkeys = verbose_hotkeys, .name = "sentry"});
+    auto & hub = dbg.hub;                 // ⭐ 别名：保持下游代码一字不改
+    auto & expense = dbg.expense;
+    auto & hotkeys = dbg.hotkeys;
+    bool & paused = dbg.paused;
+
   if (verbose_hotkeys) tools::logger()->info("{}", hotkeys.help());
 
   cv::Mat img;

@@ -42,7 +42,7 @@
 #include "io/camera/video.hpp"
 #include "utils/debug/csv_sink.hpp"
 #include "utils/debug/debug_sink.hpp"
-#include "utils/debug/expense.hpp"
+#include "utils/debug/debug_setup.hpp"   // ⭐ W49：一行装配
 #include "utils/ov/device.hpp"
 
 #ifndef HZMIR_CONFIG_HPP
@@ -116,12 +116,15 @@ int run_uav(io::CameraBase & camera, Board & cboard, const std::string & config_
   auto_buff::Aimer buff_aimer(config_path);
 
   // ⭐ Debug 数据面
-  tools::SinkHub hub;
-  if (!csv_prefix.empty()) hub.add(std::make_shared<tools::CsvSink>(csv_prefix));
-  tools::Expense expense;
+    // ⭐⭐ W49（方案 D）：**一行装配整个 Debug 体系**
+    tools::DebugRuntime dbg({.csv_prefix = csv_prefix, .name = "uav"});
+    auto & hub = dbg.hub;                 // ⭐ 别名：保持下游代码一字不改
+    auto & expense = dbg.expense;
+    auto & hotkeys = dbg.hotkeys;
+    bool & paused = dbg.paused;
 
-  cv::Mat img;
-  std::chrono::steady_clock::time_point t;
+    cv::Mat img;
+    std::chrono::steady_clock::time_point t;
   auto_aim::FrameDebug fd;
   uint32_t frame_id = 0;
   auto last_mode = io::Mode::idle;

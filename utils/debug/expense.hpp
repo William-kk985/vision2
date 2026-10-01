@@ -218,6 +218,26 @@ private:
   const char * tag_;
 };
 
+/// ⭐⭐ W49：**作用域计时宏** —— 编译期保证 `begin`/`end` 配对
+///
+/// ## 为什么需要
+/// 现在的写法是 `begin()` / `end()` **分开写**：
+/// ```cpp
+/// expense.begin("detect");
+/// auto armors = yolo.detect(img);
+/// expense.end("detect");          // ⚠️ 忘了这行 → 该段恒为 0（W44 踩过同类）
+/// ```
+/// 用宏之后**不可能忘**：
+/// ```cpp
+/// { HZMIR_SCOPE_EXPENSE(expense, "detect"); auto armors = yolo.detect(img); }
+/// //                                         ↑ 作用域结束自动 end()
+/// ```
+#define HZMIR_SCOPE_EXPENSE(expense_obj, tag) \
+  ::tools::ScopedExpense HZMIR_CONCAT(_hzmir_scope_exp_, __LINE__)((expense_obj), (tag))
+
+#define HZMIR_CONCAT_(a, b) a##b
+#define HZMIR_CONCAT(a, b) HZMIR_CONCAT_(a, b)
+
 }  // namespace tools
 
 #endif  // HZMIR_UTILS_DEBUG_EXPENSE_HPP

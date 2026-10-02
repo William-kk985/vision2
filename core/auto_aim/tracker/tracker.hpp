@@ -20,6 +20,11 @@ class Tracker
 public:
   Tracker(const std::string & config_path, Solver & solver);
 
+  /// ⭐ W71：暴露 solver（主程序读 `last_debug()` 填 `fd.solver.*`；
+  ///   原来 `Tracker` 内部调 `solver_.solve(armor)`，外部完全看不到结果）
+  Solver & solver() { return solver_; }
+  const Solver & solver() const { return solver_; }
+
   std::string state() const;
 
   std::list<Target> track(
@@ -29,6 +34,9 @@ public:
   // ⭐ W7 新增：横切能力接口（从 omniperception 捞出）
   /// @brief 设置无敌掩码（来自下位机/ROS 的比赛信息）
   void set_invincible(const InvincibleMask & m) { invincible_ = m; }
+
+  /// ⭐ W72：读无敌掩码（主程序填 `fd.target.invincible`；原来该列永远是 0）
+  const InvincibleMask & invincible() const { return invincible_; }
   /// @brief 设置集火指令（上级指定的优先目标；空 = 不限制）
   void set_auto_aim_targets(std::vector<ArmorName> t) { auto_aim_targets_ = std::move(t); }
   /// @brief 运行时切换优先级模式（⭐ 开启后即偏离同济行为）

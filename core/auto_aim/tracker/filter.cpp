@@ -33,11 +33,30 @@ std::vector<ArmorName> ArmorFilter::parse_names(const std::string & csv)
 
 void ArmorFilter::load(const YAML::Node & yaml)
 {
+  // ⭐⭐⭐ W69：**先读顶层 `enemy_color`** —— 与 `Tracker::Tracker()` 保持一致。
+  //
+  // ⚠️ 原来这里只读 `yaml["armor_filter"]["enemy_color"]`，而 `Tracker` 读的是**顶层**
+  //    `yaml["enemy_color"]` ⇒ 两处读**不同位置**，用户设顶层 `enemy_color` 对 filter
+  //    **完全无效**（filter 静默用默认 `red`）。
+  //
+  // 实测（demo.avi，687 帧，蓝色装甲板）：
+  //   顶层 enemy_color=red（默认）        → trk_armor_count 非零   0/687  ⚠️ 全被滤掉
+  //   顶层 enemy_color=blue               → trk_armor_count 非零   0/687  ⚠️ 依旧无效！
+  //   armor_filter: enemy_color=blue      → trk_armor_count 非零 494/687  ✅ 只有段内生效
+  //
+  // ⇒ 现在：**顶层为准**（和 Tracker 同源），`armor_filter` 段里的值可**显式覆盖**。
+  if (yaml["enemy_color"])
+    cfg_.enemy_color =
+      (yaml["enemy_color"].as<std::string>() == "red") ? Color::red : Color::blue;
+
   auto node = yaml["armor_filter"];
   if (!node) {
-    tools::logger()->info("[ArmorFilter] 无 armor_filter 段 → 保持同济行为（仅颜色过滤）");
+    tools::logger()->info(
+      "[ArmorFilter] 无 armor_filter 段 → 保持同济行为（仅颜色过滤，enemy_color={} 取自顶层）",
+      (cfg_.enemy_color == Color::red ? "red" : "blue"));
     return;
   }
+  // ⭐ 段内显式覆盖（优先级高于顶层）
   if (node["enemy_color"])
     cfg_.enemy_color = (node["enemy_color"].as<std::string>() == "red") ? Color::red : Color::blue;
   if (node["use_enemy_color"]) cfg_.use_enemy_color = node["use_enemy_color"].as<bool>();

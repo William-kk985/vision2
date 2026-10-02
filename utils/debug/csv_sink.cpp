@@ -21,7 +21,7 @@ const char * FRAME_HEADER =
   "tgt_id,tgt_x,tgt_y,tgt_z,tgt_yaw,tgt_w,tgt_r,tgt_l,tgt_h,tgt_nis,tgt_nis_thresh,"
   "tgt_invincible,tgt_t_update_us,"
   // planner
-  "pln_t_fly,pln_t_fire,pln_t_pred,pln_overlap,pln_dps,pln_kill_time,pln_iters,pln_acc_max,"
+  "pln_t_fly,pln_overlap,pln_iters,pln_acc_max,"
   "pln_t_plan_us,"
   // shooter
   "sht_traj_err,sht_fire_thresh,sht_should_fire,sht_blocked_inv,sht_blocked_filter,"
@@ -48,9 +48,9 @@ std::string row(const auto_aim::FrameDebug & d)
     << d.target.xyz_world[2] << ',' << d.target.yaw << ',' << d.target.w << ',' << d.target.r << ','
     << d.target.l << ',' << d.target.h << ',' << d.target.nis << ',' << d.target.nis_thresh << ','
     << b(d.target.invincible) << ',' << d.target.t_update_us << ','
-    << d.planner.t_fly << ',' << d.planner.t_fire << ',' << d.planner.t_pred << ','
-    << d.planner.overlap_ratio << ',' << d.planner.dps << ',' << d.planner.kill_time << ','
-    << d.planner.solver_iters << ',' << d.planner.acc_max << ',' << d.planner.t_plan_us << ','
+    // ⚠️ W72：删掉 t_fire / t_pred / dps / kill_time（**算法里没这些量**，留着只会是 0）
+    << d.planner.t_fly << ',' << d.planner.overlap_ratio << ',' << d.planner.solver_iters << ','
+    << d.planner.acc_max << ',' << d.planner.t_plan_us << ','
     << d.shooter.traj_err_at_fire << ',' << d.shooter.fire_thresh << ','
     << b(d.shooter.should_fire) << ',' << b(d.shooter.blocked_by_invincible) << ','
     << b(d.shooter.blocked_by_filter) << ',' << d.shooter.t_since_last_fire_us << ','

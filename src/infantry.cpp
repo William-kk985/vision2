@@ -34,7 +34,8 @@
 #include "utils/debug/plotter.hpp"
 #include "utils/debug/recorder.hpp"
 // ⭐ W16：Debug 数据面（W8 建好，这次接进主程序）
-#include "core/auto_aim/detector/det_stats.hpp"   // ⭐ W63
+#include "core/auto_aim/detector/det_stats.hpp"
+#include "core/auto_aim/target/target_debug_fill.hpp"   // ⭐ W70   // ⭐ W63
 #include "core/debug.hpp"
 #include "utils/debug/csv_sink.hpp"
 #include "utils/debug/hotkeys.hpp"   // ⭐ W18：终端热键
@@ -171,7 +172,8 @@ int main(int argc, char * argv[])
   {
     std::mutex mtx;
     auto_aim::Plan plan;
-    int64_t us = 0;
+    int64_t us = 0;       // planner.plan() 耗时（本线程测）
+    int64_t ctl_us = 0;   // ⭐ W73：board->send() 耗时（真机上=串口写）
     bool valid = false;
   } psnap;
 
@@ -226,9 +228,18 @@ int main(int argc, char * argv[])
           psnap.valid = true;
         }
 
+        // ⭐⭐ W73：测 `board->send()` 的真实耗时（真机上就是串口写）——
+        //   原来 `ctl_t_us` 没地方取，我先填 0（会变成死列）。现在在这条线程里量。
+        const auto tc0 = std::chrono::steady_clock::now();
         board->send(
           plan.control, plan.fire, plan.yaw, plan.yaw_vel, plan.yaw_acc, plan.pitch, plan.pitch_vel,
           plan.pitch_acc);
+        const auto ctl_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                              std::chrono::steady_clock::now() - tc0).count();
+        {
+          std::lock_guard<std::mutex> lk(psnap.mtx);
+          psnap.ctl_us = ctl_us;
+        }
 
         std::this_thread::sleep_for(10ms);
       } else
@@ -314,6 +325,8 @@ int main(int argc, char * argv[])
       auto targets = tracker.track(armors, t);
       expense.end("track");
       fd.tracker.t_track_us = expense.us("track");
+      // ⭐⭐ W71：`sol_*` 四列（原来永远是 0）—— Solver 在 Tracker 内部被调用
+      fd.solver = tracker.solver().last_debug();
       fd.tracker.priority_mode = static_cast<int>(tracker.priority_mode());
       fd.tracker.filtered_out = n_before - static_cast<int>(armors.size());
       fd.tracker.armor_count = static_cast<int>(armors.size());
@@ -323,6 +336,16 @@ int main(int argc, char * argv[])
                           : (st == "detecting")            ? 1
                                                            : 0;
       }
+      // ⭐⭐ W70：填 `tgt_*`（原来 `fd.target.*` **从没被赋值** → CSV 里 13 列永远 0）
+      //   EKF 状态布局（见 target.cpp）：x vx y vy z vz a w r l h
+      if (!targets.empty()) {
+        auto_aim::fill_target_debug(fd.target, targets.front(), fd.solver.t_solve_us);
+        // ⭐⭐ W72：`tgt_invincible` + `sht_blocked_inv`（原来都是 0）
+        //   无敌在 Tracker 的 filter 层判定 → 这里查掩码是否含该目标的兵种
+        fd.target.invincible = tracker.invincible().has(targets.front().name);
+        fd.shooter.blocked_by_invincible = fd.target.invincible;
+      }
+
       if (!targets.empty())
         target_queue.push(targets.front());
       else
@@ -396,7 +419,26 @@ int main(int argc, char * argv[])
         fd.controller.cmd_yaw = p.yaw;
         fd.controller.cmd_pitch = p.pitch;
         fd.controller.control = p.control;
+        fd.controller.t_ctrl_us = psnap.ctl_us;   // ⭐ W73：board->send() 真实耗时
       }
+    }
+    // ⭐⭐ W71：`t_decide_us`（原来永远是 0）= 从 perceive 结束到本帧决策完成的耗时
+    fd.t_decide_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                       std::chrono::steady_clock::now() - t_frame0).count() - fd.t_perceive_us;
+    if (fd.t_decide_us < 0) fd.t_decide_us = 0;
+    // ⭐⭐ W71：`t_since_last_fire_us` —— 距上次开火的间隔（0 = 本帧刚开火）
+    {
+      static std::chrono::steady_clock::time_point t_last_fire{};
+      // ⭐⭐ W72：`sht_blocked_filter` = 「有控制 + 有目标，但没开火」= 判据没过
+      //   （infantry/hero/sentry 走 `Plan.fire` 的 MPC 判据；uav 走 `Shooter`）
+      fd.shooter.blocked_by_filter =
+        fd.controller.control && (fd.tracker.armor_count > 0) && !fd.shooter.should_fire;
+      if (fd.shooter.should_fire) t_last_fire = std::chrono::steady_clock::now();
+      fd.shooter.t_since_last_fire_us =
+        t_last_fire.time_since_epoch().count() == 0
+          ? 0
+          : std::chrono::duration_cast<std::chrono::microseconds>(
+              std::chrono::steady_clock::now() - t_last_fire).count();
     }
     fd.t_frame_us = std::chrono::duration_cast<std::chrono::microseconds>(
                       std::chrono::steady_clock::now() - t_frame0).count();

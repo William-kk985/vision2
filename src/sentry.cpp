@@ -39,6 +39,7 @@
 #include "core/auto_aim/detector/det_stats.hpp"   // ⭐ W63
 #include "core/auto_aim/planner/legacy.hpp"   // ⭐ 同济哨兵用 Aimer（legacy）
 #include "core/auto_aim/solver/solver.hpp"
+#include "core/auto_aim/target/target_debug_fill.hpp"   // ⭐ W70
 #include "core/auto_aim/tracker/tracker.hpp"
 #include "drivers/dm_imu/dm_imu.hpp"
 #include "io/board/can/cboard.hpp"
@@ -245,6 +246,11 @@ int run_sentry(
       fd.tracker.armor_count = static_cast<int>(armors.size());
       fd.tracker.priority_mode = static_cast<int>(tracker.priority_mode());
       fd.tracker.t_track_us = expense.us("track");
+      // ⭐⭐ W71：`sol_*` 四列（原来永远是 0）
+      fd.solver = tracker.solver().last_debug();
+      // ⭐⭐ W70：填 `tgt_*`（原来 `fd.target.*` 从没被赋值 → CSV 里 13 列永远 0）
+      if (!targets.empty())
+        auto_aim::fill_target_debug(fd.target, targets.front(), fd.solver.t_solve_us);
       fd.controller.cmd_yaw = command.yaw;
       fd.controller.cmd_pitch = command.pitch;
       fd.controller.control = command.control;

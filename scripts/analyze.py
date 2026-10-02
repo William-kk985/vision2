@@ -20,18 +20,11 @@ from hzmir_csv import load_frames, budget_table, stats, FRAME_BUDGET_US
 # ⚠️ 它们在 CSV 里永远 0，**看数据看不出来**（会被误当成"这帧没量到"）。
 # ⇒ 分析时**明确标注**，避免浪费时间。
 KNOWN_DEAD_COLS = {
-    "t_decide_us": "L0 决策耗时",
-    "sol_solved": "解算成功", "sol_reproj_err": "重投影误差", "sol_yaw_offset": "yaw 偏置",
-    "sol_t_solve_us": "解算耗时",
-    "tgt_id": "目标 id", "tgt_x": "世界 x", "tgt_y": "世界 y", "tgt_z": "世界 z",
-    "tgt_yaw": "目标 yaw", "tgt_w": "角速度 ω", "tgt_r": "半径 r", "tgt_l": "长 l",
-    "tgt_h": "高 h", "tgt_nis": "NIS", "tgt_nis_thresh": "NIS 阈值",
-    "tgt_invincible": "无敌", "tgt_t_update_us": "EKF 更新耗时",
-    "pln_t_fire": "开火时间", "pln_t_pred": "预测时间", "pln_dps": "秒伤",
-    "pln_kill_time": "击杀时间",
-    "sht_blocked_inv": "被无敌挡", "sht_blocked_filter": "被过滤挡",
-    "sht_t_since_fire_us": "距上次开火",
-    "ctl_t_us": "控制耗时",
+    # ⭐ W72 后：FrameDebug 的 **所有字段都已被赋值**（原来的 26 列全部补上或删除）。
+    # 留这个表是为了：**未来新增字段忘了填时能立刻被发现**。
+    # 生成方式（可复现）：从 `csv_sink.cpp` 的 `row()` 取「列名 ↔ 字段路径」映射，
+    # 再在 `src/*.cpp` 里搜 `fd.<角色>.<字段>` / `fd.<角色> =` / `fd.<角色>,`（函数传引用）。
+    # ⚠️ 只查 `fd.<角色>.<字段>` 会**误报**（整结构赋值与传引用都查不到）。
 }
 
 
@@ -120,11 +113,14 @@ def main():
     bt = budget_table(d)
     if bt:
         print("\n── 帧预算占用（10 ms 周期 @100 Hz）──")
-        print(f"  {'段':<20} {'均值':>10} {'最大':>10} {'占均值':>9}")
-        for c, mean, mx, pct in bt:
-            print(f"  {c:<20} {mean:>8.1f}us {mx:>8.1f}us {pct:>7.2f}%")
-        total = sum(r[1] for r in bt)
-        print(f"  {'合计':<20} {total:>8.1f}us {'':>10} {total/FRAME_BUDGET_US*100:>7.2f}%")
+        print(f"  {'段':<22} {'均值':>10} {'最大':>10} {'占均值':>9}")
+        for c, mean, mx, pct, is_child in bt:
+            tag = "  ↳嵌套" if is_child else ""     # ⭐ 子段：已含在父段里，不计入合计
+            print(f"  {c+tag:<22} {mean:>8.1f}us {mx:>8.1f}us {pct:>7.2f}%")
+        # ⭐ W73：合计只加**最外层**段（子段是父段的一部分，加了会重复）
+        total = sum(r[1] for r in bt if not r[4])
+        print(f"  {'合计（不含嵌套子段）':<22} {total:>8.1f}us {'':>10} "
+              f"{total/FRAME_BUDGET_US*100:>7.2f}%")
     if a.budget:
         return
 

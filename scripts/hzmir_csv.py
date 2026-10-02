@@ -76,29 +76,40 @@ def load_series(path: str):
     return {k: (np.array(v[0]), np.array(v[1])) for k, v in out.items()}
 
 
-# ⭐ 已知的**嵌套关系**（父段包含子段）—— 求和时会重复计算，需排除子段
+# ⭐⭐ 已知的**嵌套关系**（父段包含子段）—— 求和时会**重复计算**，需排除子段
+#
+# ⚠️ W73 修正：原来这里写的是 `t_frame_us` 包含全部，但 `t_frame_us` **不在 `PERF_COLS` 里**
+#    ⇒ 这个映射**完全没生效**，导致帧预算表把嵌套子段也加进合计（实测虚高到 111%）。
+#
+# ⭐ 真实的嵌套（W71/W72 补计时后实测发现）：
+#   `Tracker::track()` 内部会调用 `solver_.solve(armor)`（PnP + yaw 优化）
+#   和 `target_.update(armor)`（EKF）⇒ 这两个是 `trk_t_track_us` 的**子段**。
 NESTED = {
-    "t_frame_us": ["t_perceive_us", "det_t_infer_us", "sol_t_solve_us", "trk_t_track_us",
-                   "tgt_t_update_us", "pln_t_plan_us", "ctl_t_us", "buff_t_us"],
+    "trk_t_track_us": ["sol_t_solve_us", "tgt_t_update_us"],
 }
+
+# 展开成「子段集合」（求和时跳过它们，只留最外层）
+NESTED_CHILDREN = frozenset(c for kids in NESTED.values() for c in kids)
 
 
 def budget_table(d: Frames) -> List[tuple]:
     """⭐ 性能列的「帧预算占用」表：(列名, 均值µs, 最大µs, 占比%)
 
-    ⚠️ **假设各段正交**。若某段是别的段的父集（如 `t_frame_us` 包住全部），
-       它会被排除在求和外（见 `NESTED`），否则合计会虚高。
+    ⚠️ 各段**不一定正交** —— `NESTED` 里列的子段是父段的一部分，
+       它们**不计入合计**（否则合计虚高；曾实测到 111%）。
+       返回的元组第 5 位 `is_child` 用于显示时加标注。
     """
     rows = []
-    skip = {c for parent in NESTED.values() for c in parent}   # 只留最外层
-    _ = skip
     for c in PERF_COLS:
         if not d.has(c):
             continue
         v = d.col(c)
         if not np.any(v):          # 全 0 的段（该兵种没走这条路径）
             continue
-        rows.append((c, float(v.mean()), float(v.max()), float(v.mean()) / FRAME_BUDGET_US * 100))
+        rows.append((
+            c, float(v.mean()), float(v.max()), float(v.mean()) / FRAME_BUDGET_US * 100,
+            c in NESTED_CHILDREN,
+        ))
     rows.sort(key=lambda x: -x[1])
     return rows
 

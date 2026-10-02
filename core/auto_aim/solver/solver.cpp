@@ -54,6 +54,10 @@ void Solver::set_R_gimbal2world(const Eigen::Quaterniond & q)
 //solvePnP（获得姿态）
 void Solver::solve(Armor & armor) const
 {
+  // ⭐⭐ W71：本函数统计（供 `fd.solver.*` 四列 —— 原来它们永远是 0）
+  const auto t_solve0 = std::chrono::steady_clock::now();
+  last_dbg_ = auto_aim::SolverDebug{};   // 每帧清零，避免残留上一帧的值
+
   const auto & object_points =
     (armor.type == ArmorType::big) ? BIG_ARMOR_POINTS : SMALL_ARMOR_POINTS;
 
@@ -82,9 +86,23 @@ void Solver::solve(Armor & armor) const
   auto is_balance = (armor.type == ArmorType::big) &&
                     (armor.name == ArmorName::three || armor.name == ArmorName::four ||
                      armor.name == ArmorName::five);
-  if (is_balance) return;
+  if (is_balance) {
+    // 平衡步兵不做 yaw 优化（pitch 假设不成立）→ yaw_offset 保持 0，但要标记成功
+    last_dbg_.solved = 1;
+    last_dbg_.t_solve_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                             std::chrono::steady_clock::now() - t_solve0).count();
+    return;
+  }
 
   optimize_yaw(armor);
+
+  // ⭐ W71：`optimize_yaw` 把 PnP 的 `yaw_raw` 存下来、再把 `ypr_in_world[0]` 换成最优值
+  //   ⇒ `yaw_offset` = 优化后 - PnP 原始（弧度）
+  last_dbg_.solved = 1;
+  last_dbg_.yaw_offset = armor.ypr_in_world[0] - armor.yaw_raw;
+  last_dbg_.reprojection_error = armor_reprojection_error(armor, armor.ypr_in_world[0], 0.0);
+  last_dbg_.t_solve_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                           std::chrono::steady_clock::now() - t_solve0).count();
 }
 
 std::vector<cv::Point2f> Solver::reproject_armor(

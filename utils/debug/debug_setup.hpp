@@ -11,11 +11,9 @@
  * hub.add(std::make_shared<PlotJugglerSink>("127.0.0.1", 9870, cli.get<bool>("pj")));
  * tools::DebugKeyBindings::SinkFactories factories;
  * factories.csv = ...; factories.plotjuggler = ...;
- * #ifdef DEBUG_L3_ENABLE
- *   factories.image = ...; if (WindowSink::available()) factories.window = ...;
- *   if (cli.get<bool>("debug-img") && factories.image) hub.add(factories.image());
- *   ...
- * #endif
+ * factories.image = ...; if (WindowSink::available()) factories.window = ...;
+ * if (cli.get<bool>("debug-img") && factories.image) hub.add(factories.image());
+ * ...
  * tools::DebugKeyBindings::bind(hotkeys, hub, factories, &paused, reload_cb);
  * tools::logger()->info("{}", hotkeys.help());
  * ```
@@ -35,6 +33,7 @@
  * `config.hpp` / 装配函数 / `CMakeLists.txt` / 测试入口」的纪律。
  * ⚠️ **热路径的 L3 门控**（`hub.wants_image()` 后构造 overlay）**仍留在各 main** ——
  * 那是**业务相关**的（各兵种的 overlay 画法不同）。
+ * ⭐ **W61 起主程序里也不再有 `#ifdef`**（原来那段被宏包着 → Release 下窗口永远黑屏）。
  */
 #ifndef HZMIR_UTILS_DEBUG_DEBUG_SETUP_HPP
 #define HZMIR_UTILS_DEBUG_DEBUG_SETUP_HPP

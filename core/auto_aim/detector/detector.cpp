@@ -1,3 +1,4 @@
+#include "utils/debug/l3_gate.hpp"   // ⭐ W61：全局 L3 门控
 #include "detector.hpp"
 
 #include <fmt/chrono.h>
@@ -39,7 +40,11 @@ std::list<Armor> Detector::detect(const cv::Mat & bgr_img, int frame_count)
   // 进行二值化
   cv::Mat binary_img;
   cv::threshold(gray_img, binary_img, threshold_, 255, cv::THRESH_BINARY);
-  cv::imshow("binary_img", binary_img);
+  // ⭐⭐⭐ W61：**门控** —— 原来这里**无条件、每帧** `imshow`（同济调试残留，绕过 `SinkHub`）。
+  //   实测（640×360）：有 DISPLAY 时 `imshow` ≈ 0.70 ms、加 `waitKey` ≈ 1.34 ms/帧；
+  //   无 DISPLAY（赛场无头）≈ 0.016 ms。**而它完全绕过按键 1 / --debug-window。**
+  //   ⇒ 现在没人要图（没按 1、没传 --debug-window）就**连这句都不执行**。
+  if (tools::l3_image_wanted()) cv::imshow("binary_img", binary_img);
 
   // 获取轮廓点
   std::vector<std::vector<cv::Point>> contours;
@@ -375,12 +380,16 @@ void Detector::show_result(
     tools::draw_text(detection, info, armor.left.bottom, {0, 255, 0});
   }
 
-  cv::Mat binary_img2;
-  cv::resize(binary_img, binary_img2, {}, 0.5, 0.5);  // 显示时缩小图片尺寸
-  cv::resize(detection, detection, {}, 0.5, 0.5);     // 显示时缩小图片尺寸
-
-  // cv::imshow("threshold", binary_img2);
-  cv::imshow("detection", detection);
+  // ⭐⭐⭐ W61：**门控 + 把 resize 也挪进门里**
+  //   原来 `cv::resize(detection, detection, 0.5)` **无条件每帧执行**（写回原图，实测 0.133 ms）
+  //    —— 那是纯显示用的，没人看图时完全白做。
+  if (tools::l3_image_wanted()) {
+    cv::Mat binary_img2;
+    cv::resize(binary_img, binary_img2, {}, 0.5, 0.5);  // 显示时缩小图片尺寸
+    cv::resize(detection, detection, {}, 0.5, 0.5);
+    // cv::imshow("threshold", binary_img2);
+    cv::imshow("detection", detection);
+  }
 }
 
 void Detector::lightbar_points_corrector(Lightbar & lightbar, const cv::Mat & gray_img) const

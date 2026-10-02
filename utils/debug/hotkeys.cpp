@@ -103,11 +103,11 @@ void toggle_sink(
   if (!factory) {
     // ⭐⭐ W55：说清楚**为什么**不可用 + **怎么办**（原来只一句"不可用"）
     tools::logger()->warn(
-      "[hotkey] ⚠️ {} **在当前构建中不可用**。\n"
-      "    原因: L3 昂贵通道需要 `DEBUG_L3_ENABLE` 宏（Release 默认关）\n"
-      "    可选: ① Debug 构建下 L3 **自动开** → `tools/scripts/build.sh --debug`\n"
-      "          ② 或用 `--debug-img` / `--debug-window` 启动就挂（仅 Debug 构建有效）\n"
-      "          ③ 想存图/看窗口请用 Debug 构建跑；Release 只有 L0~L2（CSV / PlotJuggler）",
+      "[hotkey] ⚠️ {} **当前环境不可用**。\n"
+      "    常见原因：无显示环境（`DISPLAY` 未设置）→ 可视化窗口开不了（`cv::imshow` 需要 X）。\n"
+      "    可选：① 设好 `DISPLAY` 再跑（本地图形界面）\n"
+      "          ② 用 `--debug-img` 存图代替（不需要显示）\n"
+      "          ③ 远程/无头机器：用 CSV / PlotJuggler 看数据（L0~L2 不依赖显示）",
       label);
     return;
   }

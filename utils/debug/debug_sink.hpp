@@ -31,6 +31,7 @@
 #include <opencv2/opencv.hpp>
 
 #include "core/debug.hpp"
+#include "utils/debug/l3_gate.hpp"   // ⭐ W61：全局 L3 门控
 
 namespace tools
 {
@@ -52,7 +53,7 @@ public:
   /// L2：多帧序列（曲线），按 key 分流
   virtual void on_series(std::string_view key, int64_t t_us, double v) { (void)key; (void)t_us; (void)v; }
 
-  /// L3：昂贵（存图）—— ⚠️ **只有开了 DEBUG_L3_ENABLE 且运行期开关打开时才被调用**
+  /// L3：昂贵（存图/显示）—— ⭐ **纯运行期门控**：挂了 `wants_image()==true` 的 sink 才会被调用
   virtual void on_image(std::string_view tag, const cv::Mat & img, int64_t t_us)
   {
     (void)tag; (void)img; (void)t_us;
@@ -68,6 +69,8 @@ public:
     if (!s) return;
     std::unique_lock lk(mtx_);
     sinks_.push_back(std::move(s));
+      n_.store(sinks_.size(), std::memory_order_release);   // ⭐ W61：原子镜像
+      refresh_l3_gate();                                     // ⭐ W61：同步全局门控
   }
 
   bool remove(std::string_view name)
@@ -77,6 +80,8 @@ public:
                            [&](const auto & s) { return s->name() == name; });
     if (it == sinks_.end()) return false;
     sinks_.erase(it);
+      n_.store(sinks_.size(), std::memory_order_release);   // ⭐ W61
+      refresh_l3_gate();                                     // ⭐ W61
     return true;
   }
 
@@ -100,6 +105,7 @@ public:
   /// ⭐ 是否有任意 sink 需要图像（L3 门控）—— 热路径每帧问一次，成本忽略
   bool wants_image() const
   {
+    if (n_.load(std::memory_order_acquire) == 0) return false;   // ⭐ W61 快路径
     std::shared_lock lk(mtx_);
     for (const auto & s : sinks_)
       if (s->wants_image()) return true;
@@ -108,23 +114,36 @@ public:
 
   void on_frame(const auto_aim::FrameDebug & d)
   {
+    if (n_.load(std::memory_order_acquire) == 0) return;   // ⭐ W61 快路径
     std::shared_lock lk(mtx_);          // 读多写少
     for (auto & s : sinks_) s->on_frame(d);
   }
   void on_series(std::string_view k, int64_t t, double v)
   {
+    if (n_.load(std::memory_order_acquire) == 0) return;   // ⭐ W61 快路径
     std::shared_lock lk(mtx_);
     for (auto & s : sinks_) s->on_series(k, t, v);
   }
   void on_image(std::string_view tag, const cv::Mat & img, int64_t t_us)
   {
+    if (n_.load(std::memory_order_acquire) == 0) return;   // ⭐ W61 快路径
     std::shared_lock lk(mtx_);
     for (auto & s : sinks_) s->on_image(tag, img, t_us);
   }
 
 private:
+  /// ⭐ W61：把「有没有 sink 要图」同步到全局门控（供 detector/yolo 这类深层代码查）
+  void refresh_l3_gate()
+  {
+    bool want = false;
+    for (const auto & s : sinks_)
+      if (s->wants_image()) { want = true; break; }
+    tools::set_l3_image_wanted(want);
+  }
+
   mutable std::shared_mutex mtx_;
   std::vector<std::shared_ptr<IDebugSink>> sinks_;
+  std::atomic<size_t> n_{0};   // ⭐ W61：sink 数量的原子镜像（无 sink 时免锁）
 };
 
 /// @brief 什么都不做的 sink（比赛用：零开销）

@@ -1,4 +1,5 @@
 #include "yolov8.hpp"
+#include "utils/debug/l3_gate.hpp"   // ⭐ W61：全局 L3 门控
 
 #include <fmt/chrono.h>
 #include <omp.h>
@@ -293,8 +294,13 @@ void YOLOV8::draw_detections(
     cv::Scalar green(0, 255, 0);
     cv::rectangle(detection, roi_, green, 2);
   }
-  cv::resize(detection, detection, {}, 0.5, 0.5);  // 显示时缩小图片尺寸
-  cv::imshow("detection", detection);
+  // ⭐⭐⭐ W61：**门控** —— 原来这两种操作**无条件每帧执行**（同济调试残留，绕过 `SinkHub`）：
+  //   `resize` ≈ 0.133 ms + `imshow` ≈ 0.70 ms（有 DISPLAY）→ ⚠️ 合计 ~0.83 ms/帧
+  //   实测代价见 `utils/debug/l3_gate.hpp` 的注释。
+  if (tools::l3_image_wanted()) {
+    cv::resize(detection, detection, {}, 0.5, 0.5);  // 显示时缩小图片尺寸
+    cv::imshow("detection", detection);
+  }
 }
 
 void YOLOV8::sort_keypoints(std::vector<cv::Point2f> & keypoints)

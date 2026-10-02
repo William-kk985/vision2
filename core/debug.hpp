@@ -30,7 +30,7 @@
  *   L0 耗时/帧号/模式      ~100 ns/帧   永远开
  *   L1 每角色一个快照结构  ~50 ns/帧    永远开
  *   L2 多帧序列（曲线）     ~50 ns/项    永远开（走 IDebugSink::on_series）
- *   L3 存图/存点云          ~ms          ⚠️ 唯一用宏的（DEBUG_L3_ENABLE）
+ *   L3 存图/显示            ~ms          ⭐ **纯运行期门控**（`SinkHub::wants_image()`，无宏）
  */
 #ifndef HZMIR_CORE_DEBUG_HPP
 #define HZMIR_CORE_DEBUG_HPP

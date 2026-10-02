@@ -393,7 +393,10 @@ int main(int argc, char * argv[])
                       std::chrono::steady_clock::now() - t_frame0).count();
     hub.on_frame(fd);                          // ⭐ L0+L1 广播
 
-#ifdef DEBUG_L3_ENABLE
+    // ⭐⭐⭐ W61：**不再用 `#ifdef`** —— 原来这段被 `DEBUG_L3_ENABLE` 包着，
+    //   Release 下**整个不编译** → 按 1 能开出窗口但**永远黑屏**（实测踩到）。
+    //   现在总是编入，**纯运行期门控**：没人要图 → `wants_image()` 返回 false
+    //   → **连 `clone()` 都不做**（实测 `wants_image()` ≈ 24 ns/帧 = 0.00024% 预算）。
     // ⭐ W19：L3 图像通道 —— **只有真有 L3 sink 时才构造 overlay**（否则零成本）
     if (hub.wants_image() && !img.empty()) {
       cv::Mat overlay = img.clone();
@@ -403,7 +406,6 @@ int main(int argc, char * argv[])
         cv::FONT_HERSHEY_SIMPLEX, 1.0, {0, 255, 255}, 2);
       hub.on_image("aim", overlay, fd.t_frame_us);
     }
-#endif
     hub.on_series("planner.t_fly", fd.frame_id, fd.planner.t_fly);
     hub.on_series("planner.overlap", fd.frame_id, fd.planner.overlap_ratio);
     hub.on_series("planner.acc_max", fd.frame_id, fd.planner.acc_max);

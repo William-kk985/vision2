@@ -37,6 +37,7 @@
 
 #include "core/auto_aim/detector/yolo.hpp"
 #include "core/auto_aim/detector/det_stats.hpp"
+#include "utils/system/disk_guard.hpp"   // ⭐ W83
 #include "utils/system/host_info.hpp"
 #include "utils/system/thread_tuning.hpp"   // ⭐ W82   // ⭐ W81：本机核数 + 建议   // ⭐ W63
 #include "core/auto_aim/planner/legacy.hpp"   // ⭐ 同济哨兵用 Aimer（legacy）
@@ -85,7 +86,8 @@ const std::string keys =
   "{strict-device  | false | ⭐ 严格设备模式（true = 设备不可用就抛异常）}"
   "{no-board       | false | ⭐⭐ 强制虚拟下位机（不碰串口；只有摄像头时用）}"
   "{strict-board   | false | ⭐⭐ 串口不存在就失败退出（同济行为）；默认自动降级虚拟板}"
-  "{det-stats      | true | ⭐ 逐帧打印检测统计（候选→各步过滤）；false 硬关}";
+  "{det-stats      | true | ⭐ 逐帧打印检测统计（候选→各步过滤）；false 硬关}"
+  "{record-quota   | 10240 | ⭐ 录像目录总配额 MB（启动时清理最旧文件；0=不清理）}";
 
 using namespace std::chrono_literals;
 
@@ -148,6 +150,9 @@ int run_sentry(
     // ⭐⭐ W81：启动时打印「本机核数 + 建议配置」（核少时提示关 sink）
     tools::print_host_advice("sentry");
     tools::report_thread_tuning();   // ⭐ W82
+    // ⭐⭐ W83：录像磁盘守卫（**启动时一次**：配额清理 + 剩余空间 + 低空间警告）
+    // ⚠️ 这两个兵种的 `cli` 不在本作用域 → 用固定配额（10 GB，与 infantry/hero 默认一致）
+    tools::guard_recording_dir("records", 10240, 5000);
 
     tools::DebugRuntime dbg(
       {.csv_prefix = csv_prefix, .verbose_hotkeys = verbose_hotkeys, .name = "sentry"});

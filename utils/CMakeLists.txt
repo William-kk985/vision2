@@ -23,6 +23,7 @@ add_library(hzmir_utils STATIC
   ov/device.cpp
     system/host_info.cpp
     system/thread_tuning.cpp
+    system/disk_guard.cpp
 )
 target_link_libraries(hzmir_utils PUBLIC
   ${OpenCV_LIBS} fmt::fmt spdlog::spdlog yaml-cpp

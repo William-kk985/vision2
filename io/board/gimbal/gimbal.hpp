@@ -82,6 +82,12 @@ private:
   tools::ThreadSafeQueue<std::tuple<Eigen::Quaterniond, std::chrono::steady_clock::time_point>>
     queue_{1000};
 
+    // ⭐⭐ W83：**上一次有效姿态** —— IMU 断流时 `q(t)` 返回它（而不是无限阻塞）。
+    //   初值 = 单位四元数（与虚拟板行为一致，下游 EKF 不会因 NaN 崩）。
+    Eigen::Quaterniond last_q_{1, 0, 0, 0};
+    // ⭐ 断流告警限频（每 ~1 秒一次，不刷屏）
+    std::atomic<int64_t> imu_gap_warned_{0};
+
   bool read(uint8_t * buffer, size_t size);
   void read_thread();
   void reconnect();

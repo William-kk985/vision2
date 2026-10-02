@@ -62,7 +62,8 @@ YOLOV8::YOLOV8(const std::string & config_path, bool debug)
     .convert_color(ov::preprocess::ColorFormat::RGB)
     .scale(255.0);
 
-  // TODO: ov::hint::performance_mode(ov::hint::PerformanceMode::LATENCY)
+  // ⭐ W83：`performance_mode(LATENCY)` **已设**（见下面 compile_model）；
+  //   原来这里留着一句 TODO 会让人以为没设 —— 删掉避免误导。
   model = ppp.build();
   compiled_model_ = core_.compile_model(
     model, device_, ov::hint::performance_mode(ov::hint::PerformanceMode::LATENCY));

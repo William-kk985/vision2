@@ -63,7 +63,19 @@ Gimbal::Gimbal(const std::string & config_path)
 
   thread_ = std::thread(&Gimbal::read_thread, this);
 
-  queue_.pop();
+  // ⭐⭐ W83：原来是无超时的 `queue_.pop()` —— 下位机/串口不通时**构造就永久卡死**
+  //   （进程既没日志也不退出，看起来像"启动失败"）。⇒ 改带超时 + **说清怎么办**。
+  {
+    std::tuple<Eigen::Quaterniond, std::chrono::steady_clock::time_point> first;
+    if (!queue_.pop_for(first, std::chrono::milliseconds(3000))) {
+      tools::logger()->error(
+        "[Gimbal] ⚠️ **3 秒内没收到任何 IMU 数据** → 无法确定云台姿态，启动中止。\n"
+        "    排查：① 下位机是否上电、是否在发数据\n"
+        "          ② 波特率/协议是否与下位机一致\n"
+        "          ③ 只想看检测/跟踪：用 `--no-board` 跑虚拟下位机（IMU 恒为单位四元数）");
+      throw std::runtime_error("[Gimbal] 没有 IMU 数据");
+    }
+  }
   tools::logger()->info("[Gimbal] First q received.");
 }
 
@@ -102,11 +114,38 @@ std::string Gimbal::str_of(GimbalMode mode)
 
 Eigen::Quaterniond Gimbal::q(std::chrono::steady_clock::time_point t)
 {
+  // ⭐⭐ W83 修复：原来两个调用 **都会无限阻塞**：
+  //   · `queue_.pop()`   —— 队列空就永久等
+  //   · `queue_.front()` —— 同理
+  //   ⚠️ 后果：串口一断，**主循环（每帧都调 q()）永久卡死** →
+  //      Ctrl-C / 热键 / `q` 全部失效，只能 `kill -9`。
+  //   ⇒ 现在：`pop_for` 带超时；`try_peek` 非阻塞。
+  //      超时 → 返回 `last_q_`（上一次有效姿态）+ **限频告警**，主循环继续跑。
   while (true) {
-    auto [q_a, t_a] = queue_.pop();
-    auto [q_b, t_b] = queue_.front();
+    std::tuple<Eigen::Quaterniond, std::chrono::steady_clock::time_point> item;
+    if (!queue_.pop_for(item, std::chrono::milliseconds(200))) {
+      const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::steady_clock::now().time_since_epoch()).count();
+      const auto last = imu_gap_warned_.load(std::memory_order_relaxed);
+      if (now_ms - last > 1000) {   // 每 ~1 秒告警一次（不刷屏）
+        imu_gap_warned_.store(now_ms, std::memory_order_relaxed);
+        tools::logger()->warn(
+          "[Gimbal] ⚠️ IMU 数据断流 >200ms → 本帧姿态沿用上一次（**EKF 预测不可信**）。"
+          "检查下位机/串口；只想看检测可用 `--no-board`");
+      }
+      return last_q_;
+    }
+    const auto & [q_a, t_a] = item;
+    if (q_a.coeffs().allFinite()) last_q_ = q_a;   // ⭐ 只缓存有限值
+
+    // ⭐ 非阻塞 peek：队列里只有这一个 → 直接用上一次姿态（原来会死等下一个）
+    std::tuple<Eigen::Quaterniond, std::chrono::steady_clock::time_point> nxt;
+    if (!queue_.try_peek(nxt)) return last_q_;
+
+    const auto & [q_b, t_b] = nxt;
     auto t_ab = tools::delta_time(t_a, t_b);
     auto t_ac = tools::delta_time(t_a, t);
+    if (!(t_ab > 0)) continue;                     // ⭐ 防除零（时间戳相同/倒序）
     auto k = t_ac / t_ab;
     Eigen::Quaterniond q_c = q_a.slerp(k, q_b).normalized();
     if (t < t_a) return q_c;

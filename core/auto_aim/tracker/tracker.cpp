@@ -91,10 +91,16 @@ std::list<Target> Tracker::track(
   // });
 
   // 优先选择靠近图像中心的装甲板
+  // ⭐⭐ W83 修复（同济继承的 bug）：原来硬编码 `img_center(1440/2, 1080/2)`，
+  //   ⚠️ 但本仓库相机是 **1280×720** → 中心算成 (720,540)，真实是 (640,360)
+  //   ⇒ 「优先选靠近图像中心」的排序**偏向右下角** → 多装甲板时**选错目标**。
+  //   （同济原版也是 1440×1080 硬编码 —— 因为他们的相机确实是那个分辨率）
+  //   ✅ 改用 `Armor::center_norm`（各 detector 路径都已填，**与分辨率无关**），
+  //      中心即归一化坐标的 (0.5, 0.5)。**无需改 `track()` 签名、无需新状态。**
   armors.sort([](const Armor & a, const Armor & b) {
-    cv::Point2f img_center(1440 / 2, 1080 / 2);  // TODO
-    auto distance_1 = cv::norm(a.center - img_center);
-    auto distance_2 = cv::norm(b.center - img_center);
+    const cv::Point2f center_norm(0.5f, 0.5f);
+    auto distance_1 = cv::norm(a.center_norm - center_norm);
+    auto distance_2 = cv::norm(b.center_norm - center_norm);
     return distance_1 < distance_2;
   });
 
@@ -159,10 +165,16 @@ std::tuple<omniperception::DetectionResult, std::list<Target>> Tracker::track(
   }
 
   // 优先选择靠近图像中心的装甲板
+  // ⭐⭐ W83 修复（同济继承的 bug）：原来硬编码 `img_center(1440/2, 1080/2)`，
+  //   ⚠️ 但本仓库相机是 **1280×720** → 中心算成 (720,540)，真实是 (640,360)
+  //   ⇒ 「优先选靠近图像中心」的排序**偏向右下角** → 多装甲板时**选错目标**。
+  //   （同济原版也是 1440×1080 硬编码 —— 因为他们的相机确实是那个分辨率）
+  //   ✅ 改用 `Armor::center_norm`（各 detector 路径都已填，**与分辨率无关**），
+  //      中心即归一化坐标的 (0.5, 0.5)。**无需改 `track()` 签名、无需新状态。**
   armors.sort([](const Armor & a, const Armor & b) {
-    cv::Point2f img_center(1440 / 2, 1080 / 2);  // TODO
-    auto distance_1 = cv::norm(a.center - img_center);
-    auto distance_2 = cv::norm(b.center - img_center);
+    const cv::Point2f center_norm(0.5f, 0.5f);
+    auto distance_1 = cv::norm(a.center_norm - center_norm);
+    auto distance_2 = cv::norm(b.center_norm - center_norm);
     return distance_1 < distance_2;
   });
 

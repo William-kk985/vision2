@@ -13,6 +13,27 @@ import numpy as np
 from hzmir_csv import load_frames, budget_table, stats, FRAME_BUDGET_US
 
 
+# ⭐⭐⭐ W67：**已知「从没被主程序赋值」的列**（永远 0，不是数据问题）
+#
+# 生成方式：从 `csv_sink.cpp` 的 `row()` 取「列名 ↔ 字段路径」映射，
+# 再在 `src/*.cpp` 里搜 `fd.<角色>.<字段>` —— 零命中的即为死列。
+# ⚠️ 它们在 CSV 里永远 0，**看数据看不出来**（会被误当成"这帧没量到"）。
+# ⇒ 分析时**明确标注**，避免浪费时间。
+KNOWN_DEAD_COLS = {
+    "t_decide_us": "L0 决策耗时",
+    "sol_solved": "解算成功", "sol_reproj_err": "重投影误差", "sol_yaw_offset": "yaw 偏置",
+    "sol_t_solve_us": "解算耗时",
+    "tgt_id": "目标 id", "tgt_x": "世界 x", "tgt_y": "世界 y", "tgt_z": "世界 z",
+    "tgt_yaw": "目标 yaw", "tgt_w": "角速度 ω", "tgt_r": "半径 r", "tgt_l": "长 l",
+    "tgt_h": "高 h", "tgt_nis": "NIS", "tgt_nis_thresh": "NIS 阈值",
+    "tgt_invincible": "无敌", "tgt_t_update_us": "EKF 更新耗时",
+    "pln_t_fire": "开火时间", "pln_t_pred": "预测时间", "pln_dps": "秒伤",
+    "pln_kill_time": "击杀时间",
+    "sht_blocked_inv": "被无敌挡", "sht_blocked_filter": "被过滤挡",
+    "sht_t_since_fire_us": "距上次开火",
+    "ctl_t_us": "控制耗时",
+}
+
 
 def detect_diagnosis(d) -> None:
     """⭐⭐⭐ W65：用 `det_nms` / `det_armor_count` / `det_best_conf` 三列**组合诊断检测链路**
@@ -121,13 +142,21 @@ def main():
     # ── ⭐⭐ 全 0 列警告：默认会**隐藏**它们，但"永远为 0"往往是【忘了填】而非【真为 0】 ──
     zero_cols = [c for c in d.header if not np.any(d.col(c))]
     if zero_cols and not a.all:
+        # ⭐ W67：分两类 —— 「已知死列」（代码从没赋值）vs「本段恰好为 0」
+        dead = [c for c in zero_cols if c in KNOWN_DEAD_COLS]
+        live0 = [c for c in zero_cols if c not in KNOWN_DEAD_COLS]
         print(f"\n╔═ ⚠️ **{len(zero_cols)} 个列【全为 0】，已被隐藏** ═══════════════════════════")
-        print(f"║  请确认是【真为 0】还是【**忘了填**】（后者是静默 bug，看数据看不出来）")
-        for i in range(0, min(len(zero_cols), 24), 4):
-            print("║    " + "  ".join(f"{c:<20}" for c in zero_cols[i:i+4]))
-        if len(zero_cols) > 24:
-            print(f"║    ...（还有 {len(zero_cols)-24} 个，用 `--all` 看全部）")
-        print(f"╚═ 提示：查代码里该字段的赋值点；本项目已知的：`game_state`（TODO 没接比赛状态）")
+        if dead:
+            print(f"║  ❌ **{len(dead)} 个是【代码从没赋值】的列**（永远 0，不是这段视频的问题）：")
+            for i in range(0, min(len(dead), 20), 4):
+                print("║    " + "  ".join(f"{c:<20}" for c in dead[i:i+4]))
+            if len(dead) > 20:
+                print(f"║    ...（还有 {len(dead)-20} 个）")
+        if live0:
+            print(f"║  🔶 **{len(live0)} 个是本段/本场景恰好为 0**（可能真的没量到）：")
+            for i in range(0, min(len(live0), 16), 4):
+                print("║    " + "  ".join(f"{c:<20}" for c in live0[i:i+4]))
+        print(f"╚═ 提示：`KNOWN_DEAD_COLS` 里列的就是前者；补上赋值后它们才会有数据")
 
     # ── ⭐⭐⭐ 检测链路诊断（三列组合）──
     detect_diagnosis(d)

@@ -102,6 +102,14 @@ public:
   int64_t sent_count() const { return sent_.load(); }
 
 private:
+  /// ⭐ W66：最新一条指令（供汇总日志打印真实内容）
+  struct LastCmd
+  {
+    bool control = false, fire = false;
+    float yaw = 0, yaw_vel = 0, yaw_acc = 0, pitch = 0, pitch_vel = 0, pitch_acc = 0;
+  };
+  LastCmd last_;
+
   GimbalMode mode_;
   float bullet_speed_;
   std::atomic<int64_t> sent_{0};

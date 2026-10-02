@@ -116,7 +116,7 @@ struct DebugRuntime
     if (opt.img && factories.image) hub.add(factories.image());
     if (opt.window && factories.window) hub.add(factories.window());
     tools::logger()->info(
-      "[{}] L3 图像通道可用（存图={} 窗口={}）—— **不需要重编**，按键 1/4 随时开关", opt.name,
+      "[{}] L3 图像通道可用（存图={} 窗口={}）—— 不需要重编，按键 1/4 随时开关", opt.name,
       hub.has("image") ? "开" : "关", hub.has("window") ? "开" : "关");
 
     // ── ④ 热键绑定（`bind` 的 paused/on_reload 都有默认值）──

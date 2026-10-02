@@ -80,13 +80,13 @@ inline std::unique_ptr<IBoard> make_board(
 
   if (strict) {
     tools::logger()->error(
-      "[{}] ❌ `--strict-board` 且{} → 失败退出（同济行为）。\n"
-      "    想跑起来: 去掉 `--strict-board`（自动降级虚拟板），或 `--no-board`，或 `--video=录像.avi`",
+      "[{}] `--strict-board` 且{} → 失败退出（同济行为）。\n"
+      "  想跑起来: 去掉 `--strict-board`（自动降级虚拟板），或 `--no-board`，或 `--video=录像.avi`",
       robot, why);
     std::exit(1);
   }
 
-  tools::logger()->warn("[{}] ⚠️ {} → **自动降级为虚拟下位机**", robot, why);
+  tools::logger()->warn("[{}] {} → 自动降级为虚拟下位机", robot, why);
   return std::make_unique<VirtualBoard>(fm, bullet_speed, why);
 }
 

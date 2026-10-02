@@ -54,9 +54,8 @@ struct HostInfo
 /// @brief 探测本机（`std::thread::hardware_concurrency()`）
 HostInfo detect_host();
 
-/// @brief ⭐⭐ 启动时打印「本机核数 + 建议配置」—— 四兵种各调一次
-/// @param robot 兵种名（用于日志前缀）
-void print_host_advice(const char * robot);
+// Note: the former `print_host_advice()` startup banner was removed on purpose --
+// per-channel costs are documented in README instead of spamming every startup.
 
 }  // namespace tools
 

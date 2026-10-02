@@ -217,9 +217,9 @@ std::list<Armor> YOLOV8::parse(
     static int no_cand_count = 0;
     if (++no_cand_count % 60 == 1)   // 节流：每 60 帧（约 0.6 秒）报一次
       tools::logger()->debug(
-        "[YOLOV8] objectness 无候选通过：最高 {:.3f} / 阈值 {:.2f}"
-        "（>0.5:{} >0.3:{} >0.1:{}；共 {} anchor）",
-        max_obj, score_threshold_, n_over_05, n_over_03, n_over_01, output.rows);
+        "[YOLOV8] 本帧无候选：objectness 峰值 {:.3f} < 阈值 {:.2f}"
+        "（采样 {} 个 anchor；>0.3 有 {} 个、>0.1 有 {} 个）",
+        max_obj, score_threshold_, output.rows, n_over_03, n_over_01);
   }
   if (auto_aim::det_stats_enabled() && n_pass > 0) {
     static int last_n_out = -1;
@@ -232,8 +232,8 @@ std::list<Armor> YOLOV8::parse(
       last_n_out = n_out;
       if (n_out == 0)
         tools::logger()->debug(   // ⭐ W63：warn→debug（它是诊断信息不是告警），info 级别可静音
-          "[{}] objectness 通过 {} 个候选 → **全被滤掉**：not_armor {} / 置信度 {} / "
-          "类型不符 {}  ⇒ 最终 0 个装甲板",
+          "[{}] objectness 通过 {} 个候选 → 全被滤掉：not_armor {} / 置信度 {} / "
+          "类型不符 {} 最终 0 个装甲板",
           "yolov8", n_pass, n_name, n_conf, n_type);
       else
         tools::logger()->debug(

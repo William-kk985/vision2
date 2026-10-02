@@ -54,25 +54,5 @@ HostInfo detect_host()
   return h;
 }
 
-void print_host_advice(const char * robot)
-{
-  const auto h = detect_host();
-
-  // ⭐ 只报「核数 + 各 sink 的实测开销」，是否开启由使用者按场景判断。
-  //   ⚠️ 核数少时额外提示一句风险来源（OpenVINO 会占多核），不做具体取舍建议。
-  std::string extra;
-  if (h.tier == HostTier::Tight || h.tier == HostTier::Critical) {
-    extra =
-      "\n      ⚠️ 本机核数偏少：OpenVINO 推理会占用多核（4 线程实测 7.28 ms / 2.5 核），\n"
-      "         再叠加高消耗项（窗口 / 录像）可能开始抢占自瞄线程。\n"
-      "         参考基线：30 fps 相机 → 33 ms 帧预算；自瞄线程实测约 7~9 ms。";
-  }
-
-  tools::logger()->info(
-    "[{}] 本机 {} 逻辑核（{}）\n"
-    "      各 Debug 通道的开销（实测，供按场景取舍）：\n"
-    "{}{}",
-    robot, h.logical_cores, h.tier_name, kCostTable, extra);
-}
 
 }  // namespace tools

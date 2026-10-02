@@ -19,17 +19,12 @@ Tracker::Tracker(const std::string & config_path, Solver & solver)
   omni_target_priority_{ArmorPriority::fifth}
 {
   auto yaml = YAML::LoadFile(config_path);
-  // ⭐ W82：原来这里是 `enemy_color_ = (yaml["enemy_color"]...)` —— 赋值给一个
-  //   **从不读取**的成员（死成员）。但那一行兼做"缺键校验"（`as<std::string>()` 会抛）。
-  //   ⇒ 保留校验、去掉死成员；并**明确告知**颜色过滤真正生效的位置（避免再误解）。
+  // The old assignment here targeted a write-only member (removed). Keep the
+  // key-presence check: the color filter itself lives in ArmorFilter::apply().
   if (!yaml["enemy_color"]) {
     tools::logger()->warn(
       "[Tracker] yaml 缺 `enemy_color` → 颜色过滤将用 ArmorFilter 的默认值（red）。"
       "请在 params/*.yaml 顶层补上 `enemy_color: \"red\" | \"blue\"`");
-  } else {
-    tools::logger()->debug(
-      "[Tracker] yaml 的 enemy_color = {}（⚠️ 本类不使用；实际过滤在 ArmorFilter::apply）",
-      yaml["enemy_color"].as<std::string>());
   }
   min_detect_count_ = yaml["min_detect_count"].as<int>();
   max_temp_lost_count_ = yaml["max_temp_lost_count"].as<int>();

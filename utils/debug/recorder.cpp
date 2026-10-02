@@ -23,8 +23,8 @@ Recorder::Recorder(double fps, bool enabled, size_t queue_cap)
            const auto n = ++dropped_;
            if (!drop_warned_.exchange(true)) {
              tools::logger()->warn(
-               "[Recorder] ⚠️ **队列已满，开始丢帧**（worker 的 MJPG 编码跟不上 {} fps）。"
-               "录出来的视频会**跳帧**。丢帧数会在退出时报告。",
+               "[Recorder] 队列已满，开始丢帧（worker 的 MJPG 编码跟不上 {} fps）。"
+               "录出来的视频会跳帧。丢帧数会在退出时报告。",
                fps_);
            }
            (void)n;
@@ -45,11 +45,11 @@ Recorder::Recorder(double fps, bool enabled, size_t queue_cap)
   //   （实测跑几十次测试就攒了 48 个文件）
   if (enabled_) {
     tools::logger()->info(
-      "[Recorder] ⭐ 录像已开启 → {}  /  {}（{} fps，队列容量 {}{}）", video_path_, text_path_,
+      "[Recorder] 录像已开启 → {} / {}（{} fps，队列容量 {}{}）", video_path_, text_path_,
       fps_, queue_.capacity(), "");
   } else {
     tools::logger()->info(
-      "[Recorder] 录像**未开启**（要录请传 `--record` 或热键开启）—— 不会产生 records/ 文件");
+      "[Recorder] 录像未开启（要录请传 `--record` 或热键开启）—— 不会产生 records/ 文件");
   }
 }
 
@@ -81,7 +81,7 @@ void Recorder::close()
   const int64_t w = written_.load(), d = dropped_.load();
   if (d > 0) {
     tools::logger()->warn(
-      "[Recorder] 结束：写入 {} 帧，⚠️ **丢弃 {} 帧（{:.1f}%）** → {} 是**跳帧**的",
+      "[Recorder] 结束：写入 {} 帧，丢弃 {} 帧（{:.1f}%） → {} 是跳帧的",
       w, d, 100.0 * d / (w + d > 0 ? w + d : 1), video_path_);
   } else {
     tools::logger()->info("[Recorder] 结束：写入 {} 帧，无丢帧 → {}", w, video_path_);

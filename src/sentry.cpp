@@ -148,8 +148,6 @@ int run_sentry(
 
     // ⭐⭐ W49（方案 D）：**一行装配整个 Debug 体系**
     // ⭐⭐ W81：启动时打印「本机核数 + 建议配置」（核少时提示关 sink）
-    tools::print_host_advice("sentry");
-    tools::report_thread_tuning();   // ⭐ W82
     // ⭐⭐ W83：录像磁盘守卫（**启动时一次**：配额清理 + 剩余空间 + 低空间警告）
     // ⚠️ 这两个兵种的 `cli` 不在本作用域 → 用固定配额（10 GB，与 infantry/hero 默认一致）
     // ⚠️ 这两个兵种的 `cli` 不在本作用域 → 用默认 30 天
@@ -331,7 +329,7 @@ int main(int argc, char * argv[])
   io::VideoCamera camera(video_path, cli.get<double>("video-speed"));
   ReplayCBoard cboard(pose, m, cli.get<double>("bullet-speed"), shoot_mode);
   tools::logger()->info(
-    "[sentry] 录像回放模式: {}  mode={}({})  shoot_mode={}", video_path, int(m),
+    "[sentry] 录像回放模式: {} mode={}({}) shoot_mode={}", video_path, int(m),
     (m >= 0 && m < int(io::MODES.size())) ? io::MODES[m] : "?",
     (shoot_mode == io::ShootMode::left_shoot    ? "left"
      : shoot_mode == io::ShootMode::right_shoot ? "right"

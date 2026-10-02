@@ -81,7 +81,7 @@ size_t cleanup_older_than(const std::string & dir, int days, const std::vector<s
 
   if (removed)
     tools::logger()->info(
-      "[disk] ⭐ `{}` 清理了 {} 个超过 {} 天的文件（释放 {}）", dir, removed, days, human(freed));
+      "[disk] `{}` 清理了 {} 个超过 {} 天的文件（释放 {}）", dir, removed, days, human(freed));
   return removed;
 }
 
@@ -96,17 +96,15 @@ void guard_on_startup(int log_days, const std::string & records_dir)
   const auto lg = query_disk("logs");
   if (lg.ok)
     tools::logger()->info(
-      "[disk] `logs/` 现有 {} 个文件 / {}（保留最近 {} 天；超期自动清理）",
-      lg.files, human(lg.dir_bytes), log_days);
+      "[disk] logs/ {} 个文件 {}（清理阈值 {} 天）", lg.files, human(lg.dir_bytes), log_days);
 
   // ⭐ 录像：**只报"能录多久"，不清理**（比赛复盘/取证要用，交使用者自行管理）
   const auto rc = query_disk(records_dir);
   if (rc.ok && rc.free_bytes) {
     constexpr uint64_t kRate = static_cast<uint64_t>(1.5 * 1024 * 1024);   // 实测 1.5 MB/s
     tools::logger()->info(
-      "[disk] `{}` 占用 {} / {} 个文件 · 分区剩余 {}（按实测 1.5 MB/s 估算 **可录约 {} 分钟**）"
-      " —— ⚠️ 录像**不会**被自动清理，请自行管理",
-      records_dir, human(rc.dir_bytes), rc.files, human(rc.free_bytes), rc.free_bytes / kRate / 60);
+      "[disk] {}/ {} 个文件 {} · 分区剩余 {} · 可录约 {} 分钟（1.5 MB/s）· 不自动清理",
+      records_dir, rc.files, human(rc.dir_bytes), human(rc.free_bytes), rc.free_bytes / kRate / 60);
   }
 }
 

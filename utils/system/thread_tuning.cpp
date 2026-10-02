@@ -51,18 +51,5 @@ bool pin_current_thread(const char * cpu_list)
   return ::pthread_setaffinity_np(::pthread_self(), sizeof(set), &set) == 0;
 }
 
-void report_thread_tuning()
-{
-  const bool rt = realtime_priority_available();
-  if (rt) {
-    tools::logger()->info(
-      "[host] 实时优先级可用（RLIMIT_RTPRIO > 0）→ 自瞄线程可考虑 SCHED_FIFO");
-  } else {
-    tools::logger()->info(
-      "[host] ⚠️ 实时优先级不可用（RLIMIT_RTPRIO = 0）→ 不设 SCHED_FIFO；\n"
-      "       sink worker 已用 SCHED_IDLE（零权限，CPU 空闲时才跑）。\n"
-      "       如需 SCHED_FIFO：`sudo setcap cap_sys_nice+ep <可执行文件>` 或 `sudo` 运行");
-  }
-}
 
 }  // namespace tools

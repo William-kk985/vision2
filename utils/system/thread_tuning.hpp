@@ -42,8 +42,6 @@ bool realtime_priority_available();
 /// @return 是否成功
 bool pin_current_thread(const char * cpu_list);
 
-/// @brief 启动时打印一次「线程调优可用性」（供使用者判断要不要上 `setcap`）
-void report_thread_tuning();
 
 }  // namespace tools
 

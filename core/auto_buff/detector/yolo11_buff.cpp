@@ -20,7 +20,7 @@ YOLO11_BUFF::YOLO11_BUFF(const std::string & config)
   const std::string dev = tools::resolve_device(core, want);
   if (dev != "CPU")
     tools::logger()->warn(
-      "[Buff] ⚠️ 打符推理设备被改为 '{}'（同济硬编码为 CPU）—— 这是本项目的优化项", dev);
+      "[Buff] 打符推理设备被改为 '{}'（同济硬编码为 CPU）—— 这是本项目的优化项", dev);
   compiled_model = core.compile_model(model, dev);
   /// 创建推理请求
   infer_request = compiled_model.create_infer_request();

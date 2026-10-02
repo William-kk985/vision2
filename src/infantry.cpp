@@ -156,8 +156,6 @@ int main(int argc, char * argv[])
     //   原来这里手写 ~30 行（hub/expense/hotkeys/factories/L3/绑定/帮助）
     //   → 收进 `tools::DebugRuntime`，4 个兵种共用，加新 sink 只改一处
     // ⭐⭐ W81：启动时打印「本机核数 + 建议配置」（核少时提示关 sink）
-    tools::print_host_advice("infantry");
-    tools::report_thread_tuning();   // ⭐ W82
     // ⭐⭐ W83：录像磁盘守卫（**启动时一次**：配额清理 + 剩余空间 + 低空间警告）
     tools::guard_on_startup(cli.get<int>("log-keep-days"), "records");   // ⭐ W84
 

@@ -18,7 +18,7 @@ VideoCamera::VideoCamera(const std::string & video_path, double speed)
   total_ = static_cast<int>(cap_.get(cv::CAP_PROP_FRAME_COUNT));
 
   tools::logger()->info(
-    "[VideoCamera] {}  fps={:.1f}  frames={}  speed={:.1f}x", video_path, fps_, total_, speed_);
+    "[VideoCamera] {} fps={:.1f} frames={} speed={:.1f}x", video_path, fps_, total_, speed_);
 }
 
 void VideoCamera::read(cv::Mat & img, std::chrono::steady_clock::time_point & timestamp)

@@ -76,9 +76,7 @@ std::string resolve_device(ov::Core & core, const std::string & requested)
   }
 
   tools::logger()->warn(
-    "[Device] ⚠️ 请求的设备 '{}' **不可用**（可用: {}）→ **回退 CPU**。"
-    "若要恢复同济的严格行为：tools::set_strict_device(true)",
-    want, describe_devices(core));
+    "[Device] 请求设备 '{}' 不可用（可用 {}）→ 回退 CPU", want, describe_devices(core));
   return "CPU";
 }
 

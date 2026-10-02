@@ -223,8 +223,6 @@ int main(int argc, char * argv[])
   // ⭐ W16：Debug 数据面（SinkHub 可热插拔；空 hub → on_frame 就是空循环，零成本）
     // ⭐⭐ W49（方案 D）：**一行装配整个 Debug 体系**（原来手写 ~30 行）
     // ⭐⭐ W81：启动时打印「本机核数 + 建议配置」（核少时提示关 sink）
-    tools::print_host_advice("hero");
-    tools::report_thread_tuning();   // ⭐ W82
     // ⭐⭐ W83：录像磁盘守卫（**启动时一次**：配额清理 + 剩余空间 + 低空间警告）
     tools::guard_on_startup(cli.get<int>("log-keep-days"), "records");   // ⭐ W84
 

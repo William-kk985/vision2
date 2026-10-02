@@ -17,7 +17,7 @@ ImageSink::ImageSink(std::string out_dir, int every_n, size_t max_files, bool de
   ::mkdir(out_dir_.c_str(), 0755);   // 已存在则忽略错误
   th_ = std::thread([this] { worker(); });
   tools::logger()->info(
-    "[ImageSink] -> {}  每 {} 张存 1 张，上限 {} 张", out_dir_, every_n_, max_files_);
+    "[ImageSink] -> {} 每 {} 张存 1 张，上限 {} 张", out_dir_, every_n_, max_files_);
 }
 
 ImageSink::~ImageSink() { close(); }

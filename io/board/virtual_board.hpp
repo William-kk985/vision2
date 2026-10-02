@@ -59,11 +59,11 @@ public:
   : mode_(mode), bullet_speed_(static_cast<float>(bullet_speed))
   {
     tools::logger()->warn(
-      "[VirtualBoard] ⚠️ **使用虚拟下位机**（{}）\n"
-      "    能做什么: 看检测/跟踪/解算/规划的**内部量**（CSV / 窗口 / PlotJuggler）、验证主链路不崩\n"
-      "    ⚠️ 不能做什么: **IMU 姿态恒为单位四元数**、弹速固定 {:.1f} m/s\n"
-      "       ⇒ **EKF 的 yaw/ω 预测、弹道误差、命中判定都不可信**\n"
-      "    想恢复『没下位机就失败』: 加 --strict-board",
+      "[VirtualBoard] 使用虚拟下位机（{}）\n"
+      "  能做什么: 看检测/跟踪/解算/规划的内部量（CSV / 窗口 / PlotJuggler）、验证主链路不崩\n"
+      "  不能做什么: IMU 姿态恒为单位四元数、弹速固定 {:.1f} m/s\n"
+      "    EKF 的 yaw/ω 预测、弹道误差、命中判定都不可信\n"
+      "  想恢复『没下位机就失败』: 加 --strict-board",
       reason, static_cast<double>(bullet_speed_));
   }
 
@@ -87,13 +87,25 @@ public:
   {
     (void)yaw_vel; (void)yaw_acc; (void)pitch_vel; (void)pitch_acc;
     const auto n = ++sent_;
-    // ⭐ 前 3 次打印（让你确认真在跑），之后静默计数（不刷屏）
-    if (n <= 3)
+    last_ = {control, fire, yaw, yaw_vel, yaw_acc, pitch, pitch_vel, pitch_acc};
+
+    // W85: report the actual downlink payload, not just a counter.
+    //   The payload = gimbal target angles/rates + fire bit
+    //   (on real hardware this is the VisionToGimbal 41-byte serial frame).
+    constexpr double kRad2Deg = 57.29577951308232;
+    if (n <= 3) {
       tools::logger()->info(
-        "[VirtualBoard] send#{:<3} control={} shoot={} yaw={:.4f} pitch={:.4f}  （无硬件，已丢弃）",
-        n, control, fire, static_cast<double>(yaw), static_cast<double>(pitch));
-    else if (n % 500 == 0)
-      tools::logger()->debug("[VirtualBoard] 已发送 {} 条指令（全部丢弃）", n);
+        "[VirtualBoard] tx #{} control={} fire={} yaw={:.2f}deg pitch={:.2f}deg", n, control, fire,
+        static_cast<double>(yaw) * kRad2Deg, static_cast<double>(pitch) * kRad2Deg);
+    } else if (n % 500 == 0) {
+      tools::logger()->debug(
+        "[VirtualBoard] tx {} (dropped, no hw) last: control={} fire={} "
+        "yaw={:.2f}deg yaw_vel={:.2f}deg/s pitch={:.2f}deg pitch_vel={:.2f}deg/s",
+        n, last_.control, last_.fire, static_cast<double>(last_.yaw) * kRad2Deg,
+        static_cast<double>(last_.yaw_vel) * kRad2Deg,
+        static_cast<double>(last_.pitch) * kRad2Deg,
+          static_cast<double>(last_.pitch_vel) * kRad2Deg);
+      }
   }
 
   void set_mode(GimbalMode m) { mode_ = m; }

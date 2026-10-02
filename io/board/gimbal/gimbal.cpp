@@ -22,8 +22,8 @@ Gimbal::Gimbal(const std::string & config_path)
   } catch (const std::exception & e) {
     // ⭐⭐ W53：**把错误变成可操作的**。原来只有一句 `Failed to open serial` +
     //   `exit(1)` —— 用户不知道：① 试的是哪个设备 ② 这台机器有哪些串口 ③ 怎么办。
-    tools::logger()->error("[Gimbal] ❌ 打不开串口: {}", e.what());
-    tools::logger()->error("[Gimbal]    尝试的设备: '{}'（来自 {} 的 `com_port`）", com_port, config_path);
+    tools::logger()->error("[Gimbal] 打不开串口: {}", e.what());
+    tools::logger()->error("[Gimbal]  尝试的设备: '{}'（来自 {} 的 `com_port`）", com_port, config_path);
 
     // ⭐ 列出这台机器上**实际可用**的串口
     std::vector<std::string> avail;
@@ -36,9 +36,9 @@ Gimbal::Gimbal(const std::string & config_path)
     if (!avail.empty()) {
       std::string joined;
       for (const auto & a : avail) joined += a + "  ";
-      tools::logger()->error("[Gimbal]    本机可用串口: {}", joined);
+      tools::logger()->error("[Gimbal]  本机可用串口: {}", joined);
     } else {
-      tools::logger()->error("[Gimbal]    本机**没有任何** /dev/ttyUSB* / ttyACM* 设备");
+      tools::logger()->error("[Gimbal]  本机没有任何 /dev/ttyUSB* / ttyACM* 设备");
     }
 
     // ⭐ 从配置路径推导兵种名（如 params/hero.yaml → "hero"），避免硬编码
@@ -50,13 +50,13 @@ Gimbal::Gimbal(const std::string & config_path)
 
     // ⭐ 给出**具体怎么办**
     tools::logger()->error(
-      "[Gimbal]    ── 怎么办 ──\n"
-      "      ① **零硬件验证**（没接硬件就用这个）:\n"
-      "           tools/scripts/run.sh {} --video=录像.avi --force-mode=1\n"
-      "      ② 检查 udev 规则有没有把下位机映射成 '{}':\n"
-      "           ls -l '{}'   # 不存在就是这个原因\n"
-      "      ③ 改参数文件里的 `com_port` 为实际设备（或插上硬件后用 dmesg 确认）:\n"
-      "           dmesg | tail -20 | grep -i tty",
+      "[Gimbal]  ── 怎么办 ──\n"
+      "   ① 零硬件验证（没接硬件就用这个）:\n"
+      "      tools/scripts/run.sh {} --video=录像.avi --force-mode=1\n"
+      "   ② 检查 udev 规则有没有把下位机映射成 '{}':\n"
+      "      ls -l '{}'  # 不存在就是这个原因\n"
+      "   ③ 改参数文件里的 `com_port` 为实际设备（或插上硬件后用 dmesg 确认）:\n"
+      "      dmesg | tail -20 | grep -i tty",
       robot, com_port, com_port);
     exit(1);
   }
@@ -69,10 +69,10 @@ Gimbal::Gimbal(const std::string & config_path)
     std::tuple<Eigen::Quaterniond, std::chrono::steady_clock::time_point> first;
     if (!queue_.pop_for(first, std::chrono::milliseconds(3000))) {
       tools::logger()->error(
-        "[Gimbal] ⚠️ **3 秒内没收到任何 IMU 数据** → 无法确定云台姿态，启动中止。\n"
-        "    排查：① 下位机是否上电、是否在发数据\n"
-        "          ② 波特率/协议是否与下位机一致\n"
-        "          ③ 只想看检测/跟踪：用 `--no-board` 跑虚拟下位机（IMU 恒为单位四元数）");
+        "[Gimbal] 3 秒内没收到任何 IMU 数据 → 无法确定云台姿态，启动中止。\n"
+        "  排查：① 下位机是否上电、是否在发数据\n"
+        "     ② 波特率/协议是否与下位机一致\n"
+        "     ③ 只想看检测/跟踪：用 `--no-board` 跑虚拟下位机（IMU 恒为单位四元数）");
       throw std::runtime_error("[Gimbal] 没有 IMU 数据");
     }
   }
@@ -130,7 +130,7 @@ Eigen::Quaterniond Gimbal::q(std::chrono::steady_clock::time_point t)
       if (now_ms - last > 1000) {   // 每 ~1 秒告警一次（不刷屏）
         imu_gap_warned_.store(now_ms, std::memory_order_relaxed);
         tools::logger()->warn(
-          "[Gimbal] ⚠️ IMU 数据断流 >200ms → 本帧姿态沿用上一次（**EKF 预测不可信**）。"
+          "[Gimbal] IMU 数据断流 >200ms → 本帧姿态沿用上一次（EKF 预测不可信）。"
           "检查下位机/串口；只想看检测可用 `--no-board`");
       }
       return last_q_;

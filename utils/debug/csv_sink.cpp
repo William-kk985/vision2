@@ -95,7 +95,7 @@ void CsvSink::on_frame(const auto_aim::FrameDebug & d)
     if (!capped_warned_) {
       capped_warned_ = true;
       tools::logger()->error(
-        "[CsvSink] 已达上限 {} 帧（很可能是上游空转）→ **停止写入**。"
+        "[CsvSink] 已达上限 {} 帧（很可能是上游空转）→ 停止写入。"
         "请检查主循环是否在空帧时退出；本帧起丢弃。",
         max_rows_);
     }

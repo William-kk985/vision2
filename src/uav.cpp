@@ -127,8 +127,6 @@ int run_uav(io::CameraBase & camera, Board & cboard, const std::string & config_
   // ⭐ Debug 数据面
     // ⭐⭐ W49（方案 D）：**一行装配整个 Debug 体系**
     // ⭐⭐ W81：启动时打印「本机核数 + 建议配置」（核少时提示关 sink）
-    tools::print_host_advice("uav");
-    tools::report_thread_tuning();   // ⭐ W82
     // ⭐⭐ W83：录像磁盘守卫（**启动时一次**：配额清理 + 剩余空间 + 低空间警告）
     // ⚠️ 这两个兵种的 `cli` 不在本作用域 → 用固定配额（10 GB，与 infantry/hero 默认一致）
     // ⚠️ 这两个兵种的 `cli` 不在本作用域 → 用默认 30 天
@@ -288,7 +286,7 @@ int main(int argc, char * argv[])
   io::VideoCamera camera(video_path, cli.get<double>("video-speed"));
   ReplayCBoard cboard(pose, m, cli.get<double>("bullet-speed"));
   tools::logger()->info(
-    "[uav] 录像回放模式: {}  mode={}({})", video_path, int(m),
+    "[uav] 录像回放模式: {} mode={}({})", video_path, int(m),
     (m >= 0 && m < int(io::MODES.size())) ? io::MODES[m] : "?");
   const int rc = run_uav(camera, cboard, config_path, csv_prefix, cli.get<bool>("record"));
   tools::logger()->info("[uav] 录像播放完毕（共 {} 帧），退出", cboard.sent_count);

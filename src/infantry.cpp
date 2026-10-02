@@ -74,7 +74,7 @@ const std::string keys =
   "{no-board       | false | ⭐⭐ 强制虚拟下位机（不碰串口；只有摄像头时用）}"
   "{strict-board   | false | ⭐⭐ 串口不存在就失败退出（同济行为）；默认自动降级虚拟板}"
   "{det-stats      | true | ⭐ 逐帧打印检测统计（候选→各步过滤）；false 硬关}"
-  "{record-quota   | 10240 | ⭐ 录像目录总配额 MB（启动时清理最旧文件；0=不清理）}";
+  "{log-keep-days  | 30 | ⭐ 日志保留天数（超期自动清理 logs/ 与 MvSdkLog/；0=不清理）}";
 
 using namespace std::chrono_literals;
 
@@ -159,7 +159,7 @@ int main(int argc, char * argv[])
     tools::print_host_advice("infantry");
     tools::report_thread_tuning();   // ⭐ W82
     // ⭐⭐ W83：录像磁盘守卫（**启动时一次**：配额清理 + 剩余空间 + 低空间警告）
-    tools::guard_recording_dir("records", cli.get<int>("record-quota"), 5000);
+    tools::guard_on_startup(cli.get<int>("log-keep-days"), "records");   // ⭐ W84
 
     tools::DebugRuntime dbg(
       {.csv_prefix = cli.get<std::string>("csv"),

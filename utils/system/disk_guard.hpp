@@ -1,34 +1,38 @@
 /**
  * @file utils/system/disk_guard.hpp
- * @brief ⭐⭐ **录像磁盘守卫** —— 防止 `records/` 累积写满磁盘
+ * @brief ⭐⭐ **日志清理 + 磁盘空间报告**
  *
- * ## 为什么需要
- * `Recorder` 每帧写 MJPG，**实测 1.5 MB/s（49 KB/帧 @30fps）**：
+ * ## 为什么需要清理
+ * 实测（本仓库开发期）：
  * ```
- *    1 分钟 → 0.09 GB      7 分钟（一场比赛）→ 0.63 GB
- *   60 分钟 → 5.40 GB      ⚠️ 6 小时 → 32.4 GB
+ *   logs/        236 个文件 / 2.7 MB    ← ⭐ 每次运行写一个（logger.cpp）
+ *   MvSdkLog/      1 个文件 / 8 KB       ← 海康 SDK 追加写
  * ```
- * ⚠️ 而 `records/` 的文件**从不自动清理** → 多跑几天就可能写满 SSD。
+ * ⚠️ **注意：日志总共才 2.7 MB —— 清它不是为省空间，而是【控制文件数】。**
+ * 按每天跑 100 次估算，一年会攒 **~36500 个文件** → 目录没法浏览、`ls` 都卡。
  *
- * ## 清理策略（⭐ 只在【进程启动时】做一次）
+ * ## 清理什么 / 不清理什么
+ * | 目录 | 清理 | 理由 |
+ * |---|---|---|
+ * | ⭐ `logs/`（含 `logs/ros/`） | ✅ **超 30 天删** | 文件数增长快、单文件小 |
+ * | ⭐ `MvSdkLog/` | ✅ 超 30 天删 | SDK 写的老日志同样只增不减 |
+ * | ❌ `records/`（录像） | **不清理** | ⭐ **比赛复盘/取证要用**，且由使用者自行管理 |
+ * | ❌ `debug_img/` | **不清理** | 已有上限（默认 500 张），且是主动按 `4` 才产生 |
+ *
+ * ## ⭐ 清理频率：**只在进程启动时做一次**
  * | 频率 | 评价 |
  * |---|---|
  * | 每帧 | ⚠️ 扫描目录太贵 |
- * | 每 N 分钟 | ⚠️ 要后台线程，且可能删到**正在写**的文件 |
- * | ⭐ **启动时一次** | ⭐ **最自然**（一次运行 = 一个 session）· **零运行期开销** · **不会删到在写的文件** |
- *
- * ⚠️ 磁盘写满的风险主要来自**累积多次运行** ⇒ **启动时清理正好解决**。
- *
- * ## 做三件事
- * 1. ⭐ **报剩余空间**（让人对"能录多久"有概念）
- * 2. ⭐ **按总大小配额清理最旧的文件**（默认 10 GB ≈ 2 小时录像）
- * 3. ⚠️ **剩余空间过低时明确警告**（不静默）
+ * | 每 N 分钟 | ⚠️ 要后台线程；且可能删到**正在写**的文件 |
+ * | ⭐ **启动时一次** | ⭐ **最自然**（一次运行 = 一个 session）· **零运行期开销** · **不碰正在写的文件** |
+ * ⚠️ 文件累积的风险来自**多次运行** ⇒ 启动时清理正好覆盖。
  */
 #ifndef HZMIR_UTILS_SYSTEM_DISK_GUARD_HPP
 #define HZMIR_UTILS_SYSTEM_DISK_GUARD_HPP
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace tools
 {
@@ -38,25 +42,26 @@ struct DiskStatus
 {
   bool ok = false;             ///< 查询是否成功
   uint64_t dir_bytes = 0;      ///< 目录当前占用
+  uint64_t files = 0;          ///< 目录内文件数
   uint64_t free_bytes = 0;     ///< 所在文件系统剩余
   uint64_t total_bytes = 0;    ///< 所在文件系统总容量
 };
 
-/// @brief 查目录占用 + 所属文件系统剩余空间（目录不存在则返回 `ok=false`）
+/// @brief 查目录占用 + 文件数 + 所属文件系统剩余（目录不存在则 `ok=false`）
 DiskStatus query_disk(const std::string & dir);
 
-/// @brief ⭐ 按**总大小配额**清理目录里最旧的文件（只删常规文件）
-/// @param dir       目标目录（如 `"records"`）
-/// @param quota_mb  总大小配额（MB）；`0` = 不清理
+/// @brief ⭐ **删除目录里早于 `days` 天的文件**（按扩展名过滤，递归）
+/// @param dir   目标目录（如 `"logs"`）
+/// @param days  保留天数（**≤0 = 不清理**，直接返回 0）
+/// @param exts  要清理的扩展名（如 `{".log"}`）；**空 = 所有常规文件**
 /// @return 删除的文件数
 /// @note ⚠️ **启动时调用一次**即可 —— 见文件头注释的"清理频率"分析。
-size_t enforce_quota(const std::string & dir, uint64_t quota_mb);
+size_t cleanup_older_than(const std::string & dir, int days, const std::vector<std::string> & exts);
 
-/// @brief ⭐⭐ 启动时调用：报剩余空间 + 配额清理 + 低空间警告
-/// @param dir           录像目录（如 `"records"`）
-/// @param quota_mb      总大小配额（MB）；0 = 不清理
-/// @param min_free_mb   剩余空间低于此值就**明确警告**（0 = 不检查）
-void guard_recording_dir(const std::string & dir, uint64_t quota_mb, uint64_t min_free_mb);
+/// @brief ⭐⭐ 启动时调用：清理旧日志 + 报告磁盘（**不清理录像**）
+/// @param log_days     日志保留天数（默认 30；≤0 = 不清理）
+/// @param records_dir  录像目录（**只报告，不清理**）
+void guard_on_startup(int log_days, const std::string & records_dir);
 
 }  // namespace tools
 

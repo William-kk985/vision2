@@ -37,7 +37,8 @@
 
 #include "core/auto_aim/detector/yolo.hpp"
 #include "core/auto_aim/detector/det_stats.hpp"
-#include "utils/system/disk_guard.hpp"   // ⭐ W83
+#include "utils/system/disk_guard.hpp"
+#include "utils/system/paths.hpp"   // ⭐ W87   // ⭐ W83
 #include "utils/system/host_info.hpp"
 #include "utils/system/thread_tuning.hpp"   // ⭐ W82   // ⭐ W81：本机核数 + 建议   // ⭐ W63
 #include "core/auto_aim/planner/legacy.hpp"   // ⭐ 同济哨兵用 Aimer（legacy）
@@ -79,15 +80,14 @@ const std::string keys =
   "{bullet-speed   | 22.0 | 录像模式下的弹速（下位机不可用时）}"
   "{shoot-mode     | 2 | ⭐ 哨兵枪口：0=left 1=right 2=both}"
   "{csv            | | ⭐ Debug CSV 输出前缀}"
-  "{record         | false | ⭐⭐ 录像到 records/（默认**不录**；录会占一个核做 MJPG 编码）}"
-  "{record         | false | ⭐⭐ 录像到 records/（默认**不录**；录会占一个核做 MJPG 编码）}"
+  "{record         | false | ⭐⭐ 录像到 output/video/（默认**不录**；录会占一个核做 MJPG 编码）}"
   "{pj             | false | ⭐ 是否发 PlotJuggler UDP}"
   "{tongji         | true | ⭐⭐ 同济兼容模式（默认 true = 完全同济行为）}"
   "{strict-device  | false | ⭐ 严格设备模式（true = 设备不可用就抛异常）}"
   "{no-board       | false | ⭐⭐ 强制虚拟下位机（不碰串口；只有摄像头时用）}"
   "{strict-board   | false | ⭐⭐ 串口不存在就失败退出（同济行为）；默认自动降级虚拟板}"
   "{det-stats      | true | ⭐ 逐帧打印检测统计（候选→各步过滤）；false 硬关}"
-  "{log-keep-days  | 30 | ⭐ 日志保留天数（超期自动清理 logs/ 与 MvSdkLog/；0=不清理）}";
+  "{log-keep-days  | 30 | ⭐ 日志保留天数（超期自动清理 output/logs/；0=不清理）}";
 
 using namespace std::chrono_literals;
 
@@ -151,7 +151,7 @@ int run_sentry(
     // ⭐⭐ W83：录像磁盘守卫（**启动时一次**：配额清理 + 剩余空间 + 低空间警告）
     // ⚠️ 这两个兵种的 `cli` 不在本作用域 → 用固定配额（10 GB，与 infantry/hero 默认一致）
     // ⚠️ 这两个兵种的 `cli` 不在本作用域 → 用默认 30 天
-    tools::guard_on_startup(30, "records");   // ⭐ W84
+    tools::guard_on_startup(30, tools::paths::video());   // ⭐ W84
 
     tools::DebugRuntime dbg(
       {.csv_prefix = csv_prefix, .verbose_hotkeys = verbose_hotkeys, .name = "sentry"});

@@ -21,7 +21,8 @@
 
 #include "io/camera/camera.hpp"
 #include "core/auto_aim/detector/det_stats.hpp"
-#include "utils/system/disk_guard.hpp"   // ⭐ W83
+#include "utils/system/disk_guard.hpp"
+#include "utils/system/paths.hpp"   // ⭐ W87   // ⭐ W83
 #include "utils/system/host_info.hpp"
 #include "utils/system/thread_tuning.hpp"   // ⭐ W82   // ⭐ W81：本机核数 + 建议   // ⭐ W63
 #include "drivers/dm_imu/dm_imu.hpp"
@@ -62,14 +63,13 @@ const std::string keys =
   "{force-mode     | 1 | ⭐ 录像模式档位：0=idle 1=auto_aim 2=small_buff 3=big_buff 4=outpost}"
   "{bullet-speed   | 22.0 | 录像模式下的弹速}"
   "{csv            | | ⭐ Debug CSV 输出前缀}"
-  "{record         | false | ⭐⭐ 录像到 records/（默认**不录**；录会占一个核做 MJPG 编码）}"
-  "{record         | false | ⭐⭐ 录像到 records/（默认**不录**；录会占一个核做 MJPG 编码）}"
+  "{record         | false | ⭐⭐ 录像到 output/video/（默认**不录**；录会占一个核做 MJPG 编码）}"
   "{tongji         | true | ⭐⭐ 同济兼容模式（默认 true = 完全同济行为）}"
   "{strict-device  | false | ⭐ 严格设备模式}"
   "{no-board       | false | ⭐⭐ 强制虚拟下位机（不碰串口；只有摄像头时用）}"
   "{strict-board   | false | ⭐⭐ 串口不存在就失败退出（同济行为）；默认自动降级虚拟板}"
   "{det-stats      | true | ⭐ 逐帧打印检测统计（候选→各步过滤）；false 硬关}"
-  "{log-keep-days  | 30 | ⭐ 日志保留天数（超期自动清理 logs/ 与 MvSdkLog/；0=不清理）}";
+  "{log-keep-days  | 30 | ⭐ 日志保留天数（超期自动清理 output/logs/；0=不清理）}";
 
 using namespace std::chrono_literals;
 
@@ -130,7 +130,7 @@ int run_uav(io::CameraBase & camera, Board & cboard, const std::string & config_
     // ⭐⭐ W83：录像磁盘守卫（**启动时一次**：配额清理 + 剩余空间 + 低空间警告）
     // ⚠️ 这两个兵种的 `cli` 不在本作用域 → 用固定配额（10 GB，与 infantry/hero 默认一致）
     // ⚠️ 这两个兵种的 `cli` 不在本作用域 → 用默认 30 天
-    tools::guard_on_startup(30, "records");   // ⭐ W84
+    tools::guard_on_startup(30, tools::paths::video());   // ⭐ W84
 
     tools::DebugRuntime dbg({.csv_prefix = csv_prefix, .name = "uav"});
     auto & hub = dbg.hub;                 // ⭐ 别名：保持下游代码一字不改

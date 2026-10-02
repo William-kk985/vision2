@@ -45,7 +45,8 @@ static std::vector<std::vector<std::string>> read_csv(const std::string & p)
 int main()
 {
   std::printf("═══ CSV schema 护栏 ═══\n");
-  const std::string prefix = "csvschema_test";
+  // ⭐ W87：显式 /tmp 路径（见 test_debug.cpp 的说明）
+  const std::string prefix = "/tmp/hzmir_csvschema_test";
 
   {
     tools::CsvSink csv(prefix);

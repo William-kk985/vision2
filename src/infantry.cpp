@@ -35,7 +35,8 @@
 #include "utils/debug/recorder.hpp"
 // ⭐ W16：Debug 数据面（W8 建好，这次接进主程序）
 #include "core/auto_aim/detector/det_stats.hpp"
-#include "utils/system/disk_guard.hpp"   // ⭐ W83
+#include "utils/system/disk_guard.hpp"
+#include "utils/system/paths.hpp"   // ⭐ W87   // ⭐ W83
 #include "utils/system/host_info.hpp"
 #include "utils/system/thread_tuning.hpp"   // ⭐ W82   // ⭐ W81：本机核数 + 建议
 #include "core/auto_aim/target/target_debug_fill.hpp"   // ⭐ W70   // ⭐ W63
@@ -64,7 +65,7 @@ const std::string keys =
   "{bullet-speed   | 22.0 | 录像模式下的弹速（下位机不可用时）}"
   "{csv            |      | ⭐ Debug CSV 输出前缀（给路径才落 CSV）}"
 
-  "{record         | false | ⭐⭐ 录像到 records/（默认**不录**；录会占一个核做 MJPG 编码）}"
+  "{record         | false | ⭐⭐ 录像到 output/video/（默认**不录**；录会占一个核做 MJPG 编码）}"
   "{pj             | false | ⭐ 是否发 PlotJuggler UDP}"
   "{debug-img      | false | ⭐ L3：启动就开存图（每 30 张 1 张，上限 500）}"
   "{debug-window   | false | ⭐ L3：启动就开可视化窗口（需 DISPLAY）}"
@@ -74,7 +75,7 @@ const std::string keys =
   "{no-board       | false | ⭐⭐ 强制虚拟下位机（不碰串口；只有摄像头时用）}"
   "{strict-board   | false | ⭐⭐ 串口不存在就失败退出（同济行为）；默认自动降级虚拟板}"
   "{det-stats      | true | ⭐ 逐帧打印检测统计（候选→各步过滤）；false 硬关}"
-  "{log-keep-days  | 30 | ⭐ 日志保留天数（超期自动清理 logs/ 与 MvSdkLog/；0=不清理）}";
+  "{log-keep-days  | 30 | ⭐ 日志保留天数（超期自动清理 output/logs/；0=不清理）}";
 
 using namespace std::chrono_literals;
 
@@ -157,7 +158,7 @@ int main(int argc, char * argv[])
     //   → 收进 `tools::DebugRuntime`，4 个兵种共用，加新 sink 只改一处
     // ⭐⭐ W81：启动时打印「本机核数 + 建议配置」（核少时提示关 sink）
     // ⭐⭐ W83：录像磁盘守卫（**启动时一次**：配额清理 + 剩余空间 + 低空间警告）
-    tools::guard_on_startup(cli.get<int>("log-keep-days"), "records");   // ⭐ W84
+    tools::guard_on_startup(cli.get<int>("log-keep-days"), tools::paths::video());   // ⭐ W84
 
     tools::DebugRuntime dbg(
       {.csv_prefix = cli.get<std::string>("csv"),

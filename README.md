@@ -84,6 +84,27 @@ python3 scripts/plot.py    run_frames.csv --preset plan
 python3 scripts/compare.py A_frames.csv B_frames.csv    # A/B 实验对比
 ```
 
+#### 输出都去哪了（`output/`）
+
+| 子目录 | 内容 | 怎么产生 |
+|---|---|---|
+| `output/logs/` | `YYYY-MM-DD_HH-MM-SS.log` | ⭐ **每次运行自动**（含 `ros/`） |
+| `output/csv/` | `<prefix>_frames.csv` / `_series.csv` | `--csv=<prefix>` 或热键 `2` |
+| `output/video/` | `.avi` + **同名 `.txt`**（每帧位姿） | `--record` |
+| `output/images/` | `NNNNNN_aim.png` | 热键 `4` |
+
+```bash
+ls output/csv/                          # 找 CSV
+python3 scripts/analyze.py output/csv/run1_frames.csv
+```
+
+⭐ 想换个地方放（比如挂到大盘）：`HZMIR_OUTPUT_DIR=/mnt/ssd/hzmir tools/scripts/run.sh infantry`
+⭐ `--csv=/tmp/x/mine` 含 `/` 时**尊重原路径**，不会强制搬到 `output/csv/`。
+
+**磁盘与清理**：启动时打印一行 `output/` 各子目录占用 + 分区剩余；
+⭐ **`output/logs/` 超 30 天自动清理**（`--log-keep-days=`），
+⚠️ **录像/存图不自动清理**（比赛复盘要用）—— `output/images/` 实测 **~1.3 MB/张**（上限 500 张 ≈ 650 MB）。
+
 #### 没有下位机 / 没有相机时
 
 | 情况 | 行为 | 命令 |
@@ -127,6 +148,11 @@ udevadm info -a -n /dev/ttyACM0 | grep -E '({serial}|{idVendor}|{idProduct})'   
 ## 目录结构
 
 ```
+├── output/               ⭐⭐ **所有运行期产物**（已 gitignore；可用
+│   ├── logs/              `HZMIR_OUTPUT_DIR` 改根目录）
+│   ├── video/             日志（含 ros/）
+│   ├── images/            录像 .avi + 同名 .txt 位姿
+│   └── csv/              存图 .png
 ├── config.hpp            ⭐ 唯一的编译期宏入口（+ 互斥检查）
 ├── core/                 契约层 + 业务角色
 │   ├── types.hpp         ⭐ 零依赖契约（Armor / Target / Command …）

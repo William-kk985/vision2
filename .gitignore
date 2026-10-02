@@ -42,8 +42,16 @@ params/ballistic_table_*.bin
 # ══════════════════════════════════════════════════════════════
 # 运行期产物
 # ══════════════════════════════════════════════════════════════
+# ⭐ W87：运行期输出统一到 `output/`（logs / video / images / csv）
+output/
+
+# ── 兼容旧的散落路径（历史产物，仍忽略）──
 logs/
 records/
+debug_imgs/
+MvSdkLog/
+*_frames.csv
+*_series.csv
 *.avi
 *.log
 ros_log/

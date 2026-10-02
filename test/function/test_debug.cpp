@@ -93,7 +93,9 @@ int main()
   // ═══ ③ CsvSink：L0+L1 落盘 + L2 曲线 ═══
   std::printf("③ CsvSink\n");
   {
-    const std::string prefix = "test_debug_out";
+    // ⭐ W87：测试**不污染 `output/`** —— 用含 `/` 的显式路径，
+    //   `paths::csv_prefix()` 对含 `/` 的前缀【原样尊重】。
+    const std::string prefix = "/tmp/hzmir_test_debug_out";
     {
       tools::CsvSink csv(prefix);
       for (uint32_t i = 0; i < 5; ++i) {

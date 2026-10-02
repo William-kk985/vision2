@@ -43,6 +43,7 @@
 #include <string>
 #include <utility>
 
+#include "utils/system/paths.hpp"   // W87: unified output/ layout
 #include "utils/debug/csv_sink.hpp"
 #include "utils/debug/debug_sink.hpp"
 #include "utils/debug/expense.hpp"
@@ -71,7 +72,7 @@ struct DebugOptions
   bool verbose_hotkeys = true;         ///< 打印热键帮助
   std::string name = "hzmir";          ///< 日志前缀 + 窗口标题
   std::string csv_fallback = "hzmir_hotkey";   ///< 热键开 CSV 时的默认前缀
-  std::string img_dir = "debug_imgs";  ///< 存图目录
+  std::string img_dir = "output/images";   // ⭐ W87（默认值在这里；也可传别的）  ///< 存图目录
   int img_every_n = 30;                ///< 每 N 帧存 1 张
   size_t img_max_files = 500;          ///< 总共最多存几张
   size_t img_max_queue = 16;           ///< ⭐ 队列深度上限（防 OOM）

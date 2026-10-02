@@ -14,6 +14,7 @@
 
 #include <opencv2/opencv.hpp>
 
+#include "utils/system/paths.hpp"   // W87: output/video layout
 #include "utils/debug/recorder.hpp"
 
 using Clock = std::chrono::steady_clock;
@@ -24,7 +25,11 @@ static void bad(const char * m) { std::printf("  [!!] %s\n", m); ++g_fail; }
 static int count_files()
 {
   int n = 0;
-  for (auto & e : std::filesystem::directory_iterator("records"))
+  // ⭐ W87：录像目录从 `records/` 改到 `output/video/`（见 utils/system/paths.hpp）
+  const std::string dir = tools::paths::video();
+  std::error_code ec;
+  if (!std::filesystem::exists(dir, ec)) return 0;
+  for (auto & e : std::filesystem::directory_iterator(dir))
     if (e.path().extension() == ".avi") ++n;
   return n;
 }
@@ -32,7 +37,7 @@ static int count_files()
 int main()
 {
   std::printf("═══ Recorder 三处修复回归（W48）═══\n");
-  std::filesystem::create_directory("records");
+  std::filesystem::create_directories(tools::paths::video());
   const auto before = count_files();
 
   auto q = Eigen::Quaterniond::Identity();
@@ -48,7 +53,7 @@ int main()
       if (rec.written() == 0 && rec.dropped() == 0) ok("默认 enabled=false → 不录、不计");
       else bad("默认不该录");
     }
-    if (count_files() == before) ok("⭐ 默认不产生 records/*.avi（原来无条件录）");
+    if (count_files() == before) ok("⭐ 默认不产生 output/video/*.avi（原来无条件录）");
     else bad("默认产生了文件");
   }
 

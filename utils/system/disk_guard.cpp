@@ -6,7 +6,10 @@
 #include <chrono>
 #include <filesystem>
 
+#include <fmt/format.h>
+
 #include "utils/log/logger.hpp"
+#include "utils/system/paths.hpp"
 
 namespace fs = std::filesystem;
 
@@ -87,24 +90,33 @@ size_t cleanup_older_than(const std::string & dir, int days, const std::vector<s
 
 void guard_on_startup(int log_days, const std::string & records_dir)
 {
-  // ── ① ⭐ 清理旧日志（**启动时一次**）──
-  //   ⚠️ 实测 logs/ 236 个文件才 2.7 MB —— 清它是为**控制文件数**（目录可浏览），不为省空间。
-  cleanup_older_than("logs", log_days, {".log"});
-  cleanup_older_than("MvSdkLog", log_days, {".log"});   // 海康 SDK 的日志（只增不减）
+  // ── ① 清理旧日志（启动时一次；见文件头注释的"清理频率"分析）──
+  cleanup_older_than(paths::logs(), log_days, {".log"});
+  cleanup_older_than("MvSdkLog", log_days, {".log"});   // 海康 SDK 自己写的路径
 
-  // ── ② 报告现状（**只报告，不清理录像**）──
-  const auto lg = query_disk("logs");
-  if (lg.ok)
-    tools::logger()->debug(
-      "[disk] logs/ {} 个文件 {}（清理阈值 {} 天）", lg.files, human(lg.dir_bytes), log_days);
+  // ── ② 报告 output/ 各子目录现状（**只报告，不清理**录像/存图）──
+  struct Row { const char * name; std::string dir; bool clean; };
+  const Row rows[] = {
+    {"logs",   paths::logs(),   true},
+    {"csv",    paths::csv(),    false},
+    {"video",  paths::video(),  false},
+    {"images", paths::images(), false},
+  };
 
-  // ⭐ 录像：**只报"能录多久"，不清理**（比赛复盘/取证要用，交使用者自行管理）
+  std::string dir_line, clean_note;
+  for (const auto & r : rows) {
+    const auto st = query_disk(r.dir);
+    if (!st.ok) continue;
+    dir_line += fmt::format("{}={}个/{} ", r.name, st.files, human(st.dir_bytes));
+  }
+
   const auto rc = query_disk(records_dir);
   if (rc.ok && rc.free_bytes) {
     constexpr uint64_t kRate = static_cast<uint64_t>(1.5 * 1024 * 1024);   // 实测 1.5 MB/s
     tools::logger()->debug(
-      "[disk] {}/ {} 个文件 {} · 分区剩余 {} · 可录约 {} 分钟（1.5 MB/s）· 不自动清理",
-      records_dir, rc.files, human(rc.dir_bytes), human(rc.free_bytes), rc.free_bytes / kRate / 60);
+      "[disk] {}{} {} 分区剩余 {} · 录像可录约 {} 分钟（1.5 MB/s）",
+      paths::root(), dir_line.empty() ? "" : std::string("/ ") + dir_line,
+      rc.files ? "" : "", human(rc.free_bytes), rc.free_bytes / kRate / 60);
   }
 }
 

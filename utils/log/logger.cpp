@@ -1,5 +1,6 @@
 #include "utils/log/logger.hpp"
 
+#include "utils/system/paths.hpp"   // W87: unified output/ layout
 #include <fmt/chrono.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
@@ -25,7 +26,10 @@ constexpr spdlog::level::level_enum DEFAULT_LEVEL = spdlog::level::debug;
 
 void set_logger()
 {
-  auto file_name = fmt::format("logs/{:%Y-%m-%d_%H-%M-%S}.log", std::chrono::system_clock::now());
+  // ⭐ W87：输出统一到 `output/`（见 utils/system/paths.hpp）
+  tools::paths::ensure_all();
+  auto file_name = fmt::format("{}/{:%Y-%m-%d_%H-%M-%S}.log", tools::paths::logs(),
+                               std::chrono::system_clock::now());
   file_sink_ = std::make_shared<spdlog::sinks::basic_file_sink_mt>(file_name, true);
   console_sink_ = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
 

@@ -3,6 +3,7 @@
 #include <sstream>
 
 #include "utils/log/logger.hpp"
+#include "utils/system/paths.hpp"   // ⭐ W87
 #include "utils/system/thread_tuning.hpp"   // ⭐ W82
 
 namespace tools
@@ -68,8 +69,11 @@ std::string row(const auto_aim::FrameDebug & d)
 
 CsvSink::CsvSink(std::string prefix, size_t max_rows) : max_rows_(max_rows)
 {
-  frames_path_ = prefix + "_frames.csv";
-  series_path_ = prefix + "_series.csv";
+  // ⭐ W87：CSV → `output/csv`（除非用户给的 prefix 里已含 `/`，那就尊重原路径）
+  const std::string dir_prefix = tools::paths::csv_prefix(prefix);
+  tools::paths::ensure_dir(tools::paths::csv());
+  frames_path_ = dir_prefix + "_frames.csv";
+  series_path_ = dir_prefix + "_series.csv";
 
   ff_ = std::fopen(frames_path_.c_str(), "w");
   sf_ = std::fopen(series_path_.c_str(), "w");

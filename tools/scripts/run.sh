@@ -103,8 +103,8 @@ if [ "$ROBOT" = "sentry" ]; then
     warn "找不到 $ROS_PREFIX/setup.bash → 可能报 'Type support not from this implementation'"
   fi
   # ⚠️ 关键修复：~/.ros/log 常常只读 → 指到可写目录
-  export ROS_LOG_DIR="$ROOT/logs/ros"
-  export ROS_HOME="$ROOT/logs/roshome"
+  export ROS_LOG_DIR="$ROOT/output/logs/ros"   # ⭐ W87
+  export ROS_HOME="$ROOT/output/logs/roshome"
   mkdir -p "$ROS_LOG_DIR" "$ROS_HOME"
   ok "ROS_LOG_DIR=$ROS_LOG_DIR  （⚠️ 修 ~/.ros/log 只读的坑）"
 fi

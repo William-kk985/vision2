@@ -6,6 +6,7 @@
 #include <string>
 
 #include "utils/log/logger.hpp"
+#include "utils/system/paths.hpp"   // ⭐ W87
 #include "utils/system/thread_tuning.hpp"   // ⭐ W82
 #include "utils/math/math_tools.hpp"
 
@@ -33,7 +34,9 @@ Recorder::Recorder(double fps, bool enabled, size_t queue_cap)
   start_time_ = std::chrono::steady_clock::now();
   last_time_ = start_time_;
 
-  auto folder_path = "records";
+  // ⭐ W87：录像 → `output/video`
+  const std::string folder_path = tools::paths::video();
+  tools::paths::ensure_dir(folder_path);
   auto file_name = fmt::format("{:%Y-%m-%d_%H-%M-%S}", std::chrono::system_clock::now());
   text_path_ = fmt::format("{}/{}.txt", folder_path, file_name);
   video_path_ = fmt::format("{}/{}.avi", folder_path, file_name);

@@ -24,11 +24,11 @@
 ## 2. `analyze.py` —— 统计摘要
 
 ```bash
-python3 scripts/analyze.py run_frames.csv                 # 预算表 + 非全零列统计
-python3 scripts/analyze.py run_frames.csv --budget         # 只看帧预算占用
-python3 scripts/analyze.py run_frames.csv --warmup 3       # ⭐ 剔除前 3 帧（推理热身）
-python3 scripts/analyze.py run_frames.csv --all            # 含恒 0 的列
-python3 scripts/analyze.py run_frames.csv --group mode     # 按档位分组
+python3 scripts/analyze.py output/csv/run_frames.csv                 # 预算表 + 非全零列统计
+python3 scripts/analyze.py output/csv/run_frames.csv --budget         # 只看帧预算占用
+python3 scripts/analyze.py output/csv/run_frames.csv --warmup 3       # ⭐ 剔除前 3 帧（推理热身）
+python3 scripts/analyze.py output/csv/run_frames.csv --all            # 含恒 0 的列
+python3 scripts/analyze.py output/csv/run_frames.csv --group mode     # 按档位分组
 ```
 
 **实测输出**（CPU 推理，自瞄档，40 帧）：

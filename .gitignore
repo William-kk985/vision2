@@ -54,3 +54,9 @@ raw/
 .idea/
 *.swp
 *~
+
+# ── tools/scripts 产生的临时物 ──
+logs/ros/          # run.sh 产生的 ROS 日志
+logs/roshome/      # run.sh 产生的 ROS home
+*.cmake.log        # build.sh 的 cmake 日志
+*.build.log        # build.sh 的编译日志

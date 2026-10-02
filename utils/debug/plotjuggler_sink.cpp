@@ -27,6 +27,15 @@ PlotJugglerSink::PlotJugglerSink(std::string host, uint16_t port, bool enabled)
 
 PlotJugglerSink::~PlotJugglerSink()
 {
+  // ⭐ W80：先停 worker（否则它可能还在用 dest_/fd_）
+  {
+    std::lock_guard lk(mtx_);
+    enabled_ = false;
+    quit_.store(true);
+  }
+  cv_.notify_all();
+  if (th_.joinable()) th_.join();
+
   if (fd_ >= 0) ::close(fd_);
   delete dest_;
   dest_ = nullptr;
@@ -41,25 +50,60 @@ void PlotJugglerSink::send(const std::string & json)
 void PlotJugglerSink::on_frame(const auto_aim::FrameDebug & d)
 {
   if (!enabled_) return;
-  const double ts = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0_).count();
 
-  std::ostringstream o;
-  o << "{\"timestamp\":" << ts   // ⭐ 必须有，否则落不了时间轴
-    << ",\"frame_id\":" << d.frame_id << ",\"t_frame_us\":" << d.t_frame_us
-    << ",\"t_perceive_us\":" << d.t_perceive_us << ",\"t_decide_us\":" << d.t_decide_us
-    << ",\"det_armor_count\":" << d.detector.armor_count
-    << ",\"det_t_infer_us\":" << d.detector.t_infer_us
-    << ",\"trk_state\":" << d.tracker.state
-    << ",\"tgt_w\":" << d.target.w << ",\"tgt_nis\":" << d.target.nis
-    << ",\"tgt_x\":" << d.target.xyz_world[0] << ",\"tgt_y\":" << d.target.xyz_world[1]
-    << ",\"tgt_z\":" << d.target.xyz_world[2]
-    << ",\"pln_t_fly\":" << d.planner.t_fly << ",\"pln_overlap\":" << d.planner.overlap_ratio
-    // ⚠️ W79：去掉 `pln_kill_time`（算法里没这个量，永远是 0）
-    << ",\"pln_iters\":" << d.planner.solver_iters
-    << ",\"sht_should_fire\":" << (d.shooter.should_fire ? 1 : 0)
-    << ",\"ctl_yaw\":" << d.controller.cmd_yaw << ",\"ctl_pitch\":" << d.controller.cmd_pitch
-    << "}";
-  send(o.str());
+  // ⭐⭐⭐ W80：自瞄线程**只做**「取时间戳 + 400 B POD 拷贝 + 入队」
+  //   原来这里拼 ~18 个字段的 `std::ostringstream` JSON（~1 µs）→ 已搬到 worker。
+  //   ⚠️ `timestamp` 必须在这里取（worker 取会滞后到"发送时刻"而非"帧时刻"）。
+  Queued item;
+  item.ts = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0_).count();
+  item.d = d;
+
+  {
+    std::lock_guard lk(mtx_);
+    if (!enabled_) return;
+    if (q_.size() >= kMaxQueue) {
+      q_.pop_front();                       // ⭐ 丢了最旧的（实时曲线无所谓）
+      dropped_.fetch_add(1, std::memory_order_relaxed);
+    }
+    q_.push_back(item);
+  }
+  cv_.notify_one();
+}
+
+void PlotJugglerSink::worker()
+{
+  while (true) {
+    Queued item;
+    {
+      std::unique_lock lk(mtx_);
+      cv_.wait(lk, [this] { return quit_.load() || !q_.empty(); });
+      if (q_.empty()) {
+        if (quit_.load()) break;
+        continue;
+      }
+      item = q_.front();
+      q_.pop_front();
+    }
+
+    // ⭐⭐ 以下全在 worker 线程（不再占自瞄线程）
+    const auto & d = item.d;
+    std::ostringstream o;
+    o << "{\"timestamp\":" << item.ts
+      << ",\"frame_id\":" << d.frame_id << ",\"t_frame_us\":" << d.t_frame_us
+      << ",\"t_perceive_us\":" << d.t_perceive_us << ",\"t_decide_us\":" << d.t_decide_us
+      << ",\"det_armor_count\":" << d.detector.armor_count
+      << ",\"det_t_infer_us\":" << d.detector.t_infer_us
+      << ",\"trk_state\":" << d.tracker.state
+      << ",\"tgt_w\":" << d.target.w << ",\"tgt_nis\":" << d.target.nis
+      << ",\"tgt_x\":" << d.target.xyz_world[0] << ",\"tgt_y\":" << d.target.xyz_world[1]
+      << ",\"tgt_z\":" << d.target.xyz_world[2]
+      << ",\"pln_t_fly\":" << d.planner.t_fly << ",\"pln_overlap\":" << d.planner.overlap_ratio
+      << ",\"pln_iters\":" << d.planner.solver_iters
+      << ",\"sht_should_fire\":" << (d.shooter.should_fire ? 1 : 0)
+      << ",\"ctl_yaw\":" << d.controller.cmd_yaw << ",\"ctl_pitch\":" << d.controller.cmd_pitch
+      << "}";
+    send(o.str());
+  }
 }
 
 }  // namespace tools

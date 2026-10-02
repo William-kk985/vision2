@@ -13,6 +13,71 @@ import numpy as np
 from hzmir_csv import load_frames, budget_table, stats, FRAME_BUDGET_US
 
 
+
+def detect_diagnosis(d) -> None:
+    """⭐⭐⭐ W65：用 `det_nms` / `det_armor_count` / `det_best_conf` 三列**组合诊断检测链路**
+
+    ## 为什么需要
+    `det_armor_count` 是【过滤后】的数量（`check_name`/`check_type` 在 `detect()` 内就删了），
+    所以它 = 0 时**分不清**：
+      · YOLO **根本没候选**（objectness 没过）        ← 没检出
+      · YOLO **有候选但被滤掉**（not_armor/置信度/类型）← 检出了但不用
+    ⭐ 用 `det_nms`（NMS 存活数，过滤前）就能区分开。
+
+    | det_nms | det_armor_count | 含义 |
+    |---|---|---|
+    | 0 | 0 | ⭐ **YOLO 没候选**（objectness 没过） |
+    | >0 | 0 | ⭐ **检出了但被滤掉**（not_armor / 置信度 / 类型） |
+    | >0 | >0 | ✅ 正常输出 |
+    """
+    need = ("det_nms", "det_armor_count", "det_best_conf")
+    if not all(c in d.header for c in need):
+        return
+    nms = d.col("det_nms").astype(np.int64)
+    cnt = d.col("det_armor_count").astype(np.int64)
+    conf = d.col("det_best_conf").astype(np.float64)
+    n = len(nms)
+    if n == 0:
+        return
+
+    no_cand = int(np.sum((nms == 0) & (cnt == 0)))          # YOLO 没候选
+    filtered = int(np.sum((nms > 0) & (cnt == 0)))          # 有候选但全被滤掉
+    ok = int(np.sum(cnt > 0))                                # 正常输出
+
+    print("\n── ⭐ 检测链路诊断（det_nms → det_armor_count）──")
+    print(f"  {'✅ 正常输出':<22} {ok:>6} 帧  ({ok / n * 100:5.1f}%)")
+    print(f"  {'⭐ 有候选但全被滤掉':<20} {filtered:>6} 帧  ({filtered / n * 100:5.1f}%)"
+          f"   ← check_name / check_type 删掉的")
+    print(f"  {'⚠️ YOLO 没候选':<22} {no_cand:>6} 帧  ({no_cand / n * 100:5.1f}%)"
+          f"   ← objectness 没过，YOLO 没看到装甲板")
+
+    # ── 置信度 ──
+    if ok > 0:
+        c_ok = conf[cnt > 0]
+        print(f"\n  输出帧的置信度: 均值 {c_ok.mean():.3f}  最低 {c_ok.min():.3f}  "
+              f"最高 {c_ok.max():.3f}")
+
+    # ── ⚠️ 列没填的检测（历史 bug：best_conf/nms 从没被赋值）──
+    if ok > 0 and not np.any(conf > 0):
+        print("  ⚠️⚠️ **有检出但 det_best_conf 全是 0** → 这一列**没被赋值**（历史 bug）")
+    if ok > 0 and not np.any(nms > 0):
+        print("  ⚠️⚠️ **有检出但 det_nms 全是 0** → 这一列**没被赋值**（历史 bug）")
+
+    # ── 结论 ──
+    print("  ── 判读 ──")
+    if filtered > n * 0.2:
+        print(f"  · ⭐ **{filtered / n * 100:.0f}% 的帧「YOLO 看到了但被滤掉」** → "
+              f"查 `check_name`(not_armor/置信度) 与 `check_type`(大小装甲板不符)")
+        print("    → 跑程序时加 `--det-stats` 看终端会打印各步各滤掉几个")
+    elif no_cand > n * 0.5:
+        print(f"  · ⚠️ **{no_cand / n * 100:.0f}% 的帧 YOLO 完全没候选** → 多是画面里没有装甲板，")
+        print("    或装甲板**数字缺失/模糊**（实测：遮住数字 → objectness 直接不过阈值）")
+    elif ok > n * 0.5:
+        print("  · ✅ 检测链路**正常**（多数帧有输出）")
+    else:
+        print("  · 🔶 三种情况都有，建议结合终端 `--det-stats` 日志看具体某帧")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("frames_csv")
@@ -63,6 +128,9 @@ def main():
         if len(zero_cols) > 24:
             print(f"║    ...（还有 {len(zero_cols)-24} 个，用 `--all` 看全部）")
         print(f"╚═ 提示：查代码里该字段的赋值点；本项目已知的：`game_state`（TODO 没接比赛状态）")
+
+    # ── ⭐⭐⭐ 检测链路诊断（三列组合）──
+    detect_diagnosis(d)
 
     # ── 逐列统计 ──
     cols = d.header if a.all else d.nonzero_cols()

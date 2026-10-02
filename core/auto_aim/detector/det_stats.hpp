@@ -1,0 +1,49 @@
+/**
+ * @file core/auto_aim/detector/det_stats.hpp
+ * @brief ⭐⭐ **检测统计日志的开关**（W63）
+ *
+ * ## 为什么需要
+ * W62 给 YOLO 加了「逐帧候选 → 各步过滤」统计（非常好用 —— 实测直接区分出了
+ * 「objectness 没检出」vs「被 not_armor 滤掉」vs「正常输出」三种情况）。
+ * ⚠️ 但连续运行时它每 0.3~0.6 秒刷一行，**赛场/长时间跑批时是噪音**。
+ *
+ * ## 两层控制
+ * | 方式 | 效果 |
+ * |---|---|
+ * | ⭐ **`--det-stats=false`** | **硬关**（不受日志级别影响） |
+ * | **日志级别** | 统计走 `debug` 级 → `HZMIR_LOG_LEVEL=info` 或按 `d` 循环即可静音 |
+ *
+ * ⭐ 默认 **开**（`debug` 级别下可见）—— 因为它对调试**很有价值**。
+ */
+#ifndef HZMIR_CORE_AUTO_AIM_DETECTOR_DET_STATS_HPP
+#define HZMIR_CORE_AUTO_AIM_DETECTOR_DET_STATS_HPP
+
+#include <atomic>
+
+namespace auto_aim
+{
+
+namespace detail
+{
+inline std::atomic<bool> & det_stats_flag()
+{
+  static std::atomic<bool> on{true};   // ⭐ 默认开
+  return on;
+}
+}  // namespace detail
+
+/// @brief 设置是否输出检测统计（`--det-stats=false` 关闭）
+inline void set_det_stats_enabled(bool on) noexcept
+{
+  detail::det_stats_flag().store(on, std::memory_order_release);
+}
+
+/// @brief 检测统计当前是否启用
+inline bool det_stats_enabled() noexcept
+{
+  return detail::det_stats_flag().load(std::memory_order_acquire);
+}
+
+}  // namespace auto_aim
+
+#endif  // HZMIR_CORE_AUTO_MAIM_DETECTOR_DET_STATS_HPP

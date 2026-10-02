@@ -36,6 +36,7 @@
 #include <vector>
 
 #include "core/auto_aim/detector/yolo.hpp"
+#include "core/auto_aim/detector/det_stats.hpp"   // ⭐ W63
 #include "core/auto_aim/planner/legacy.hpp"   // ⭐ 同济哨兵用 Aimer（legacy）
 #include "core/auto_aim/solver/solver.hpp"
 #include "core/auto_aim/tracker/tracker.hpp"
@@ -80,7 +81,8 @@ const std::string keys =
   "{tongji         | true | ⭐⭐ 同济兼容模式（默认 true = 完全同济行为）}"
   "{strict-device  | false | ⭐ 严格设备模式（true = 设备不可用就抛异常）}"
   "{no-board       | false | ⭐⭐ 强制虚拟下位机（不碰串口；只有摄像头时用）}"
-  "{strict-board   | false | ⭐⭐ 串口不存在就失败退出（同济行为）；默认自动降级虚拟板}";
+  "{strict-board   | false | ⭐⭐ 串口不存在就失败退出（同济行为）；默认自动降级虚拟板}"
+  "{det-stats      | true | ⭐ 逐帧打印检测统计（候选→各步过滤）；false 硬关}";
 
 using namespace std::chrono_literals;
 
@@ -278,6 +280,7 @@ int main(int argc, char * argv[])
     else
       tools::ExtendedKalmanFilter::use_chi2_q95_nis_threshold();
     tools::set_strict_device(cli.get<bool>("strict-device"));
+    auto_aim::set_det_stats_enabled(cli.get<bool>("det-stats"));   // ⭐ W63
   }
 
   const auto enemy_color = auto_aim::Color::blue;   // ⭐ 同济 sentry.yaml 是 blue

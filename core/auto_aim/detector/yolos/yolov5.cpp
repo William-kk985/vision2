@@ -1,4 +1,5 @@
 #include "yolov5.hpp"
+#include "../det_stats.hpp"   // ⭐ W63：检测统计开关
 #include "utils/debug/l3_gate.hpp"   // ⭐ W61：全局 L3 门控
 
 #include <fmt/chrono.h>
@@ -203,15 +204,15 @@ std::list<Armor> YOLOV5::parse(
   // ⭐⭐⭐ W62：**一帧一行汇总** —— 一眼看出卡在哪一步
   //   ⚠️ `n_pass` 才是"像装甲板的候选数"；anchor 总数（25200）没意义、不打。
   // ⭐ 情况 0：**objectness 一个候选都没过** → YOLO 压根没看到"像装甲板的东西"
-  if (n_pass == 0) {
+  if (auto_aim::det_stats_enabled() && n_pass == 0) {
     static int no_cand_count = 0;
     if (++no_cand_count % 60 == 1)   // 节流：每 60 帧（约 0.6 秒）报一次
-      tools::logger()->warn(
-        "[YOLOV5] ⚠️ objectness **一个候选都没过** → YOLO 没看到像装甲板的东西"
+      tools::logger()->debug(   // ⭐ W63：warn→debug，这样 info 级别就能静音
+        "[YOLOV5] objectness **一个候选都没过** → YOLO 没看到像装甲板的东西"
         "（阈值 {}；anchor 总数 {} 个）⇒ 这是「没检出」，不是被 not_armor 滤掉",
         score_threshold_, output.rows);
   }
-  if (n_pass > 0) {
+  if (auto_aim::det_stats_enabled() && n_pass > 0) {
     static int last_n_out = -1;
     static int same_count = 0;
     const int n_out = static_cast<int>(armors.size());
@@ -221,8 +222,8 @@ std::list<Armor> YOLOV5::parse(
       same_count = 0;
       last_n_out = n_out;
       if (n_out == 0)
-        tools::logger()->warn(
-          "[{}] ⚠️ objectness 通过 {} 个候选 → **全被滤掉**：not_armor {} / 置信度 {} / "
+        tools::logger()->debug(   // ⭐ W63：warn→debug（它是诊断信息不是告警），info 级别可静音
+          "[{}] objectness 通过 {} 个候选 → **全被滤掉**：not_armor {} / 置信度 {} / "
           "类型不符 {}  ⇒ 最终 0 个装甲板",
           "yolov5", n_pass, n_name, n_conf, n_type);
       else

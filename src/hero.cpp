@@ -52,6 +52,7 @@
 #include "utils/debug/plotter.hpp"
 #include "utils/debug/recorder.hpp"
 // ⭐ W16：Debug 数据面（W8 建好，这次接进主程序）
+#include "core/auto_aim/detector/det_stats.hpp"   // ⭐ W63
 #include "core/debug.hpp"
 #include "utils/debug/csv_sink.hpp"
 #include "utils/debug/hotkeys.hpp"   // ⭐ W18：终端热键
@@ -135,7 +136,8 @@ const std::string keys =
   "{tongji         | true | ⭐⭐ 同济兼容模式：true(默认)=完全同济行为；false=启用本项目优化}"
   "{strict-device  | false | ⭐ 严格设备模式：true=同济行为(设备不可用就抛异常)；false=回退CPU}"
   "{no-board       | false | ⭐⭐ 强制虚拟下位机（不碰串口；只有摄像头时用）}"
-  "{strict-board   | false | ⭐⭐ 串口不存在就失败退出（同济行为）；默认自动降级虚拟板}";
+  "{strict-board   | false | ⭐⭐ 串口不存在就失败退出（同济行为）；默认自动降级虚拟板}"
+  "{det-stats      | true | ⭐ 逐帧打印检测统计（候选→各步过滤）；false 硬关}";
 
 
 using namespace std::chrono_literals;
@@ -158,7 +160,8 @@ int main(int argc, char * argv[])
   //   默认 true = 完全同济行为。yaml 里的优化开关（弹道/过滤器/优先级）另算。
   {
     const bool tj = cli.get<bool>("tongji");
-    tools::set_strict_device(cli.get<bool>("strict-device"));   // ⭐ W28
+    tools::set_strict_device(cli.get<bool>("strict-device"));
+    auto_aim::set_det_stats_enabled(cli.get<bool>("det-stats"));   // ⭐ W63：检测统计开关
     auto_aim::Aimer::set_tongji_compat(tj);                       // E5：小陀螺判据用 x[8]（同济）还是 x[7]（修正）
     if (tj)
       tools::ExtendedKalmanFilter::use_tongji_nis_threshold();    // E3b：0.711（同济）

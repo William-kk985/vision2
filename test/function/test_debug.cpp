@@ -100,6 +100,7 @@ int main()
         FrameDebug d;
         d.frame_id = i;
         d.t_frame_us = 100000 + i * 10000;
+        d.t_cam_wait_us = 90000 + i * 100;   // ⭐ W86：阻塞等相机（不计入处理耗时）
         d.t_perceive_us = 5000 + i;
         d.t_decide_us = 800 + i;
         d.mode = 1;
@@ -130,8 +131,10 @@ int main()
     assert(fl[0].find("tgt_nis") != std::string::npos);
     ok("表头含 frame_id / tgt_nis（⭐ PlotJuggler 落时间轴所需字段齐全）");
     // ⚠️ W19 修正：fl[1] 是 i=0 那一行 → frame_id=0（原来写成 1，Release 下 assert 跳过没暴露）
-    assert(fl[1].find("0,100000,5000,800,1,0,") != std::string::npos);
-    ok("数据行内容正确（frame_id,t_frame_us,t_perceive_us,t_decide_us,mode,game_state）");
+    // ⭐⭐ W86：第 3 列变成 `t_cam_wait_us`（等相机，不耗 CPU）——
+    //   这个 assert 当时**正好抓到**加列导致的格式变更（Debug 构建才生效）。
+    assert(fl[1].find("0,100000,90000,5000,800,1,0,") != std::string::npos);
+    ok("数据行内容正确（frame_id,t_frame_us,t_cam_wait_us,t_perceive_us,t_decide_us,mode,game_state）");
 
     // invincible 标记：第 3 帧（frame_id=3 -> 文件第 4 行）
     auto & l4 = fl[4];   // i=3

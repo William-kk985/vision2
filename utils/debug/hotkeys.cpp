@@ -3,11 +3,51 @@
 #include <termios.h>
 #include <unistd.h>
 
+#include <cstdarg>
 #include <cstdio>
 #include <functional>
 #include <sstream>
 
 #include "utils/log/logger.hpp"
+
+namespace tools
+{
+namespace
+{
+/**
+ * ⭐⭐⭐ W78：**热键反馈不走 logger**
+ *
+ * ## 为什么
+ * 原来所有热键反馈都用 `logger()->warn(...)`。⚠️ 但按 `d` 把级别切到 `err`/`off` 后，
+ * **`warn` 自己也被过滤掉** → 反馈**静默** → 用户以为「按键坏了 / `d` 不循环了」
+ * （实测踩到：按两次 `d` 到 `warn`，再按就什么都看不到，其实是在往 `err`/`off` 走）。
+ *
+ * ## 原则
+ * 热键是**用户主动操作** —— 它的反馈**必须永远可见**，与日志级别无关
+ * （就像按键本身不该依赖日志级别一样）。
+ *
+ * ⇒ 直接写 `stdout` + `fflush`（不经过 spdlog 的级别过滤）。
+ * ⚠️ 用 `
+` 而不是 spdlog 的格式，因为这里就是给**人**看的即时反馈。
+ */
+void hotkey_feedback(const char * fmt, ...) __attribute__((format(printf, 1, 2)));
+void hotkey_feedback(const char * fmt, ...)
+{
+  std::fputs("[hotkey] ", stdout);
+  va_list ap;
+  va_start(ap, fmt);
+  std::vfprintf(stdout, fmt, ap);
+  va_end(ap);
+  std::fputc('\n', stdout);
+  std::fflush(stdout);   // ⭐ tty 行缓冲，但重定向到文件时必须手动刷
+}
+}  // namespace
+}  // namespace tools
+
+namespace
+{
+using tools::hotkey_feedback;
+}  // namespace
 
 namespace tools
 {
@@ -97,13 +137,13 @@ void toggle_sink(
 {
   if (hub.has(sink_name)) {
     hub.remove(sink_name);
-    tools::logger()->warn("[hotkey] {} 已移除（后续 on_frame/on_image 路径上没有它）", label);
+    hotkey_feedback("%s 已移除（后续 on_frame/on_image 路径上没有它）", label);
     return;
   }
   if (!factory) {
     // ⭐⭐ W55：说清楚**为什么**不可用 + **怎么办**（原来只一句"不可用"）
-    tools::logger()->warn(
-      "[hotkey] ⚠️ {} **当前环境不可用**。\n"
+    hotkey_feedback(
+      "⚠️ %s **当前环境不可用**。\n"
       "    常见原因：无显示环境（`DISPLAY` 未设置）→ 可视化窗口开不了（`cv::imshow` 需要 X）。\n"
       "    可选：① 设好 `DISPLAY` 再跑（本地图形界面）\n"
       "          ② 用 `--debug-img` 存图代替（不需要显示）\n"
@@ -112,7 +152,7 @@ void toggle_sink(
     return;
   }
   hub.add(factory());
-  tools::logger()->warn("[hotkey] {} 已挂上", label);
+  hotkey_feedback("%s 已挂上", label);
 }
 }  // namespace
 
@@ -140,21 +180,22 @@ void DebugKeyBindings::bind(
 
   // d —— 日志级别循环
   hk.on('d', "日志级别循环", [] {
-    tools::logger()->warn("[hotkey] 日志级别 -> {}", tools::log_level_name(tools::cycle_log_level()));
+    // ⭐⭐ W78：**必须绕过 logger** —— 否则切到 err/off 时这句自己也被过滤（实测踩到）
+    hotkey_feedback("日志级别 -> %s", tools::log_level_name(tools::cycle_log_level()));
   });
 
   // p —— 暂停/继续
   if (paused) {
     hk.on('p', "暂停/继续", [paused] {
       *paused = !*paused;
-      tools::logger()->warn("[hotkey] {}", *paused ? "已暂停" : "已继续");
+      hotkey_feedback("%s", *paused ? "已暂停（主循环跳过整帧：不读相机/不检测/不发指令；热键仍响应）" : "已继续");
     });
   }
 
   // r —— ⭐ W21：配置热重载
   hk.on('r', "热重载配置", [on_reload] {
     if (!on_reload) {
-      tools::logger()->warn("[hotkey] 热重载未装配");
+      hotkey_feedback("热重载未装配");
       return;
     }
     on_reload();
@@ -162,7 +203,7 @@ void DebugKeyBindings::bind(
 
   // q —— 退出
   hk.on('q', "退出", [] {
-    tools::logger()->warn("[hotkey] 请求退出");
+    hotkey_feedback("请求退出（与 Ctrl-C 同一出口：停线程 + 关相机 + 写 CSV 尾巴）");
     Exiter::request_exit();
   });
 

@@ -92,7 +92,9 @@ Eigen::VectorXd ExtendedKalmanFilter::update(
   //   · ⚠️ 原值 0.711 其实是 χ²(4) 的 **5% 下尾**（"好得可疑"的下界），
   //     被误当成 95% 分位用 → W9 实测 **49% 的帧被判「失败」**。
   //     正确的一致性上界是 95% 分位 = 9.4877（差 13.3 倍）。
-  //   · `nis_fail_threshold()` 可在运行期改（默认已换成正确值）
+  //   · `nis_fail_threshold()` 可在运行期改
+  //     ⚠️ W74 更正：**默认【没有】换成正确值** —— 仍是同济原值 0.711
+  //        （原注释与实现不符；换值属效果优化，需显式调用）
   const double nis_threshold = nis_fail_threshold();
   const double nees_threshold = nis_fail_threshold();
 

@@ -36,7 +36,8 @@
 #include <vector>
 
 #include "core/auto_aim/detector/yolo.hpp"
-#include "core/auto_aim/detector/det_stats.hpp"   // ⭐ W63
+#include "core/auto_aim/detector/det_stats.hpp"
+#include "utils/system/host_info.hpp"   // ⭐ W81：本机核数 + 建议   // ⭐ W63
 #include "core/auto_aim/planner/legacy.hpp"   // ⭐ 同济哨兵用 Aimer（legacy）
 #include "core/auto_aim/solver/solver.hpp"
 #include "core/auto_aim/target/target_debug_fill.hpp"   // ⭐ W70
@@ -143,6 +144,9 @@ int run_sentry(
   tools::Recorder recorder(30, record);
 
     // ⭐⭐ W49（方案 D）：**一行装配整个 Debug 体系**
+    // ⭐⭐ W81：启动时打印「本机核数 + 建议配置」（核少时提示关 sink）
+    tools::print_host_advice("sentry");
+
     tools::DebugRuntime dbg(
       {.csv_prefix = csv_prefix, .verbose_hotkeys = verbose_hotkeys, .name = "sentry"});
     auto & hub = dbg.hub;                 // ⭐ 别名：保持下游代码一字不改

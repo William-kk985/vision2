@@ -22,7 +22,13 @@ PlotJugglerSink::PlotJugglerSink(std::string host, uint16_t port, bool enabled)
   d->sin_port = ::htons(port);
   d->sin_addr.s_addr = ::inet_addr(host.c_str());
   dest_ = d;
-  tools::logger()->info("[PlotJugglerSink] -> {}:{}", host, port);
+  // ⭐⭐ W80：起 worker（JSON 拼装 + sendto 都在它上面）
+  //   ⚠️⚠️ 这一行曾在 W80 被漏掉（Python 替换用了 4 空格缩进、文件是 2 空格 → 静默失败）：
+  //      后果是 `on_frame` 只往队列推、**没人消费** → PlotJuggler 一条数据都收不到，
+  //      而 benchmark 只测入队（104 ns）看不出问题。**加下面的启动日志便于自查。**
+  th_ = std::thread([this] { worker(); });
+  tools::logger()->info("[PlotJugglerSink] -> {}:{}（JSON 拼装在 worker 线程，不占自瞄）",
+                        host, port);
 }
 
 PlotJugglerSink::~PlotJugglerSink()

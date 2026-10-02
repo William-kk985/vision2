@@ -53,6 +53,7 @@
 #include "utils/debug/recorder.hpp"
 // ⭐ W16：Debug 数据面（W8 建好，这次接进主程序）
 #include "core/auto_aim/detector/det_stats.hpp"
+#include "utils/system/host_info.hpp"   // ⭐ W81：本机核数 + 建议
 #include "core/auto_aim/target/target_debug_fill.hpp"   // ⭐ W70   // ⭐ W63
 #include "core/debug.hpp"
 #include "utils/debug/csv_sink.hpp"
@@ -218,6 +219,9 @@ int main(int argc, char * argv[])
 
   // ⭐ W16：Debug 数据面（SinkHub 可热插拔；空 hub → on_frame 就是空循环，零成本）
     // ⭐⭐ W49（方案 D）：**一行装配整个 Debug 体系**（原来手写 ~30 行）
+    // ⭐⭐ W81：启动时打印「本机核数 + 建议配置」（核少时提示关 sink）
+    tools::print_host_advice("hero");
+
     tools::DebugRuntime dbg(
       {.csv_prefix = cli.get<std::string>("csv"),
        .pj = cli.get<bool>("pj"),

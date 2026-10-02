@@ -16,7 +16,11 @@ namespace io
 class HikRobot : public CameraBase
 {
 public:
-  HikRobot(double exposure_ms, double gain, const std::string & vid_pid);
+  /// @param fps ⭐⭐ W58：**目标帧率（可配）** —— 原来硬编码 150。
+  ///   ⚠️ 150 fps @ 1440×1080 Bayer8 ≈ **233 MB/s**，接近 USB3 实际上限；
+  ///   若协商到 USB2（480 Mbps ≈ 40 MB/s）则**一帧都传不过来** → `0x80000007`。
+  ///   yaml 里加 `fps: 30` 可控；缺省 30（安全值）。
+  HikRobot(double exposure_ms, double gain, const std::string & vid_pid, double fps = 30.0);
   ~HikRobot() override;
   void read(cv::Mat & img, std::chrono::steady_clock::time_point & timestamp) override;
 
@@ -29,6 +33,7 @@ private:
 
   double exposure_us_;
   double gain_;
+  double fps_ = 30.0;   // ⭐ W58
 
   std::thread daemon_thread_;
   std::atomic<bool> daemon_quit_;

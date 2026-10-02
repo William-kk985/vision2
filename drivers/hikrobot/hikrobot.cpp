@@ -8,8 +8,8 @@ using namespace std::chrono_literals;
 
 namespace io
 {
-HikRobot::HikRobot(double exposure_ms, double gain, const std::string & vid_pid)
-: exposure_us_(exposure_ms * 1e3), gain_(gain), queue_(1), handle_(nullptr),
+HikRobot::HikRobot(double exposure_ms, double gain, const std::string & vid_pid, double fps)
+: exposure_us_(exposure_ms * 1e3), gain_(gain), fps_(fps), queue_(1), handle_(nullptr),
   daemon_quit_(false), vid_(-1), pid_(-1)
 {
   set_vid_pid(vid_pid);
@@ -130,7 +130,7 @@ void HikRobot::capture_start()
 
   // ⭐ 帧率：**必须检查返回值**（原来 `MV_CC_SetFrameRate(handle_, 150)` 的返回值被丢弃）
   //   150 fps @ 160 万像素 ≈ 233 MB/s，接近 USB3 实际上限 → 可能设置失败
-  const double kTargetFps = 150.0;
+  const double kTargetFps = fps_;   // ⭐ W58：可配（yaml 的 `fps`，默认 30）
   ret = MV_CC_SetFrameRate(handle_, kTargetFps);
   if (ret != MV_OK)
     tools::logger()->warn(
@@ -149,6 +149,26 @@ void HikRobot::capture_start()
     if (MV_CC_GetEnumValue(handle_, "TriggerMode", &ev) == MV_OK)
       tools::logger()->info(
         "[HikRobot] TriggerMode = {}（0=Off 才是自由运行）", ev.nCurValue);
+
+    // ⭐⭐ W58：**打印分辨率 + 估算带宽** —— `0x80000007` 十有八九是带宽不够
+    MVCC_INTVALUE iv{};
+    int64_t w = 0, h = 0;
+    if (MV_CC_GetIntValue(handle_, "Width", &iv) == MV_OK) w = static_cast<int64_t>(iv.nCurValue);
+    if (MV_CC_GetIntValue(handle_, "Height", &iv) == MV_OK) h = static_cast<int64_t>(iv.nCurValue);
+    MVCC_FLOATVALUE fr{};
+    double fps_now = kTargetFps;
+    if (MV_CC_GetFloatValue(handle_, "ResultingFrameRate", &fr) == MV_OK)
+      fps_now = static_cast<double>(fr.fCurValue);
+    if (w > 0 && h > 0) {
+      const double mbps = static_cast<double>(w * h) * fps_now / 1048576.0;   // Bayer8 = 1 B/px
+      tools::logger()->info(
+        "[HikRobot] 分辨率 = {}×{}，帧率 {:.1f} fps → **需带宽 ≈ {:.0f} MB/s**", w, h, fps_now,
+        mbps);
+      if (mbps > 150.0)
+        tools::logger()->warn(
+            "    ⚠️ >150 MB/s 已接近/超过 USB3 可用带宽（若协商成 USB2 只有 ~40 MB/s）\n"
+            "       若报 `0x80000007`（无数据）→ 先把 yaml 里的 `fps` 降到 30 试试");
+    }
   }
 
   ret = MV_CC_StartGrabbing(handle_);

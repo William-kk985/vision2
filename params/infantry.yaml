@@ -75,6 +75,9 @@ camera_name: "hikrobot"
 exposure_ms: 2
 gain: 16
 vid_pid: "2bdf:0001"
+# ⭐⭐ W58：目标帧率。150 fps @1440x1080 Bayer8 ≈ 233 MB/s（接近 USB3 上限）
+#   若报 0x80000007（无数据）→ 先降到 30 试（≈47 MB/s，肯定够）
+fps: 30
 
 #  1  0  0
 #  0  1  0

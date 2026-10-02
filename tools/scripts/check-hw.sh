@@ -99,6 +99,38 @@ else
   warn "没有 python3，跳过"
 fi
 
+say "4.5 ⭐⭐ USB 协商速率（带宽问题的关键）"
+if command -v lsusb >/dev/null; then
+  TREE="$(lsusb -t 2>/dev/null || true)"
+  if [ -n "$TREE" ]; then
+    # 找到海康那一条所在的 bus/port 分支
+    echo "$TREE" | grep -iE "Class=|Driver=" | head -20 | sed 's/^/  /'
+    echo
+    echo "  ── 判断 ──"
+    echo "    ⚠️ **5000M / 10000M** = USB3（可用 ~350 MB/s）"
+    echo "    ⚠️ **480M**            = USB2（只有 ~40 MB/s，**160 万像素 150fps 必失败**）"
+    echo "    ⚠️ **12M / 1.5M**      = USB1（不可能跑工业相机）"
+    echo
+    if echo "$TREE" | grep -q "2bdf"; then
+      # 打印海康设备那一行（含速率）
+      echo "$TREE" | grep -B1 -A1 -i "2bdf" | sed 's/^/      /' || true
+    fi
+    echo "    ⭐ 判断方法：看海康那一条前面的 `\`__ Port N: Dev X, If Y, Class=... , Driver=... , 5000M`"
+    echo "       如果显示 480M → **换 USB3 口 / 换 USB3 线**，或把 params/*.yaml 的 fps 降到 5~10"
+  else
+    warn "lsusb -t 无输出"
+  fi
+else
+  warn "没装 usbutils"
+fi
+
+say "4.6 ⭐ 带宽估算（相机上报）"
+echo "  工业相机带宽需求（Bayer8 = 1 字节/像素）："
+echo "    1440×1080 × 150 fps ≈ **233 MB/s**  ⚠️ 接近 USB3 上限"
+echo "    1440×1080 ×  30 fps ≈ ** 47 MB/s**  ✅ 稳妥"
+echo "    1280×1024 ×  30 fps ≈ ** 37 MB/s**  ✅"
+echo "  ⭐ 本项目已在 params/*.yaml 加 `fps:`（默认 30）；程序启动时会打印**实际分辨率+需带宽**"
+
 say "5. 海康 SDK"
 for p in /opt/MVS/lib/64/libMvCameraControl.so \
          "$(dirname "$0")/../../drivers/hikrobot/lib/amd64/libMvCameraControl.so"; do

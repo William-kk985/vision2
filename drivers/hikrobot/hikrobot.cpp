@@ -118,7 +118,38 @@ void HikRobot::capture_start()
   set_enum_value("GainAuto", MV_GAIN_MODE_OFF);
   set_float_value("ExposureTime", exposure_us_);
   set_float_value("Gain", gain_);
-  MV_CC_SetFrameRate(handle_, 150);
+
+  // ⭐⭐⭐ W57：**必须显式关掉触发模式** —— 这是 `0x80000007`（取图超时）的头号嫌疑
+  //
+  // 改前：代码里**从来没碰过 `TriggerMode`**（`grep -rn TriggerMode` = 0 命中）。
+  //   若相机被设成「外部触发」（MVS 客户端改过 / 某些固件默认），
+  //   `StartGrabbing` **会成功**，但**永远等不到帧** → `MV_CC_GetImageBuffer` 超时。
+  //   实测现象：等 43 秒才报 `0x80000007`，一帧都没有。
+  set_enum_value("TriggerMode", MV_TRIGGER_MODE_OFF);          // 0 = Off
+  set_enum_value("TriggerSource", MV_TRIGGER_SOURCE_SOFTWARE);  // 关掉后此项无影响，保险
+
+  // ⭐ 帧率：**必须检查返回值**（原来 `MV_CC_SetFrameRate(handle_, 150)` 的返回值被丢弃）
+  //   150 fps @ 160 万像素 ≈ 233 MB/s，接近 USB3 实际上限 → 可能设置失败
+  const double kTargetFps = 150.0;
+  ret = MV_CC_SetFrameRate(handle_, kTargetFps);
+  if (ret != MV_OK)
+    tools::logger()->warn(
+      "MV_CC_SetFrameRate({:.0f}) failed: {:#x} → 用相机默认帧率", kTargetFps, ret);
+
+  // ⭐ 回读实际生效值（下一次出问题时能一眼看出配置对不对）
+  {
+    MVCC_FLOATVALUE fv{};
+    if (MV_CC_GetFloatValue(handle_, "ExposureTime", &fv) == MV_OK)
+      tools::logger()->info("[HikRobot] 实际曝光 = {:.0f} µs", static_cast<double>(fv.fCurValue));
+    if (MV_CC_GetFloatValue(handle_, "Gain", &fv) == MV_OK)
+      tools::logger()->info("[HikRobot] 实际增益 = {:.1f} dB", static_cast<double>(fv.fCurValue));
+    if (MV_CC_GetFloatValue(handle_, "ResultingFrameRate", &fv) == MV_OK)
+      tools::logger()->info("[HikRobot] 实际帧率 = {:.1f} fps", static_cast<double>(fv.fCurValue));
+    MVCC_ENUMVALUE ev{};
+    if (MV_CC_GetEnumValue(handle_, "TriggerMode", &ev) == MV_OK)
+      tools::logger()->info(
+        "[HikRobot] TriggerMode = {}（0=Off 才是自由运行）", ev.nCurValue);
+  }
 
   ret = MV_CC_StartGrabbing(handle_);
   if (ret != MV_OK) {
@@ -140,11 +171,26 @@ void HikRobot::capture_start()
       unsigned int ret;
       unsigned int nMsec = 100;
 
+      // ⭐⭐ W57：**给 SDK 调用计时** —— 实测遇到「传 100ms 超时却阻塞 43 秒」
+      //   （海康 SDK 内部 USB 传输超时远长于 nMsec）。计时后能一眼分辨：
+      //   是"相机没帧"还是"USB/固件卡住"。
+      auto t_get0 = std::chrono::steady_clock::now();
       ret = MV_CC_GetImageBuffer(handle_, &raw, nMsec);
+      const double get_ms =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_get0)
+          .count();
       if (ret != MV_OK) {
-        tools::logger()->warn("MV_CC_GetImageBuffer failed: {:#x}", ret);
+        tools::logger()->warn(
+          "MV_CC_GetImageBuffer failed: {:#x}（本次阻塞 {:.0f} ms，请求超时 {} ms）", ret, get_ms,
+          nMsec);
+        if (get_ms > 1000.0)
+          tools::logger()->warn(
+            "    ⚠️ SDK 内部阻塞远长于请求超时 → 多半是 **USB 传输卡住 / 相机固件无响应**。\n"
+            "       检查: ① `TriggerMode` 是否为 Off ② USB3 口与线材 ③ 别被 MVS 客户端占用");
         break;
       }
+      if (get_ms > 200.0)
+        tools::logger()->debug("[HikRobot] GetImageBuffer 耗时 {:.0f} ms（偏慢）", get_ms);
 
       auto timestamp = std::chrono::steady_clock::now();
       cv::Mat img(cv::Size(raw.stFrameInfo.nWidth, raw.stFrameInfo.nHeight), CV_8U, raw.pBufAddr);

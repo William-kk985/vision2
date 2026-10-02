@@ -160,6 +160,7 @@ std::list<Armor> YOLOV8::parse(
 
   std::vector<int> indices;
   cv::dnn::NMSBoxes(boxes, confidences, score_threshold_, nms_threshold_, indices);
+  const int nms_survivors = static_cast<int>(indices.size());   // ⭐ W64：NMS 存活数（原来算完就扔）
 
   std::list<Armor> armors;
   for (const auto & i : indices) {
@@ -225,6 +226,17 @@ std::list<Armor> YOLOV8::parse(
     }
   }
   if (debug_) draw_detections(bgr_img, armors, frame_count);
+
+  // ⭐⭐ W64：把本帧统计带出去（main 会填进 `FrameDebug::detector`）
+  {
+    DetectStats st;
+    st.n_pass = n_pass;
+    st.nms_survivors = nms_survivors;
+    st.n_out = static_cast<int>(armors.size());
+    for (const auto & a : armors)
+      if (a.confidence > st.best_conf) st.best_conf = a.confidence;
+    set_last_detect_stats(st);
+  }
 
   return armors;
 }

@@ -54,7 +54,8 @@ void PlotJugglerSink::on_frame(const auto_aim::FrameDebug & d)
     << ",\"tgt_x\":" << d.target.xyz_world[0] << ",\"tgt_y\":" << d.target.xyz_world[1]
     << ",\"tgt_z\":" << d.target.xyz_world[2]
     << ",\"pln_t_fly\":" << d.planner.t_fly << ",\"pln_overlap\":" << d.planner.overlap_ratio
-    << ",\"pln_kill_time\":" << d.planner.kill_time << ",\"pln_iters\":" << d.planner.solver_iters
+    // ⚠️ W79：去掉 `pln_kill_time`（算法里没这个量，永远是 0）
+    << ",\"pln_iters\":" << d.planner.solver_iters
     << ",\"sht_should_fire\":" << (d.shooter.should_fire ? 1 : 0)
     << ",\"ctl_yaw\":" << d.controller.cmd_yaw << ",\"ctl_pitch\":" << d.controller.cmd_pitch
     << "}";

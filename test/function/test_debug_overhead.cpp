@@ -78,7 +78,7 @@ int main()
     fd.target.yaw = 1.1; fd.target.w = 3.2; fd.target.r = 0.2; fd.target.l = 0.15;
     fd.target.h = 0.1; fd.target.nis = 2.0; fd.target.nis_thresh = 9.5;
     fd.target.invincible = false;
-    fd.planner.t_fly = 0.28; fd.planner.t_fire = 0.02;
+    fd.planner.t_fly = 0.28;   // ⚠️ W79：t_fire/t_pred/dps/kill_time 已删（算法里没这些量）
     fd.controller.cmd_yaw = 1.0; fd.controller.cmd_pitch = 0.05;
     fd.controller.control = true; fd.controller.shoot = true;
     g_sink += fd.frame_id + size_t(fd.target.w * 100);

@@ -32,8 +32,13 @@ namespace auto_aim
 /// 规划器
 struct PlannerDebug
 {
-  double t_fly = 0, t_fire = 0, t_pred = 0;   // 同济理论三个时间
-  double overlap_ratio = 0, dps = 0, kill_time = 0;  // ⭐ 重合度 / 秒伤 / 击杀时间
+  double t_fly = 0;          // 弹丸飞行时间（同济理论的 t_fly）
+  double overlap_ratio = 0;  // ⭐ 前瞻段重合度
+  // ⚠️ W79 补齐：`t_fire` / `t_pred` / `dps` / `kill_time` **已删除**
+  //   —— 它们是**同济理论/旧 decider 设计**里的量，**当前算法实现里根本没有**
+  //      （`grep core/auto_aim/planner/*.cpp` 零命中）。
+  //   ⚠️ W72 我改 `csv_sink.cpp` 时**漏了这里**（结构体字段还在、plotjuggler 还在发）
+  //      → 典型「只改一半」。现在补齐。
   int solver_iters = 0;
   double acc_max = 0;
   int64_t t_plan_us = 0;

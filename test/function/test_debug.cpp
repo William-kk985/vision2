@@ -114,7 +114,6 @@ int main()
         d.target.invincible = (i == 3);
         d.planner.t_fly = 0.23;
         d.planner.overlap_ratio = 0.6;
-        d.planner.kill_time = 1.1;
         d.shooter.should_fire = (i >= 2);
         d.shooter.blocked_by_invincible = (i == 3);
         d.controller.cmd_yaw = -0.05;

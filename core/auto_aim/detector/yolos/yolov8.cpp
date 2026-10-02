@@ -124,10 +124,12 @@ std::list<Armor> YOLOV8::parse(
   //   原来 objectness/not_armor/置信度/类型 四种失败【都没有日志】、
   //   `armor_count` 又是过滤后的 → 终端和 CSV 都分不出卡在哪一步。
   int n_pass = 0, n_name = 0, n_conf = 0, n_type = 0;   // ⭐ 只统计 objectness 通过后的候选
-  // ⭐⭐ W66：记录本帧**最高 objectness**（以及它所在的 anchor 行），
-  //   这样没候选时能打印「最高多少 / 阈值多少 / 它以为是哪个类别」——真实数值而非一句"没过"
+  // ⭐⭐ W68：记录本帧 objectness **分布** —— 只看"最高多少"信息量太少，
+  //   看"有多少 anchor 接近阈值"才知道离能用还有多远。
+  //   ⚠️ 不再记录"最像的 anchor 的类别/颜色"：那两路输出**只有在 objectness 高时才有意义**，
+  //      对 objectness≈0.25 的 anchor 打印它们纯属误导（用户实测反馈）。
   double max_obj = 0;
-  int max_obj_row = -1;
+  int n_over_05 = 0, n_over_03 = 0, n_over_01 = 0;
   for (int r = 0; r < output.rows; r++) {
     auto xywh = output.row(r).colRange(0, 4);
     auto scores = output.row(r).colRange(4, 4 + class_num_);
@@ -139,7 +141,10 @@ std::list<Armor> YOLOV8::parse(
     cv::Point max_point;
     cv::minMaxLoc(scores, nullptr, &score, nullptr, &max_point);
 
-      if (score > max_obj) { max_obj = score; max_obj_row = r; }   // ⭐ W66：便宜（一次比较）
+      if (score > max_obj) max_obj = score;   // ⭐ W68：便宜（一次比较）
+      if (score > 0.5) ++n_over_05;
+      if (score > 0.3) ++n_over_03;
+      if (score > 0.1) ++n_over_01;
       if (score < score_threshold_) continue;   // ⭐ 大部分 anchor 都在这（不是装甲板）
       ++n_pass;                                  // ⭐ 通过 objectness = "像装甲板"的候选
 
@@ -199,38 +204,18 @@ std::list<Armor> YOLOV8::parse(
     ++it;
   }
 
-  // ⭐⭐⭐ W62：**一帧一行汇总**（`n_raw == 0` 时说明 YOLO 根本没输出候选 → 不打）
-  // ⭐⭐⭐ W62：**一帧一行汇总** —— 一眼看出卡在哪一步
+  // ⭐⭐⭐ W62/W68：**一帧一行汇总** —— 一眼看出卡在哪一步
   //   ⚠️ `n_pass` 才是"像装甲板的候选数"；anchor 总数（25200）没意义、不打。
-  // ⭐⭐ W66：没候选时，把「最像的那个 anchor」的类别也解出来（**只算一次**，不是 25200 次）
-  int best_cls = -1, best_color = -1;
-  double best_cls_score = 0, best_color_score = 0;
-  if (n_pass == 0 && max_obj_row >= 0) {
-    cv::Mat cs = output.row(max_obj_row).colRange(13, 22);
-    cv::Mat cols = output.row(max_obj_row).colRange(9, 13);
-    cv::Point cid, coid;
-    cv::minMaxLoc(cs, NULL, &best_cls_score, NULL, &cid);
-    cv::minMaxLoc(cols, NULL, &best_color_score, NULL, &coid);
-    best_cls = cid.x;
-    best_color = coid.x;                    // ⭐ 颜色用它自己的 argmax 索引（原来错用了 best_cls）
-    // ⚠️ 类别/颜色的输出是 **logit**（没 sigmoid）→ 显示前转成概率，否则数字会误导
-    const auto sig = [](double x) { return 1.0 / (1.0 + std::exp(-x)); };   // ⭐ 本地，不依赖成员
-    best_cls_score = sig(best_cls_score);
-    best_color_score = sig(best_color_score);
-  }
-
-  // ⭐ 情况 0：**objectness 一个候选都没过** → YOLO 压根没看到"像装甲板的东西"
+  //   ⭐ W68：没候选时只报 **objectness 分布**（离阈值多远）；
+  //     不再报"最像的 anchor 的类别/颜色"—— 那两路输出**只在 objectness 高时才有意义**，
+  //     对 objectness≈0.2 的 anchor 打印它们纯属误导（用户实测反馈）。
   if (auto_aim::det_stats_enabled() && n_pass == 0) {
     static int no_cand_count = 0;
     if (++no_cand_count % 60 == 1)   // 节流：每 60 帧（约 0.6 秒）报一次
-      tools::logger()->debug(   // ⭐ W63：warn→debug
-        "[YOLOV8] objectness 一个候选都没过（**本帧最高 {:.3f}** < 阈值 {:.2f}）"
-        " ⇒ 没检出。最像的 anchor: 类别={}({:.1%}) 颜色={}({:.1%})；anchor {} 个",
-        max_obj, score_threshold_,
-        (best_cls >= 0 && best_cls < (int)ARMOR_NAMES.size()) ? ARMOR_NAMES[best_cls] : "?",
-        best_cls_score,
-        (best_color >= 0 && best_color < (int)COLORS.size()) ? COLORS[best_color] : "?",
-        best_color_score, output.rows);
+      tools::logger()->debug(
+        "[YOLOV8] objectness 无候选通过：最高 {:.3f} / 阈值 {:.2f}"
+        "（>0.5:{} >0.3:{} >0.1:{}；共 {} anchor）",
+        max_obj, score_threshold_, n_over_05, n_over_03, n_over_01, output.rows);
   }
   if (auto_aim::det_stats_enabled() && n_pass > 0) {
     static int last_n_out = -1;

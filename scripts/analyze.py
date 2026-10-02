@@ -28,6 +28,53 @@ KNOWN_DEAD_COLS = {
 }
 
 
+def color_mismatch_diagnosis(d) -> None:
+    """⭐⭐⭐ W75：诊断「**颜色配错**」—— 检出很多但跟踪收到 0
+
+    颜色过滤在 `Tracker` 里（`ArmorFilter::apply`），所以：
+
+    | `det_armor_count` | `trk_armor_count` | 含义 |
+    |---|---|---|
+    | > 0 | **0** | ⭐ **颜色配错了**（YOLO 检出了，但 `a.color != enemy_color` 全被删） |
+    | 0 | 0 | ⭐ **YOLO 没检出**（不是颜色问题） |
+    | > 0 | > 0 | ✅ 正常 |
+
+    ⭐ 配置在哪：`params/<兵种>.yaml` 的**顶层** `enemy_color: "red" | "blue"`
+    （⚠️ W69 前 `filter.cpp` 读的是 `armor_filter:` 段内，顶层设了也不生效；现已修）
+    """
+    need = ("det_armor_count", "trk_armor_count")
+    if not all(c in d.header for c in need):
+        return
+    det = d.col("det_armor_count").astype(np.int64)
+    trk = d.col("trk_armor_count").astype(np.int64)
+    n = len(det)
+    if n == 0:
+        return
+
+    det_ok = int(np.sum(det > 0))
+    both_ok = int(np.sum((det > 0) & (trk > 0)))
+    only_det = int(np.sum((det > 0) & (trk == 0)))    # ⭐ 检出但 tracker 一个都没收到
+    if det_ok == 0:
+        return
+
+    print("\n── ⭐ 颜色过滤诊断（det_armor_count → trk_armor_count）──")
+    print(f"  检出到装甲板的帧           {det_ok:>6} 帧")
+    print(f"  ⭐ **检出但 tracker 收到 0**  {only_det:>6} 帧  "
+          f"({only_det / det_ok * 100:5.1f}% 的检出帧)")
+
+    rate = only_det / det_ok
+    if rate > 0.8:
+        print("\n  ⚠️⚠️ **强烈提示：颜色配错了！**")
+        print("     YOLO 检出了装甲板，但 `ArmorFilter` 把颜色不符的全删了")
+        print("     → 检查 `params/<兵种>.yaml` 顶层 `enemy_color`（red / blue）")
+        print("     → 程序启动日志里有 `[ArmorFilter] ... enemy_color=??? 取自顶层` 可直接确认")
+    elif rate > 0.2:
+        print(f"\n  🔶 {rate * 100:.0f}% 的检出帧被颜色滤掉 —— 可能是敌人颜色混杂，"
+              f"或 `enemy_color` 配反了")
+    else:
+        print("\n  ✅ 颜色过滤正常（多数检出帧都进了 tracker）")
+
+
 def detect_diagnosis(d) -> None:
     """⭐⭐⭐ W65：用 `det_nms` / `det_armor_count` / `det_best_conf` 三列**组合诊断检测链路**
 
@@ -153,6 +200,9 @@ def main():
             for i in range(0, min(len(live0), 16), 4):
                 print("║    " + "  ".join(f"{c:<20}" for c in live0[i:i+4]))
         print(f"╚═ 提示：`KNOWN_DEAD_COLS` 里列的就是前者；补上赋值后它们才会有数据")
+
+    # ── ⭐⭐⭐ 颜色过滤诊断（检出→跟踪）──
+    color_mismatch_diagnosis(d)
 
     # ── ⭐⭐⭐ 检测链路诊断（三列组合）──
     detect_diagnosis(d)

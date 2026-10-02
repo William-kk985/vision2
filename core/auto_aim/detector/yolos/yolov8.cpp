@@ -118,6 +118,10 @@ std::list<Armor> YOLOV8::parse(
   std::vector<float> confidences;
   std::vector<cv::Rect> boxes;
   std::vector<std::vector<cv::Point2f>> armors_key_points;
+  // ⭐⭐⭐ W62：**逐帧统计各步过滤** —— 解决「识别不出来时不知道卡在哪」
+  //   原来 objectness/not_armor/置信度/类型 四种失败【都没有日志】、
+  //   `armor_count` 又是过滤后的 → 终端和 CSV 都分不出卡在哪一步。
+  int n_pass = 0, n_name = 0, n_conf = 0, n_type = 0;   // ⭐ 只统计 objectness 通过后的候选
   for (int r = 0; r < output.rows; r++) {
     auto xywh = output.row(r).colRange(0, 4);
     auto scores = output.row(r).colRange(4, 4 + class_num_);
@@ -129,7 +133,8 @@ std::list<Armor> YOLOV8::parse(
     cv::Point max_point;
     cv::minMaxLoc(scores, nullptr, &score, nullptr, &max_point);
 
-    if (score < score_threshold_) continue;
+      if (score < score_threshold_) continue;   // ⭐ 大部分 anchor 都在这（不是装甲板）
+      ++n_pass;                                  // ⭐ 通过 objectness = "像装甲板"的候选
 
     auto x = xywh.at<float>(0);
     auto y = xywh.at<float>(1);
@@ -169,13 +174,15 @@ std::list<Armor> YOLOV8::parse(
     it->pattern = get_pattern(bgr_img, *it);
     classifier_.classify(*it);
 
+    if (it->name == ArmorName::not_armor) { ++n_name; it = armors.erase(it); continue; }
+    if (it->confidence <= min_confidence_) { ++n_conf; it = armors.erase(it); continue; }
     if (!check_name(*it)) {
-      it = armors.erase(it);
-      continue;
+      ++n_conf;
     }
 
     it->type = get_type(*it);
     if (!check_type(*it)) {
+      ++n_type;
       it = armors.erase(it);
       continue;
     }
@@ -184,6 +191,38 @@ std::list<Armor> YOLOV8::parse(
     ++it;
   }
 
+  // ⭐⭐⭐ W62：**一帧一行汇总**（`n_raw == 0` 时说明 YOLO 根本没输出候选 → 不打）
+  // ⭐⭐⭐ W62：**一帧一行汇总** —— 一眼看出卡在哪一步
+  //   ⚠️ `n_pass` 才是"像装甲板的候选数"；anchor 总数（25200）没意义、不打。
+  // ⭐ 情况 0：**objectness 一个候选都没过** → YOLO 压根没看到"像装甲板的东西"
+  if (n_pass == 0) {
+    static int no_cand_count = 0;
+    if (++no_cand_count % 60 == 1)   // 节流：每 60 帧（约 0.6 秒）报一次
+      tools::logger()->warn(
+        "[YOLOV8] ⚠️ objectness **一个候选都没过** → YOLO 没看到像装甲板的东西"
+        "（阈值 {}；anchor 总数 {} 个）⇒ 这是「没检出」，不是被 not_armor 滤掉",
+        score_threshold_, output.rows);
+  }
+  if (n_pass > 0) {
+    static int last_n_out = -1;
+    static int same_count = 0;
+    const int n_out = static_cast<int>(armors.size());
+    if (n_out == last_n_out && ++same_count % 30 != 0) {
+      // 节流：输出数没变化时每 30 帧报一次（约 0.3 秒）
+    } else {
+      same_count = 0;
+      last_n_out = n_out;
+      if (n_out == 0)
+        tools::logger()->warn(
+          "[{}] ⚠️ objectness 通过 {} 个候选 → **全被滤掉**：not_armor {} / 置信度 {} / "
+          "类型不符 {}  ⇒ 最终 0 个装甲板",
+          "yolov8", n_pass, n_name, n_conf, n_type);
+      else
+        tools::logger()->debug(
+          "[{}] objectness 通过 {} → 输出 {}（滤掉 not_armor {} / conf {} / type {}）", "yolov8",
+          n_pass, n_out, n_name, n_conf, n_type);
+    }
+  }
   if (debug_) draw_detections(bgr_img, armors, frame_count);
 
   return armors;

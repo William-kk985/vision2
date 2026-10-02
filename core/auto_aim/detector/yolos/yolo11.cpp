@@ -26,6 +26,9 @@ YOLO11::YOLO11(const std::string & config_path, bool debug)
     core_, yaml["device"] ? yaml["device"].as<std::string>() : "");
   binary_threshold_ = yaml["threshold"].as<double>();
   min_confidence_ = yaml["min_confidence"].as<double>();
+  // ⭐⭐ W76：阈值可配（不写 = 同济原值 0.7 / 0.3）
+  if (yaml["score_threshold"]) score_threshold_ = yaml["score_threshold"].as<float>();
+  if (yaml["nms_threshold"]) nms_threshold_ = yaml["nms_threshold"].as<float>();
   int x = 0, y = 0, width = 0, height = 0;
   x = yaml["roi"]["x"].as<int>();
   y = yaml["roi"]["y"].as<int>();

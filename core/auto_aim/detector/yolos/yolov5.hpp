@@ -29,8 +29,13 @@ private:
   bool debug_, use_roi_, use_traditional_;
 
   const int class_num_ = 13;
-  const float nms_threshold_ = 0.3;
-  const float score_threshold_ = 0.7;
+  // ⭐⭐ W76：原来这两个是 **`const` 硬编码**（0.7 / 0.3），yaml 里改不了 ——
+  //   调试时想放宽 `score_threshold` 看"差多少"完全做不到。
+  //   ⇒ 现在可从 yaml 读，**默认值仍是同济原值 0.7 / 0.3**（不写这一项 = 同济行为）。
+  //   ⚠️ 注意两关**串联**：`score_threshold_`（YOLO 解析）→ `min_confidence_`（check_name，默认 0.8）
+  //   ⇒ **有效阈值是两者中更严的那个**（默认情形下是 0.8）。
+  float nms_threshold_ = 0.3;
+  float score_threshold_ = 0.7;
   double min_confidence_, binary_threshold_;
 
   ov::Core core_;

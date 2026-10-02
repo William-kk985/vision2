@@ -29,6 +29,15 @@ yolov8_model_path: assets/yolov8.xml
 yolov5_model_path: assets/yolov5.xml
 device: GPU
 min_confidence: 0.8
+
+#####----- ⭐ W76：检测阈值（两关【串联】，有效阈值 = 更严的那个）-----#####
+#  ① score_threshold：YOLO 解析时 objectness 的门槛（低于它 → 连候选都没有）
+#  ② min_confidence ：check_name 里的门槛（过了 ① 还要过它，否则被删）
+#  ⚠️ 默认 0.7 / 0.8 是【同济原值】；不写这两项 = 完全同济行为。
+#  ⭐ 调试「objectness 上不去」时可把 score_threshold 调低（如 0.3）
+#     以便看清"最高能到多少" —— 只会多出候选，不会改变已通过的判定。
+# score_threshold: 0.7
+# nms_threshold: 0.3
 use_traditional: true
 
 #####-----ROI-----#####

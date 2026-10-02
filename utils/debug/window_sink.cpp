@@ -23,6 +23,20 @@ WindowSink::WindowSink(std::string window, double scale)
   tools::logger()->info("[WindowSink] 窗口 '{}' 已开（scale={:.2f}）", window_, scale_);
 }
 
+WindowSink::~WindowSink()
+{
+  if (!opened_) return;
+  opened_ = false;
+  // ⭐⭐ W76：真销毁 X 窗口。OpenCV 的 `destroyWindow` 只把销毁请求排队，
+  //   必须再 pump 一次事件循环（`waitKey`）才会真正消失。
+  try {
+    cv::destroyWindow(window_);
+    cv::waitKey(1);
+  } catch (const std::exception & e) {
+    tools::logger()->warn("[WindowSink] 销毁窗口 '{}' 失败: {}", window_, e.what());
+  }
+}
+
 bool WindowSink::available()
 {
   if (const char * d = std::getenv("DISPLAY"); !d || !*d) return false;

@@ -24,6 +24,12 @@ public:
   /// @param scale  显示缩放（>0，小图省 CPU）
   explicit WindowSink(std::string window = "hzmir_debug", double scale = 0.5);
 
+  /// ⭐⭐ W76：**析构时销毁窗口** —— 原来没有析构、也没有 `cv::destroyWindow`，
+  ///   于是按 `1` 关窗后 sink 被移除（`on_image` 不再调用）但 **X 窗口一直留在屏幕上**
+  ///   （画面冻住），用户实测反馈「关上了但窗口还在」。
+  /// ⚠️ 必须在**主循环线程**析构（`hub.remove()` 由热键处理调用，就在主线程）。
+  ~WindowSink() override;
+
   const char * name() const override { return "window"; }
   bool wants_image() const override { return true; }
 

@@ -20,13 +20,47 @@ HikRobot::HikRobot(double exposure_ms, double gain, const std::string & vid_pid,
 
     capture_start();
 
+    // ⭐⭐⭐ W59：**重连要有上限 + 退避** —— 原来是无脑无限「关设备 → USB reset → 重开」
+    //
+    // 实测后果：`reset_usb()`（`libusb_reset_device`）反复重置 USB，
+    //   ⚠️ **相机直接掉线**（`MV_CC_EnumDevices` 返回 0，连续 40+ 次 `Not found camera!`），
+    //   而且**红灯不灭**（设备被留在异常状态）。海康相机 USB reset 后回不来是**已知坑**。
+    //
+    // 新策略：
+    //   · USB reset 只在**前 3 次**尝试（reset 是"重锤"，多数情况不需要）
+    //   · 之后只做 `capture_start()`（不带 reset）
+    //   · 连续失败 `kMaxRetry` 次后**停止重连**，明确告知用户怎么办
+    //   · 每次重连**退避**（100ms → 2s），别刷屏
+    int retry = 0;
+    constexpr int kMaxRetry = 30;
+
     while (!daemon_quit_) {
-      std::this_thread::sleep_for(100ms);
+      std::this_thread::sleep_for(std::chrono::milliseconds(std::min(100 * (retry + 1), 2000)));
 
-      if (capturing_) continue;
+      if (capturing_) { retry = 0; continue; }   // ⭐ 正常取流 → 重置计数
 
+      if (retry >= kMaxRetry) {
+        tools::logger()->error(
+            "[HikRobot] ❌ 连续重连 {} 次仍失败 → **停止重连**（避免反复 USB reset 把相机搞掉线）\n"
+            "    怎么办：\n"
+            "      ① ⚠️ **先确认没有别的程序占着相机**（MVS 客户端 / 上一个没退干净的进程）\n"
+            "         `pkill -f MVS`  然后重跑\n"
+            "      ② 复位: `tools/scripts/camera-reset.sh`（或物理拔插）\n"
+            "      ③ 若报 `0x80000007`（无数据）→ 先查 TriggerMode / 是否被 MVS 占用",
+            retry);
+        break;
+      }
+
+      ++retry;
       capture_stop();
-      reset_usb();
+      if (retry <= 3) {
+        tools::logger()->warn("[HikRobot] 重连第 {}/{} 次（带 USB reset）", retry, kMaxRetry);
+        reset_usb();
+      } else {
+        tools::logger()->warn(
+          "[HikRobot] 重连第 {}/{} 次（⚠️ **不再 USB reset** —— reset 会把相机搞掉线）", retry,
+          kMaxRetry);
+      }
       capture_start();
     }
 
@@ -203,10 +237,18 @@ void HikRobot::capture_start()
         tools::logger()->warn(
           "MV_CC_GetImageBuffer failed: {:#x}（本次阻塞 {:.0f} ms，请求超时 {} ms）", ret, get_ms,
           nMsec);
-        if (get_ms > 1000.0)
+        // ⭐⭐ W59：`0x80000007 = MV_E_NODATA（无数据）` —— 按概率给出排查方向
+        if (ret == 0x80000007)
           tools::logger()->warn(
-            "    ⚠️ SDK 内部阻塞远长于请求超时 → 多半是 **USB 传输卡住 / 相机固件无响应**。\n"
-            "       检查: ① `TriggerMode` 是否为 Off ② USB3 口与线材 ③ 别被 MVS 客户端占用");
+              "    ⚠️ `0x80000007` = **MV_E_NODATA（无数据）** —— 相机没给帧。按概率排查：\n"
+              "       ① ⭐ **别的程序占着相机**（USB 相机**不独占**，MVS 客户端能同时打开但抢流）\n"
+              "          → `pkill -f MVS` 后重跑\n"
+              "       ② `TriggerMode` 是否为 Off（本程序已强制 Off）\n"
+              "       ③ USB3 线材 / 端口（用 USB2 线会拿不到流）\n"
+              "       ④ 相机固件卡住 → `tools/scripts/camera-reset.sh` 或物理拔插");
+        else if (get_ms > 1000.0)
+          tools::logger()->warn(
+            "    ⚠️ SDK 内部阻塞远长于请求超时 → 多半是 USB 传输卡住 / 相机固件无响应");
         break;
       }
       if (get_ms > 200.0)
@@ -269,11 +311,19 @@ void HikRobot::capture_stop()
   unsigned int ret;
 
   ret = MV_CC_StopGrabbing(handle_);
-  // ⚠️ 0x80000300 = MV_E_CALLORDER（本来就没在取流）→ **不是错误**，别当失败
-  if (ret != MV_OK && ret != 0x80000300)
+  // ⭐⭐ W59 纠正：`0x80000300` 不是 `MV_E_CALLORDER`（那是 `0x80000003`），
+  //   而是 **`MV_E_USB_READ`（读 USB 错误）** —— ⚠️ **这是真问题**，不是"本来就没取流"！
+  //   含义：**USB 读取层面出错** → 线材 / 端口 / 供电 / 带宽 / 相机固件。
+  if (ret == 0x80000300)
+    tools::logger()->warn(
+      "MV_CC_StopGrabbing 报 0x80000300 = **MV_E_USB_READ（读 USB 错误）**\n"
+      "    ⚠️ 这是**USB 通信层面**的问题，不是「没在取流」：\n"
+      "       检查 ① USB3 线材（必须是 USB3 线，不能用 USB2 线）\n"
+      "            ② 换个 USB3 口（直连主板，别用 Hub）\n"
+      "            ③ 相机供电是否足够（工业相机耗电大）\n"
+      "            ④ 是否被 MVS 客户端等其它程序同时占用（USB 相机不独占，会抢流）");
+  else if (ret != MV_OK)
     tools::logger()->warn("MV_CC_StopGrabbing failed: {:#x}", ret);
-  else if (ret == 0x80000300)
-    tools::logger()->debug("[HikRobot] StopGrabbing: 本来就没在取流（0x80000300），忽略");
 
   ret = MV_CC_CloseDevice(handle_);
   if (ret != MV_OK) tools::logger()->warn("MV_CC_CloseDevice failed: {:#x}", ret);

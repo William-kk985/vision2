@@ -233,6 +233,9 @@ int main(int argc, char * argv[])
     }
   });
 
+    // ⭐⭐ W55：空帧计数（日志节流用）
+    int64_t empty_frames = 0;
+
   while (!exiter.exit()) {
     mode = board->mode();
 
@@ -261,7 +264,12 @@ int main(int argc, char * argv[])
         tools::logger()->info("[infantry] 录像播放完毕（共 {} 帧），退出", frame_id);
         break;
       }
-      tools::logger()->warn("[infantry] 相机空帧，等待 5ms 重试");
+      // ⭐⭐ W55：**节流** —— 相机彻底掉线时每 5ms 走到这里（200 次/秒），
+      //   不限流就是 200 行/秒刷屏。前 3 次 + 之后每 200 次（约 1 秒）报一次。
+      ++empty_frames;
+      if (empty_frames <= 3 || empty_frames % 200 == 0)
+        tools::logger()->warn(
+          "[infantry] 相机空帧 ×{}（等待 5ms 重试；Ctrl-C 可退出）", empty_frames);
       std::this_thread::sleep_for(5ms);
       continue;
     }

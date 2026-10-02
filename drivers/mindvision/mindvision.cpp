@@ -53,7 +53,14 @@ MindVision::~MindVision()
 void MindVision::read(cv::Mat & img, std::chrono::steady_clock::time_point & timestamp)
 {
   CameraData data;
-  queue_.pop(data);
+  // ⭐⭐ W55：**带超时** —— 相机掉线时不再让主循环无限卡死
+  //   （原来 `queue_.pop()` 无限阻塞 → 主循环卡住 → **Ctrl-C 不退出、热键全失效**）
+  //   超时后返回空 `img` → 主循环的 `if (img.empty()) break;` 会**干净退出**
+  if (!queue_.pop_for(data, std::chrono::milliseconds(500))) {
+    img = cv::Mat{};
+    timestamp = std::chrono::steady_clock::now();
+    return;
+  }
 
   img = data.img;
   timestamp = data.timestamp;

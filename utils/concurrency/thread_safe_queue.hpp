@@ -1,6 +1,7 @@
 #ifndef TOOLS__THREAD_SAFE_QUEUE_HPP
 #define TOOLS__THREAD_SAFE_QUEUE_HPP
 
+#include <chrono>
 #include <condition_variable>
 #include <functional>
 #include <iostream>
@@ -57,6 +58,27 @@ public:
   {
     std::unique_lock<std::mutex> lock(mutex_);
     if (queue_.empty()) return false;
+    out = std::move(queue_.front());
+    queue_.pop();
+    return true;
+  }
+
+  /// @brief ⭐⭐ W55：**带超时的取出** —— 使「等数据的循环」不再是 Ctrl-C 的死区
+  ///
+  /// ## 为什么需要它（真实翻车）
+  /// `pop()` 是**无限阻塞**的。当相机/USB 掉线时，驱动线程永远不给队列放数据 →
+  /// **主循环卡在 `pop()` 里** → `exiter.exit()` 和 `hotkeys.poll()` 都执行不到 →
+  /// ⚠️ **Ctrl-C 不退出、热键全失效**（用户实测踩到）。
+  ///
+  /// ⭐ 用超时后：主循环最多阻塞 `timeout`，然后能继续检查退出标志。
+  ///
+  /// @return true = 取到了；false = 超时（调用方应处理"暂时没数据"）
+  template <typename Rep, typename Period>
+  bool pop_for(T & out, const std::chrono::duration<Rep, Period> & timeout)
+  {
+    std::unique_lock<std::mutex> lock(mutex_);
+    if (!not_empty_condition_.wait_for(lock, timeout, [this] { return !queue_.empty(); }))
+      return false;   // ⭐ 超时：队列仍为空
     out = std::move(queue_.front());
     queue_.pop();
     return true;

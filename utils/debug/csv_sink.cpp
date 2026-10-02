@@ -11,7 +11,7 @@ namespace tools
 namespace
 {
 const char * FRAME_HEADER =
-  "frame_id,t_frame_us,t_perceive_us,t_decide_us,mode,game_state,"
+  "frame_id,t_frame_us,t_cam_wait_us,t_perceive_us,t_decide_us,mode,game_state,"
   // detector
   "det_armor_count,det_best_conf,det_nms,det_t_infer_us,"
   // solver
@@ -36,7 +36,8 @@ std::string row(const auto_aim::FrameDebug & d)
 {
   std::ostringstream o;
   auto b = [](bool v) { return v ? 1 : 0; };
-  o << d.frame_id << ',' << d.t_frame_us << ',' << d.t_perceive_us << ',' << d.t_decide_us << ','
+  o << d.frame_id << ',' << d.t_frame_us << ',' << d.t_cam_wait_us << ',' << d.t_perceive_us
+    << ',' << d.t_decide_us << ','
     << int(d.mode) << ',' << int(d.game_state) << ','
     << d.detector.armor_count << ',' << d.detector.best_confidence << ',' << d.detector.nms_survivors
     << ',' << d.detector.t_infer_us << ','

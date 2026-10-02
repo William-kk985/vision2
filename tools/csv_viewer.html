@@ -141,6 +141,8 @@ const DEAD = {};
       曾误放进列表 → 合计显示 202%。它们只在"概览"里单独显示。 */
 const PERF = ["t_perceive_us","det_t_infer_us","sol_t_solve_us",
               "trk_t_track_us","tgt_t_update_us","pln_t_plan_us","ctl_t_us","buff_t_us"];
+/* ⭐ W86：`t_cam_wait_us`【故意不放进来】—— 它是阻塞等相机的时间（真机 30fps 下 ~28 ms），
+   不耗 CPU，放进来会让"合计"看起来 300%+。它在概览卡里单独显示。 */
 /* ⭐ 嵌套：父段包含子段（求和时排除子段，否则虚高）
    · trk_t_track_us ⊃ sol_t_solve_us / tgt_t_update_us（Tracker 内部调用它们）
    · t_frame_us    ⊃ 全部（所以它不进 PERF） */
@@ -195,7 +197,9 @@ function drawCards(){
     `<div class="card"><div class="k">${k}</div><div class="v ${cls}">${v}</div></div>`);
   add("帧数", D.length);
   if (has("t_frame_us")) { const s = stat(col(idx("t_frame_us")));
-    add("帧周期 中位", fmt(s.p50) + " µs", s.p50 <= 11000 ? "ok" : "warn"); }
+    add("帧周期 中位", fmt(s.p50) + " µs", s.p50 <= 40000 ? "ok" : "warn"); }
+  if (has("t_cam_wait_us")) { const s = stat(col(idx("t_cam_wait_us")));
+    add("等相机 中位", fmt(s.p50) + " µs", "dim"); }
   if (has("det_armor_count")) {
     const v = col(idx("det_armor_count"));
     add("检出帧占比", (v.filter(x=>x>0).length / v.length * 100).toFixed(1) + " %");

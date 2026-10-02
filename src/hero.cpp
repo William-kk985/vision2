@@ -346,8 +346,14 @@ int main(int argc, char * argv[])
 
     const auto t_frame0 = std::chrono::steady_clock::now();
 
-    expense.begin("perceive");
+    // W86: time the camera wait separately -- on real hardware this is a
+    //   blocking wait (~28 ms @30fps), NOT CPU work. Keeping it inside
+    //   "perceive" made the frame-budget report read ~280%.
+    expense.begin("cam_wait");
     camera->read(img, t);
+    expense.end("cam_wait");
+
+    expense.begin("perceive");
 
     // ⭐ W16 修复（W10 遗留 #3）：录像读完/相机掉线时的处理
     //   原来直接往下走 → YOLO 打印 "Empty img!" → 循环**满速空转**
@@ -378,6 +384,7 @@ int main(int argc, char * argv[])
     // ⭐ W16：本帧调试快照
     auto_aim::FrameDebug fd;
     fd.frame_id = frame_id++;
+    fd.t_cam_wait_us = expense.us("cam_wait");   // W86: blocking wait, not CPU
     fd.t_perceive_us = expense.us("perceive");
     fd.mode = static_cast<uint8_t>(mode.load());
     fd.game_state = 0;                       // TODO: 接比赛状态（无敌/血量）后填

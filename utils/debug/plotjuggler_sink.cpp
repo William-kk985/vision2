@@ -100,7 +100,7 @@ void PlotJugglerSink::worker()
     std::ostringstream o;
     o << "{\"timestamp\":" << item.ts
       << ",\"frame_id\":" << d.frame_id << ",\"t_frame_us\":" << d.t_frame_us
-      << ",\"t_perceive_us\":" << d.t_perceive_us << ",\"t_decide_us\":" << d.t_decide_us
+      << ",\"t_cam_wait_us\":" << d.t_cam_wait_us << ",\"t_perceive_us\":" << d.t_perceive_us << ",\"t_decide_us\":" << d.t_decide_us
       << ",\"det_armor_count\":" << d.detector.armor_count
       << ",\"det_t_infer_us\":" << d.detector.t_infer_us
       << ",\"trk_state\":" << d.tracker.state

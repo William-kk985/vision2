@@ -18,7 +18,9 @@ import numpy as np
 
 # ⭐ 性能列（自动识别"占帧预算"的项）
 PERF_COLS = [
-    "t_perceive_us", "det_t_infer_us", "sol_t_solve_us", "trk_t_track_us",
+    # ⭐ W86：`t_cam_wait_us` = 阻塞等相机（**不耗 CPU**，等于帧率上限），
+    #   拆出来后 `t_perceive_us` 才是真正的活。预算表要把 cam_wait 单独看待。
+    "t_cam_wait_us", "t_perceive_us", "det_t_infer_us", "sol_t_solve_us", "trk_t_track_us",
     "tgt_t_update_us", "pln_t_plan_us", "ctl_t_us", "buff_t_us",
 ]
 FRAME_BUDGET_US = 10000.0   # 10 ms（100 Hz）

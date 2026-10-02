@@ -145,8 +145,12 @@ int run_uav(io::CameraBase & camera, Board & cboard, const std::string & config_
   auto last_mode = io::Mode::idle;
 
   while (!exiter.exit()) {
-    expense.begin("perceive");
+    // W86: time the camera wait separately (blocking, not CPU work).
+    expense.begin("cam_wait");
     camera.read(img, t);
+    expense.end("cam_wait");
+
+    expense.begin("perceive");
     if (img.empty()) break;   // ⭐ 录像读完 / 相机掉线 → 干净退出（W16 的教训）
     const Eigen::Quaterniond q = cboard.imu_at(t - 1ms);
     recorder.record(img, q, t);
@@ -160,6 +164,7 @@ int run_uav(io::CameraBase & camera, Board & cboard, const std::string & config_
 
     fd.frame_id = frame_id++;
     fd.mode = static_cast<uint8_t>(mode);
+    fd.t_cam_wait_us = expense.us("cam_wait");   // W86: blocking wait, not CPU
     fd.t_perceive_us = expense.us("perceive");
     io::Command command{};   // ⭐ W34：契约层已给默认值（原来是未初始化的）
 

@@ -57,6 +57,13 @@ struct FrameDebug
 {
   // ── L0 常驻 ──
   int64_t t_frame_us = 0;
+  // ⭐⭐ W86：**把「等相机」从 perceive 里拆出来**。
+  //   原来 `t_perceive_us` 含 `camera->read()` 的**阻塞等待** —— 真机 30fps 下
+  //   那一段约 **28 ms**（= 33.3 ms 帧周期 − 5.3 ms 推理），看起来像"perceive 极贵"，
+  //   实际是**在等相机**，不耗 CPU。拆开后：
+  //     · `t_cam_wait_us` = 阻塞等帧（不耗 CPU，等于帧率上限）
+  //     · `t_perceive_us` = 真正的活（board 读 + recorder 入队 + set_R_gimbal2world）
+  int64_t t_cam_wait_us = 0;
   int64_t t_perceive_us = 0;
   int64_t t_decide_us = 0;
   uint32_t frame_id = 0;

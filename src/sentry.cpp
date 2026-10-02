@@ -175,8 +175,12 @@ int run_sentry(
     }
 
     // ⭐ 计时口径与 infantry 一致：`perceive` = 取图 + 姿态 + 记录 + 坐标变换
-    expense.begin("perceive");
+    // W86: time the camera wait separately (blocking, not CPU work).
+    expense.begin("cam_wait");
     camera.read(img, t);
+    expense.end("cam_wait");
+
+    expense.begin("perceive");
     if (img.empty()) break;   // ⭐ 录像读完 / 相机掉线 → 干净退出（W16 的教训）
 
     const Eigen::Quaterniond q = cboard.imu_at(t - 1ms);
@@ -186,6 +190,7 @@ int run_sentry(
     //    若把 detect/track 也包进来，`budget_table` 会把嵌套区间相加 → 占比虚高（曾实测 158%）
     //    与 infantry 的口径保持一致
     expense.end("perceive");
+    fd.t_cam_wait_us = expense.us("cam_wait");   // W86: blocking wait, not CPU
     fd.t_perceive_us = expense.us("perceive");
 
     if (cboard.mode == io::Mode::auto_aim) {

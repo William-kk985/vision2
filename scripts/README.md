@@ -36,7 +36,8 @@ python3 scripts/analyze.py run_frames.csv --group mode     # 按档位分组
 ── 帧预算占用（10 ms 周期 @100 Hz）──
   段                            均值         最大       占均值
   det_t_infer_us         7266.6us  47862.0us   72.67%     ← YOLO 推理
-  t_perceive_us          2066.9us   5008.0us   20.67%     ← 取图+编码+预处理
+  t_cam_wait_us          3190.0us   4500.0us   31.90%     ← 等相机/解码（**阻塞，不耗 CPU**）
+  t_perceive_us             6.2us     50.0us    0.06%     ← 真正的取图后处理
   trk_t_track_us            1.6us      2.0us    0.02%     ← 跟踪几乎不花时间
   合计                     9335.1us              93.35%
 
@@ -86,7 +87,7 @@ python3 scripts/compare.py A.csv B.csv --cols pln_t_fly,pln_acc_max --min-rel 0.
 ```
 ── 帧预算（均值 µs）──
   段                              自瞄           打符         变化
-  t_perceive_us            2066.9us     2099.2us      +1.6%
+  t_perceive_us               6.2us       50.0us      +1.6%
 
 ── 逐列对比（按变化幅度排序）──
   buff_t_us                      0        13483   新出现 🔴

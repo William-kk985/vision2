@@ -65,7 +65,7 @@ int main()
   auto_aim::FrameDebug fd;
   const double t_fill = bench(N, [&] {
     fd.frame_id = 12345;
-    fd.t_frame_us = 9000; fd.t_perceive_us = 2000; fd.t_decide_us = 100;
+    fd.t_frame_us = 9000; fd.t_cam_wait_us = 5000; fd.t_perceive_us = 2000; fd.t_decide_us = 100;
     fd.mode = 1; fd.game_state = 4;
     fd.detector.armor_count = 3; fd.detector.best_confidence = 0.9; fd.detector.nms_survivors = 2;
     fd.detector.t_infer_us = 6000;

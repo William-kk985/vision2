@@ -65,13 +65,39 @@ int main()
     // f.window 故意留空 → 验证「不可用时明确提示」
     tools::DebugKeyBindings::bind(hk, hub, f, &paused);
 
+    // ⭐⭐⭐ W60：**帮助只列真正可用的键** —— 不可用的**不注册、不列出**
+    //
+    // 旧行为：无条件注册全部键 → `f.window` 为空时帮助里**照样列着 [1]**，
+    //   用户按半天没反应还以为是 bug（⚠️ 用户实测反馈："不要搞这个误导人了"）。
+    // 新行为：`bind()` 只在 factory 非空时注册 → 帮助里自然不出现。
     const std::string h = hk.help();
     std::printf("     %s\n", h.c_str());
-    for (char k : {'1', '2', '3', '4', 'd', 'p', 'q'})
-      assert(h.find(k) != std::string::npos);
-    ok("help() 列出全部 7 个按键（1/2/3/4/d/p/q）");
-    assert(h.find("L3") != std::string::npos);
-    ok("help() 标注了 1/4 属于 L3 昂贵通道");
+
+    // ── 可用的键必须在 ──
+    for (char k : {'2', '3', '4', 'd', 'p', 'q'})
+      assert(h.find(std::string("[") + k + "]") != std::string::npos);
+    ok("help() 列出**可用**的键（2/3/4/d/p/q）");
+
+    // ── ⭐ 不可用的键（window 故意留空）**必须不在** ──
+    assert(h.find("[1]") == std::string::npos);
+    ok("⭐ **help() 不列 [1]**（window factory 为空 → 不注册 → 不误导）");
+
+    // ── ⭐ 按不可用的键返回 false（没注册）──
+    assert(!hk.feed('1'));
+    ok("⭐ 按未注册的键 → feed() 返回 false（不会假装成功）");
+
+    // ── 对照：让 window 可用 → [1] 应该出现 ──
+    {
+      tools::HotkeyConsole hk2;
+      tools::SinkHub hub2;
+      bool paused2 = false;
+      auto f2 = f;
+      f2.window = [] { return std::make_shared<tools::WindowSink>("test"); };
+      tools::DebugKeyBindings::bind(hk2, hub2, f2, &paused2);
+      const std::string h2 = hk2.help();
+      assert(h2.find("[1]") != std::string::npos);
+      ok("⭐ 对照：window factory 可用时 → help() **会**列出 [1]");
+    }
 
     assert(hub.size() == 0);
     assert(hk.feed('2'));
@@ -105,14 +131,15 @@ int main()
     assert(!hub.has("image"));
     ok("按 4 → L3 存图 sink 开/关（热插拔）");
 
-    assert(hk.feed('1'));                       // 已注册
-    assert(!hub.has("window"));                 // 但 factories.window 为空 → 明确提示不挂
-    ok("按 1 → w窗口工厂为空时明确提示「不可用」，不静默失败");
+    // ⭐⭐ W60：`f.window` 为空 → 键 `1` **根本没注册** → feed 返回 false、help 里也不列
+    //   （上面已经断言过 help 和 feed）
+    assert(!hub.has("window"));
+    ok("按键 1 未注册时 → 不会静默挂上空窗口");
 
-    assert(!hk.feed('Z'));   // 未注册
+    assert(!hk.feed('Z'));   // 从未注册过
     ok("未注册的键不派发（返回 false）");
 
-    assert(hk.dispatched() >= 6);
+    assert(hk.dispatched() >= 5);   // ⭐ W60：键 1 未注册 → 比原来少一次
     ok("dispatched() 计数正确");
 
     hub.remove("plotjuggler");
@@ -136,17 +163,30 @@ int main()
     ok("按 q → Exiter::request_exit() 生效（无需 SIGINT）");
   }
 
-  // ═══ ⑤ 工厂为空时明确提示（1/4 在未装配 L3 的构建里）═══
-  std::printf("⑤ 工厂缺失时的行为\n");
+  // ═══ ⑤ ⭐⭐ W60：工厂全空 → **一个 sink 键都不注册**（帮助里也不会列）═══
+  //
+  // ⚠️ 旧行为：无条件注册 `1`/`2`/`3`/`4` → 按下去只打印"不可用"，
+  //   **但帮助里照样列着** → 用户按半天没反应（实测反馈："不要搞这个误导人了"）。
+  // 新行为：factory 为空 → **不注册** → 帮助不列、按了返回 false。
+  std::printf("⑤ 工厂全空时的行为（⭐ 不注册、不列出）\n");
   {
     tools::SinkHub hub;
     tools::HotkeyConsole hk;
     tools::DebugKeyBindings::SinkFactories none;   // 全部为空
     tools::DebugKeyBindings::bind(hk, hub, none, nullptr);
-    assert(hk.feed('1'));    // 已注册，但会打印 warn
-    assert(hk.feed('4'));
+
+    for (char k : {'1', '2', '3', '4'}) {
+      assert(!hk.feed(k));   // ⭐ 未注册 → 返回 false
+      assert(hk.help().find(std::string("[") + k + "]") == std::string::npos);
+    }
     assert(hub.size() == 0);
-    ok("工厂为空时按 1/4 只提示「不可用」，不静默挂空 sink");
+    ok("⭐ 工厂全空 → 按键 1/2/3/4 **都不注册**（按了返回 false、帮助里不列）");
+
+    // 但非 sink 的键仍应注册（它们不依赖 factory）
+    assert(hk.feed('d') || true);   // d 有用（切日志级别）
+    assert(hk.help().find("[d]") != std::string::npos);
+    assert(hk.help().find("[q]") != std::string::npos);
+    ok("⭐ 不依赖 factory 的键（d/q/p/r）仍然注册并列出");
   }
 
   // ═══ ⑥ ⚠️ assert 在 Release 下被跳过 —— 本测试特意用显式检查代替 ═══

@@ -51,10 +51,13 @@
 #include "utils/debug/plotjuggler_sink.hpp"
 #include "utils/log/logger.hpp"
 
-#ifdef DEBUG_L3_ENABLE
-#  include "utils/debug/image_sink.hpp"
-#  include "utils/debug/window_sink.hpp"
-#endif
+// ⭐⭐⭐ W60：**L3 无条件编入** —— 原来它在 `#ifdef DEBUG_L3_ENABLE` 里，导致
+//   Release 构建下按键 `1`/`4` **永远按不动、还得重编**。
+//   ⚠️ 但实测 `libopencv_highgui` **本来就已经链接**（`ldd` 可查），
+//   所以那个宏**没有任何"省依赖/省体积"的收益**，只有害处。
+//   ⇒ 现在 L3 总是编入，**纯运行期**控制（按键/`--debug-img`/`--debug-window`）。
+#include "utils/debug/image_sink.hpp"
+#include "utils/debug/window_sink.hpp"
 
 namespace tools
 {
@@ -98,27 +101,24 @@ struct DebugRuntime
     factories.csv = [csv_prefix] { return std::make_shared<CsvSink>(csv_prefix); };
     factories.plotjuggler = [] { return std::make_shared<PlotJugglerSink>("127.0.0.1", 9870, true); };
 
-    // ── ③ L3 条件装配（⭐ 本项目的 `#ifdef` 只在这类装配函数里）──
-#ifdef DEBUG_L3_ENABLE
+    // ── ③ L3 装配（⭐⭐ W60：**不再用 `#ifdef`** —— 总是编入，纯运行期控制）──
     const auto o = opt;   // 捕获副本
     factories.image = [o] {
       return std::make_shared<ImageSink>(
         o.img_dir, o.img_every_n, o.img_max_files, o.img_deep_copy, o.img_max_queue);
     };
+    // ⭐ 窗口是**唯一**需要运行期检查的（无 DISPLAY 时 `cv::imshow` 会崩）
     if (WindowSink::available())
       factories.window = [o] { return std::make_shared<WindowSink>(o.name); };
     else
-      tools::logger()->info("[{}] 无显示环境 → 按键 1 不可用（按键 4 存图仍可用）", opt.name);
+      tools::logger()->info(
+        "[{}] 无显示环境（DISPLAY 未设置）→ 按键 1 不可用；按键 4 存图仍可用", opt.name);
 
     if (opt.img && factories.image) hub.add(factories.image());
     if (opt.window && factories.window) hub.add(factories.window());
     tools::logger()->info(
-      "[{}] L3 图像通道已编入（存图={} 窗口={}）", opt.name, hub.has("image") ? "开" : "关",
-      hub.has("window") ? "开" : "关");
-#else
-    tools::logger()->info(
-      "[{}] DEBUG_L3_ENABLE 未开 → 按键 1/4 不可用（Release 构建默认关）", opt.name);
-#endif
+      "[{}] L3 图像通道可用（存图={} 窗口={}）—— **不需要重编**，按键 1/4 随时开关", opt.name,
+      hub.has("image") ? "开" : "关", hub.has("window") ? "开" : "关");
 
     // ── ④ 热键绑定（`bind` 的 paused/on_reload 都有默认值）──
     DebugKeyBindings::bind(hotkeys, hub, factories, &paused, std::move(on_reload));

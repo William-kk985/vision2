@@ -4,6 +4,7 @@
 #include <unistd.h>
 
 #include <cstdio>
+#include <functional>
 #include <sstream>
 
 #include "utils/log/logger.hpp"
@@ -119,18 +120,23 @@ void DebugKeyBindings::bind(
   HotkeyConsole & hk, SinkHub & hub, const SinkFactories & f, bool * paused,
   std::function<void()> on_reload)
 {
-  // 2 —— CSV 开/关
-  hk.on('2', "CSV 开/关", [&hub, f] { toggle_sink(hub, "csv", f.csv, "CSV sink"); });
+  // ⭐⭐⭐ W60：**只注册真正可用的键** —— 不可用的**不进帮助文本**
+  //
+  // 原来无条件 `hk.on('1'/'4', ...)`，然后 `toggle_sink` 在 factory 为空时打印
+  // "不可用"。⚠️ **但帮助里照样列着它们** → 用户按了半天没反应，还以为是 bug。
+  // 现在：factory 为空 → **不注册** → 帮助里自然不出现。**不再误导。**
+  auto reg = [&hk](char key, const char * desc, DebugKeyBindings::SinkFactory fac,
+                   std::function<void()> act) {
+    if (!fac) return;   // ⭐ 不可用 → 不注册（帮助里就不会列出）
+    hk.on(key, desc, std::move(act));
+  };
 
-  // 3 —— PlotJuggler 开/关
-  hk.on('3', "PlotJuggler 开/关",
-        [&hub, f] { toggle_sink(hub, "plotjuggler", f.plotjuggler, "PlotJuggler sink"); });
-
-  // 1 —— ⭐ L3 可视化窗口
-  hk.on('1', "可视化窗口(L3) 开/关", [&hub, f] { toggle_sink(hub, "window", f.window, "窗口"); });
-
-  // 4 —— ⭐ L3 存图
-  hk.on('4', "存图(L3) 开/关", [&hub, f] { toggle_sink(hub, "image", f.image, "存图"); });
+  reg('2', "CSV 开/关", f.csv, [&hub, f] { toggle_sink(hub, "csv", f.csv, "CSV sink"); });
+  reg('3', "PlotJuggler 开/关", f.plotjuggler,
+      [&hub, f] { toggle_sink(hub, "plotjuggler", f.plotjuggler, "PlotJuggler sink"); });
+  reg('1', "可视化窗口 开/关", f.window,
+      [&hub, f] { toggle_sink(hub, "window", f.window, "窗口"); });
+  reg('4', "存图 开/关", f.image, [&hub, f] { toggle_sink(hub, "image", f.image, "存图"); });
 
   // d —— 日志级别循环
   hk.on('d', "日志级别循环", [] {

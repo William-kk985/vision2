@@ -5,6 +5,10 @@
 #include "utils/math/math_tools.hpp"
 #include "utils/yaml/yaml.hpp"
 
+#include <filesystem>
+#include <string>
+#include <vector>
+
 namespace io
 {
 Gimbal::Gimbal(const std::string & config_path)
@@ -16,7 +20,44 @@ Gimbal::Gimbal(const std::string & config_path)
     serial_.setPort(com_port);
     serial_.open();
   } catch (const std::exception & e) {
-    tools::logger()->error("[Gimbal] Failed to open serial: {}", e.what());
+    // ⭐⭐ W53：**把错误变成可操作的**。原来只有一句 `Failed to open serial` +
+    //   `exit(1)` —— 用户不知道：① 试的是哪个设备 ② 这台机器有哪些串口 ③ 怎么办。
+    tools::logger()->error("[Gimbal] ❌ 打不开串口: {}", e.what());
+    tools::logger()->error("[Gimbal]    尝试的设备: '{}'（来自 {} 的 `com_port`）", com_port, config_path);
+
+    // ⭐ 列出这台机器上**实际可用**的串口
+    std::vector<std::string> avail;
+    std::error_code ec;
+    for (const auto & e2 : std::filesystem::directory_iterator("/dev", ec)) {
+      const auto n = e2.path().filename().string();
+      if (n.rfind("ttyUSB", 0) == 0 || n.rfind("ttyACM", 0) == 0 || n.rfind("ttyS", 0) == 0)
+        avail.push_back(e2.path().string());
+    }
+    if (!avail.empty()) {
+      std::string joined;
+      for (const auto & a : avail) joined += a + "  ";
+      tools::logger()->error("[Gimbal]    本机可用串口: {}", joined);
+    } else {
+      tools::logger()->error("[Gimbal]    本机**没有任何** /dev/ttyUSB* / ttyACM* 设备");
+    }
+
+    // ⭐ 从配置路径推导兵种名（如 params/hero.yaml → "hero"），避免硬编码
+    std::string robot = "infantry";
+    {
+      const auto stem = std::filesystem::path(config_path).stem().string();
+      if (!stem.empty()) robot = stem;
+    }
+
+    // ⭐ 给出**具体怎么办**
+    tools::logger()->error(
+      "[Gimbal]    ── 怎么办 ──\n"
+      "      ① **零硬件验证**（没接硬件就用这个）:\n"
+      "           tools/scripts/run.sh {} --video=录像.avi --force-mode=1\n"
+      "      ② 检查 udev 规则有没有把下位机映射成 '{}':\n"
+      "           ls -l '{}'   # 不存在就是这个原因\n"
+      "      ③ 改参数文件里的 `com_port` 为实际设备（或插上硬件后用 dmesg 确认）:\n"
+      "           dmesg | tail -20 | grep -i tty",
+      robot, com_port, com_port);
     exit(1);
   }
 

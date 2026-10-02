@@ -109,6 +109,36 @@ if [ "$ROBOT" = "sentry" ]; then
   ok "ROS_LOG_DIR=$ROS_LOG_DIR  （⚠️ 修 ~/.ros/log 只读的坑）"
 fi
 
+# ── ③.5 ⭐⭐ 串口预检（没硬件时**提前**告知，别等程序崩）──
+if [[ ! " ${EXTRA[*]-} " =~ " --video" ]] && [[ ! " ${EXTRA[*]-} " =~ " --video=" ]]; then
+  say "串口预检（机器人在不在？）"
+  COM_PORT="$(grep -m1 '^com_port:' "$PARAMS" 2>/dev/null | sed 's/.*"\(.*\)".*/\1/' || true)"
+  COM_PORT="${COM_PORT:-/dev/gimbal}"
+  if [ -e "$COM_PORT" ]; then
+    ok "串口 $COM_PORT 存在"
+  else
+    warn "**找不到串口 $COM_PORT**（参数文件里的 com_port）"
+    avail="$(ls /dev/ttyUSB* /dev/ttyACM* 2>/dev/null | tr '\n' ' ' || true)"
+    if [ -n "$avail" ]; then
+      warn "本机可用串口: $avail"
+      warn "→ 改 params/$ROBOT.yaml 的 com_port，或用 udev 把下位机映射成 $COM_PORT"
+    else
+      warn "本机**没有任何** /dev/ttyUSB* / ttyACM* 设备（没接硬件）"
+    fi
+    echo
+    warn "═══ 没硬件也能跑（录像回放）═══"
+    echo "      tools/scripts/run.sh $ROBOT --video=录像.avi --force-mode=1"
+    echo "      # --force-mode: 0=IDLE 1=自瞄 2=小符 3=大符"
+    echo "      # 想顺便看数据: 再加 --csv=run1  然后用 scripts/analyze.py 分析"
+    echo
+    if [ "${HZMIR_ALLOW_NO_HW:-0}" != 1 ]; then
+      echo "  （5 秒后仍会继续启动，程序自己会报错并退出；Ctrl-C 停）"
+      echo "  （直接跳到录像模式请 Ctrl-C 后改用上面的命令）"
+      sleep 5
+    fi
+  fi
+fi
+
 # ── ④ tty / 热键 提示 ──
 say "运行"
 if [ -t 0 ]; then

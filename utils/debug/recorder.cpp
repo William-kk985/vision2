@@ -6,6 +6,7 @@
 #include <string>
 
 #include "utils/log/logger.hpp"
+#include "utils/system/thread_tuning.hpp"   // ⭐ W82
 #include "utils/math/math_tools.hpp"
 
 namespace tools
@@ -89,6 +90,8 @@ void Recorder::close()
 
 void Recorder::save_to_file()
 {
+  // ⭐⭐ W82：录像编码最贵（~1 核）→ 用 SCHED_IDLE 避免抢自瞄
+  tools::set_idle_policy();
   while (!stop_thread_) {
     FrameData frame;
     queue_.pop(frame);   // 从队列中取出帧数据

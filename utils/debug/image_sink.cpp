@@ -5,6 +5,7 @@
 #include <sys/stat.h>
 
 #include "utils/log/logger.hpp"
+#include "utils/system/thread_tuning.hpp"   // ⭐ W82
 
 namespace tools
 {
@@ -50,6 +51,9 @@ void ImageSink::on_image(std::string_view tag, const cv::Mat & img, int64_t t_us
 
 void ImageSink::worker()
 {
+  // ⭐⭐ W82：worker 用 SCHED_IDLE —— 只在 CPU 空闲时才跑，
+  //   保证【永远不抢自瞄线程】（不需要 root；失败也只是不生效）
+  tools::set_idle_policy();
   while (true) {
     std::pair<std::string, cv::Mat> item;
     {

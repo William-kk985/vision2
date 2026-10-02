@@ -22,6 +22,7 @@ add_library(hzmir_utils STATIC
   wheels/estimate/rls_bullet_speed.cpp
   ov/device.cpp
     system/host_info.cpp
+    system/thread_tuning.cpp
 )
 target_link_libraries(hzmir_utils PUBLIC
   ${OpenCV_LIBS} fmt::fmt spdlog::spdlog yaml-cpp

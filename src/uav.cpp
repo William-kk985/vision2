@@ -21,7 +21,8 @@
 
 #include "io/camera/camera.hpp"
 #include "core/auto_aim/detector/det_stats.hpp"
-#include "utils/system/host_info.hpp"   // ⭐ W81：本机核数 + 建议   // ⭐ W63
+#include "utils/system/host_info.hpp"
+#include "utils/system/thread_tuning.hpp"   // ⭐ W82   // ⭐ W81：本机核数 + 建议   // ⭐ W63
 #include "drivers/dm_imu/dm_imu.hpp"
 #include "core/auto_aim/planner/legacy.hpp"
 #include "core/auto_aim/detector/detector.hpp"
@@ -125,6 +126,7 @@ int run_uav(io::CameraBase & camera, Board & cboard, const std::string & config_
     // ⭐⭐ W49（方案 D）：**一行装配整个 Debug 体系**
     // ⭐⭐ W81：启动时打印「本机核数 + 建议配置」（核少时提示关 sink）
     tools::print_host_advice("uav");
+    tools::report_thread_tuning();   // ⭐ W82
 
     tools::DebugRuntime dbg({.csv_prefix = csv_prefix, .name = "uav"});
     auto & hub = dbg.hub;                 // ⭐ 别名：保持下游代码一字不改

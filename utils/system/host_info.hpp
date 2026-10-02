@@ -34,13 +34,13 @@
 namespace tools
 {
 
-/// 核数档位（决定建议的严格程度）
+/// 核数档位（⭐ 只影响「提醒语气」，**不代替使用者判断**）
 enum class HostTier
 {
-  Roomy,    ///< ⭐ ≥16 核：宽松，随便开 sink
-  Okay,     ///< ✅ 8~15 核：够用，窗口/录像慎开
-  Tight,    ///< 🔶 4~7 核：够用但紧张，只留 CSV / PlotJuggler
-  Critical  ///< ⚠️ ≤3 核：紧张，全关 sink
+  Roomy,    ///< ≥16 核：充裕
+  Okay,     ///< 8~15 核：正常
+  Tight,    ///< 4~7 核：偏紧（额外提示 OpenVINO 抢核风险）
+  Critical  ///< ≤3 核：紧张
 };
 
 /// 本机画像
@@ -48,8 +48,7 @@ struct HostInfo
 {
   unsigned logical_cores = 0;                         ///< 逻辑核数
   HostTier tier = HostTier::Okay;                     ///< 档位
-  const char * tier_name = "?";                       ///< 档位中文名
-  std::string advice;                                 ///< 建议（多行，已含缩进）
+  const char * tier_name = "?";                       ///< 档位名（充裕/正常/偏紧/紧张）
 };
 
 /// @brief 探测本机（`std::thread::hardware_concurrency()`）

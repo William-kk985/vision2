@@ -58,7 +58,11 @@ public:
 
 private:
   Solver & solver_;
-  Color enemy_color_;
+  // ⚠️ W82 删除：`Color enemy_color_;` —— **只赋值、从不读取**的死成员。
+  //   颜色过滤实际发生在 `ArmorFilter::apply()`（它自己从 yaml 读 `enemy_color`，
+  //   见 W69 修复：顶层为准 + `armor_filter` 段可覆盖）。
+  //   历史上这里还有个副作用：构造函数里 `yaml["enemy_color"].as<std::string>()`
+  //   在缺键时会抛异常（当校验用）→ 已改为显式校验（见 .cpp）。
   int min_detect_count_;
   int max_temp_lost_count_;
   int detect_count_;

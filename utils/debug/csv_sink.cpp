@@ -3,6 +3,7 @@
 #include <sstream>
 
 #include "utils/log/logger.hpp"
+#include "utils/system/thread_tuning.hpp"   // ⭐ W82
 
 namespace tools
 {
@@ -117,6 +118,9 @@ void CsvSink::on_series(std::string_view key, int64_t t_us, double v)
 
 void CsvSink::worker()
 {
+  // ⭐⭐ W82：worker 用 SCHED_IDLE —— 只在 CPU 空闲时才跑，
+  //   保证【永远不抢自瞄线程】（不需要 root；失败也只是不生效）
+  tools::set_idle_policy();
   while (true) {
     std::string series;
     auto_aim::FrameDebug frame{};

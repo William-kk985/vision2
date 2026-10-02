@@ -101,10 +101,39 @@ tools/scripts/build.sh --both --test
 
 ---
 
+## `check-hw.sh` —— 硬件诊断（⚠️ **在你自己终端里跑**）
+
+```bash
+tools/scripts/check-hw.sh
+```
+
+⭐ **为什么需要它**：「`Not found camera!`」有**两种完全不同的原因**，光看程序日志分不清：
+
+| 现象 | 原因 | 修法 |
+|---|---|---|
+| `MV_CC_EnumDevices` 返回 **0 个** | ⚠️ **libusb 枚举不到** → `/dev/bus/usb` 不存在 / 权限 | 挂 usbfs + udev 规则 + **重新插拔** |
+| `MV_CC_OpenDevice` 失败（有错误码） | 权限够但**被别的进程占着** | 关掉 MVS 客户端 / 别的程序 |
+
+**它检查 7 项**：
+1. `lsusb` 里有没有海康（VendorID `2bdf`）
+2. ⭐ **`/dev/bus/usb` 挂载**（libusb 的前提）
+3. ⭐ **udev 规则**（并提醒「后加的规则必须 reload + 重插」）
+4. ⭐ **libusb 实际能不能打开相机**（**关键判定**）
+5. 海康 SDK 版本
+6. 串口设备 + 权限 + 用户组
+7. `/dev/video*`（本项目**不用** V4L2，仅供参考）
+
+> ⚠️ **`Unable to open usb!` 是个误导性日志** —— 它只是 `reset_usb()` 的
+> **USB 重置重试**失败，**不代表相机打开失败**。真正要看的是 `Not found camera!`
+> （= `MV_CC_EnumDevices` 返回 0）。
+
+---
+
 ## 目录里还有什么
 
 | 文件 | 作用 |
 |---|---|
+| **`check-hw.sh`** | ⭐⭐ **硬件诊断**（相机 / 串口 / usbfs / udev）—— 见下 |
 | `watchdog.sh` | 进程崩溃自动重启（搬自同济，改进版：路径自适应 + 指数退避 + 原因记录） |
 | `split_video.py` | 切录像（做 A/B 实验用） |
 | `build.sh` / `run.sh` | ⭐ 本文件介绍的这两个 |

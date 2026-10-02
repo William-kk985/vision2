@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>HzMIR 调试 CSV 查看器</title>
+<!--
+  ⭐ HzMIR Vision —— 离线 CSV 查看器（单文件、零依赖、可离线）
+
+  ## 用法
+    1. 用 `tools/scripts/run.sh <兵种> --csv=<前缀>` 采数据
+    2. 双击本文件（浏览器打开）
+    3. 把 `<前缀>_frames.csv` **拖进来**（或点选择）
+
+  ## 为什么不用 PlotJuggler / CDN
+    · 单机场景 PlotJuggler 要装；CDN 断网就废
+    · 这里自绘 canvas（~150 行），**完全离线**
+    · 定位不同：PlotJuggler 看实时流；本页看**跑完的 CSV**（含分组诊断）
+
+  ## 诊断逻辑与 scripts/analyze.py 一致（JS 重写）
+    · 检测链路：det_nms → det_armor_count（区分"没检出"vs"被滤掉"）
+    · 帧预算：各段耗时占 10 ms / 33 ms
+    · 全 0 列标注（区分"死列"与"恰好为 0"）
+-->
+<style>
+  :root{
+    --bg:#111418; --fg:#dfe4ea; --dim:#8b95a3; --line:#2a3138;
+    --acc:#4aa3ff; --warn:#ffb020; --bad:#ff5c5c; --ok:#3ddc84;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+       background:var(--bg);color:var(--fg)}
+  #drop{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+        flex-direction:column;gap:12px;border:2px dashed var(--line);margin:14px;
+        border-radius:12px;text-align:center;padding:24px}
+  #drop.hot{border-color:var(--acc);background:#161b22}
+  #drop h1{font-size:16px;margin:0;font-weight:600}
+  #drop p{margin:0;color:var(--dim)}
+  #app{display:none;padding:12px}
+  header{display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+         border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:10px}
+  .pill{background:#1b2129;border:1px solid var(--line);border-radius:999px;
+        padding:2px 10px;color:var(--dim)}
+  button{background:#1b2129;color:var(--fg);border:1px solid var(--line);
+         border-radius:6px;padding:4px 10px;cursor:pointer;font:inherit}
+  button:hover{border-color:var(--acc)}
+  button.on{background:#12314f;border-color:var(--acc)}
+  section{margin:14px 0}
+  h2{font-size:13px;margin:0 0 8px;color:var(--dim);font-weight:600;
+     text-transform:uppercase;letter-spacing:.5px}
+  .grid{display:grid;gap:8px}
+  .cards{grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
+  .card{background:#161b22;border:1px solid var(--line);border-radius:8px;padding:10px}
+  .card .k{color:var(--dim);font-size:11px}
+  .card .v{font-size:18px;margin-top:2px}
+  table{border-collapse:collapse;width:100%;font-size:12px}
+  th,td{border:1px solid var(--line);padding:3px 7px;text-align:right;white-space:nowrap}
+  th{background:#161b22;position:sticky;top:0;cursor:pointer;color:var(--dim)}
+  td.name{text-align:left;color:var(--dim)}
+  .tblwrap{max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+  .cols{display:flex;flex-wrap:wrap;gap:6px;max-height:170px;overflow:auto;
+        border:1px solid var(--line);border-radius:8px;padding:8px}
+  .grp{display:flex;gap:4px;flex-wrap:wrap;align-items:center;
+       border:1px solid var(--line);border-radius:6px;padding:4px 6px}
+  .grp b{color:var(--dim);font-weight:600;font-size:11px;margin-right:4px}
+  .col{background:#1b2129;border:1px solid transparent;border-radius:4px;
+       padding:1px 6px;cursor:pointer;font-size:11px;color:var(--dim)}
+  .col:hover{border-color:var(--line)}
+  .col.on{background:#12314f;color:var(--fg);border-color:var(--acc)}
+  canvas{width:100%;height:280px;background:#0d1117;border:1px solid var(--line);border-radius:8px}
+  .bad{color:var(--bad)} .warn{color:var(--warn)} .ok{color:var(--ok)} .dim{color:var(--dim)}
+  #tip{position:fixed;pointer-events:none;background:#0d1117ee;border:1px solid var(--acc);
+       border-radius:6px;padding:4px 8px;font-size:11px;display:none;z-index:9}
+</style>
+</head>
+<body>
+
+<div id="drop">
+  <h1>拖入 <code>&lt;前缀&gt;_frames.csv</code></h1>
+  <p>从 <code>run.sh &lt;兵种&gt; --csv=run1</code> 产出 · 或点下面选择文件</p>
+  <input type="file" id="file" accept=".csv" style="display:none">
+  <button onclick="document.getElementById('file').click()">选择文件…</button>
+  <p class="dim">单文件 · 零依赖 · 可离线</p>
+</div>
+
+<div id="app">
+  <header>
+    <strong id="fname">—</strong>
+    <span class="pill" id="nrows">—</span>
+    <span class="pill" id="ncols">—</span>
+    <button onclick="location.reload()">重新选择</button>
+  </header>
+
+  <section>
+    <h2>概览</h2>
+    <div class="grid cards" id="cards"></div>
+  </section>
+
+  <section>
+    <h2>诊断</h2>
+    <div class="grid cards" id="diag"></div>
+  </section>
+
+  <section>
+    <h2>曲线（点列名切换）</h2>
+    <div class="cols" id="colpicks"></div>
+    <div style="margin-top:8px"><canvas id="plot"></canvas></div>
+    <p class="dim" id="plotinfo" style="margin:6px 0 0"></p>
+  </section>
+
+  <section>
+    <h2>逐帧表（点表头排序 · 只显示已选列 + 前 12 列）</h2>
+    <div class="tblwrap"><table id="tbl"></table></div>
+  </section>
+</div>
+<div id="tip"></div>
+
+<script>
+"use strict";
+/* ═══════════════════ 状态 ═══════════════════ */
+let H = [];        // 表头
+let D = [];        // 数据（数组的数组）
+let SEL = [];      // 已选列的索引
+let SORT = { i: 0, asc: true };
+const $ = id => document.getElementById(id);
+
+/* ═══════════════════ 列分组（与 utils/debug/csv_sink.cpp 一致）═══════════════════ */
+const GROUP_ORDER = ["frame","t","mode","game","det","sol","trk","tgt","pln","sht","ctl","buff"];
+const groupOf = c => {
+  if (c === "frame_id") return "frame";
+  if (c === "mode" || c === "game_state") return c === "mode" ? "mode" : "game";
+  const p = c.split("_")[0];
+  return GROUP_ORDER.includes(p) ? p : "其它";
+};
+
+/* ⭐ 已知"从没被赋值"的列（与 scripts/analyze.py 的 KNOWN_DEAD_COLS 对应）
+   ⚠️ W72 之后 FrameDebug 所有字段都已被赋值 → 这里留空表供未来自查。 */
+const DEAD = {};
+
+/* ⭐ 性能列（占帧预算的【叶子段】—— 父段不要放进来，否则合计虚高）
+   ⚠️ 踩过的坑：`t_frame_us`（整个帧周期）和 `t_decide_us` 是**父段**，
+      曾误放进列表 → 合计显示 202%。它们只在"概览"里单独显示。 */
+const PERF = ["t_perceive_us","det_t_infer_us","sol_t_solve_us",
+              "trk_t_track_us","tgt_t_update_us","pln_t_plan_us","ctl_t_us","buff_t_us"];
+/* ⭐ 嵌套：父段包含子段（求和时排除子段，否则虚高）
+   · trk_t_track_us ⊃ sol_t_solve_us / tgt_t_update_us（Tracker 内部调用它们）
+   · t_frame_us    ⊃ 全部（所以它不进 PERF） */
+const NESTED = { trk_t_track_us: ["sol_t_solve_us","tgt_t_update_us"] };
+const NESTED_CHILD = new Set(Object.values(NESTED).flat());
+
+/* ═══════════════════ 读文件 ═══════════════════ */
+function readCSV(text){
+  const lines = text.replace(/\r/g,"").split("\n").filter(l => l.length);
+  H = lines[0].split(",").map(s => s.trim());
+  D = lines.slice(1).map(l => {
+    const a = l.split(",");
+    // ⭐ 按表头长度补齐（CSV 末列可能带 \n）
+    while (a.length < H.length) a.push("");
+    return a.slice(0, H.length).map(v => { const f = parseFloat(v); return Number.isFinite(f) ? f : 0; });
+  });
+  SEL = H.map((c,i)=>i).filter(i => ["frame_id","t_frame_us","det_armor_count","trk_armor_count","tgt_nis","det_t_infer_us"].includes(H[i]));
+  if (!SEL.length) SEL = [0];
+  SORT = { i: 0, asc: true };
+  render();
+}
+
+/* ═══════════════════ 统计工具 ═══════════════════ */
+const col = i => D.map(r => r[i]);
+function stat(arr){
+  const v = arr.filter(Number.isFinite).slice().sort((a,b)=>a-b);
+  if (!v.length) return null;
+  const mean = v.reduce((a,b)=>a+b,0)/v.length;
+  const q = p => v[Math.min(v.length-1, Math.floor(v.length*p))];
+  return { n:v.length, min:v[0], max:v[v.length-1], mean, p50:q(.5), p95:q(.95) };
+}
+const idx = c => H.indexOf(c);
+const has = c => idx(c) >= 0;
+const fmt = x => (Math.abs(x) >= 1000 ? x.toFixed(0)
+                : Math.abs(x) >= 1    ? x.toFixed(2)
+                : Math.abs(x) >= .001 ? x.toFixed(4) : x.toExponential(1));
+
+/* ═══════════════════ 渲染 ═══════════════════ */
+function render(){
+  $("drop").style.display = "none";
+  $("app").style.display = "block";
+  $("fname").textContent = window.__fname || "—";
+  $("nrows").textContent = D.length + " 帧";
+  $("ncols").textContent = H.length + " 列";
+  drawCards(); drawDiag(); drawColPicks(); drawPlot(); drawTable();
+}
+
+/* ── 概览卡 ── */
+function drawCards(){
+  const box = $("cards"); box.innerHTML = "";
+  const add = (k,v,cls="") => box.insertAdjacentHTML("beforeend",
+    `<div class="card"><div class="k">${k}</div><div class="v ${cls}">${v}</div></div>`);
+  add("帧数", D.length);
+  if (has("t_frame_us")) { const s = stat(col(idx("t_frame_us")));
+    add("帧周期 中位", fmt(s.p50) + " µs", s.p50 <= 11000 ? "ok" : "warn"); }
+  if (has("det_armor_count")) {
+    const v = col(idx("det_armor_count"));
+    add("检出帧占比", (v.filter(x=>x>0).length / v.length * 100).toFixed(1) + " %");
+  }
+  if (has("trk_armor_count")) {
+    const v = col(idx("trk_armor_count"));
+    add("跟踪收到帧占比", (v.filter(x=>x>0).length / v.length * 100).toFixed(1) + " %");
+  }
+  if (has("mode")) { const v = col(idx("mode")); const s = new Set(v);
+    add("档位", [...s].join(", ")); }
+}
+
+/* ── 诊断（与 analyze.py 一致） ── */
+function drawDiag(){
+  const box = $("diag"); box.innerHTML = "";
+  const card = (title, body, cls="") => box.insertAdjacentHTML("beforeend",
+    `<div class="card" style="grid-column:1/-1"><div class="k">${title}</div>
+     <div style="margin-top:4px" class="${cls}">${body}</div></div>`);
+
+  /* 1) 检测链路：det_nms → det_armor_count */
+  if (has("det_nms") && has("det_armor_count")) {
+    const nms = col(idx("det_nms")), cnt = col(idx("det_armor_count")), n = nms.length;
+    const noCand  = nms.filter((x,i)=>x===0 && cnt[i]===0).length;
+    const filt    = nms.filter((x,i)=>x>0  && cnt[i]===0).length;
+    const ok      = cnt.filter(x=>x>0).length;
+    let msg = `✅ 正常输出 <b>${ok}</b> (${(ok/n*100).toFixed(1)}%)　`
+            + `⭐ 有候选但全被滤掉 <b>${filt}</b> (${(filt/n*100).toFixed(1)}%)　`
+            + `⚠️ 完全没候选 <b>${noCand}</b> (${(noCand/n*100).toFixed(1)}%)<br>`
+            + `<span class="dim">"有候选但全被滤掉" = YOLO 看到了但 check_name/check_type 删掉；
+               "完全没候选" = objectness 没过阈值（YOLO 没看到装甲板）</span>`;
+    // 颜色诊断
+    if (has("trk_armor_count")) {
+      const trk = col(idx("trk_armor_count"));
+      const detOk = cnt.filter(x=>x>0).length;
+      const onlyDet = cnt.filter((x,i)=>x>0 && trk[i]===0).length;
+      if (detOk) {
+        const rate = onlyDet/detOk;
+        msg += `<br><br><b>颜色/过滤诊断</b>：检出 ${detOk} 帧，其中 `
+             + `<b>${onlyDet}</b> 帧 tracker 收到 0（${(rate*100).toFixed(1)}%）`;
+        if (rate > 0.8) msg += ` <span class="bad">⚠️ 强烈提示：颜色配错了
+          （检查 params/&lt;兵种&gt;.yaml 顶层 enemy_color）</span>`;
+        else if (rate > 0.2) msg += ` <span class="warn">🔶 可能是敌人颜色混杂，或 enemy_color 配反</span>`;
+        else msg += ` <span class="ok">✅ 颜色过滤正常</span>`;
+      }
+    }
+    card("检测链路诊断", msg);
+  }
+
+  /* 2) 帧预算 */
+  if (has("t_frame_us")) {
+    const budget = 10000;   // 10 ms（100 Hz）
+    const s = stat(col(idx("t_frame_us")));
+    let rows = PERF.filter(has).map(c => {
+      const st = stat(col(idx(c)));
+      const pct = st.mean / budget * 100;
+      const tag = NESTED_CHILD.has(c) ? ' <span class="dim">↳嵌套</span>' : "";
+      return { c, mean: st.mean, max: st.max, pct, child: NESTED_CHILD.has(c), tag };
+    }).sort((a,b)=>b.mean-a.mean);
+    const total = rows.filter(r=>!r.child).reduce((a,r)=>a+r.mean,0);
+    let t = `<table><tr><th>段</th><th>均值 µs</th><th>最大 µs</th><th>占 10ms</th></tr>`;
+    for (const r of rows)
+      t += `<tr><td class="name">${r.c}${r.tag}</td><td>${r.mean.toFixed(1)}</td>
+            <td>${r.max.toFixed(0)}</td><td class="${r.pct>50?'warn':''}">${r.pct.toFixed(2)}%</td></tr>`;
+    t += `<tr><td class="name"><b>合计（不含嵌套子段）</b></td><td><b>${total.toFixed(1)}</b></td>
+          <td></td><td><b>${(total/budget*100).toFixed(2)}%</b></td></tr></table>`;
+    t += `<p class="dim" style="margin:6px 0 0">⚠️ 30 fps 相机的真实预算是 <b>33 ms</b>；
+          pln_t_plan_us 在 plan 线程并发测量，求和可能超过 t_frame_us，不是 bug。</p>`;
+    card("帧预算（10 ms 周期 @100 Hz）", t);
+  }
+
+  /* 3) 全 0 列 */
+  const zero = H.filter((c,i) => !col(i).some(x => x !== 0));
+  if (zero.length) {
+    const dead = zero.filter(c => c in DEAD);
+    const live = zero.filter(c => !(c in DEAD));
+    let m = "";
+    if (dead.length) m += `<span class="bad">❌ ${dead.length} 列是【代码从没赋值】（永远 0）：</span>
+      <span class="dim">${dead.join(", ")}</span><br>`;
+    if (live.length) m += `<span class="warn">🔶 ${live.length} 列在本段数据中恰好为 0</span>
+      <span class="dim">（可能真的没量到）：${live.join(", ")}</span>`;
+    card("全 0 列", m);
+  }
+}
+
+/* ── 列选择器 ── */
+function drawColPicks(){
+  const box = $("colpicks"); box.innerHTML = "";
+  const groups = {};
+  H.forEach((c,i) => { (groups[groupOf(c)] ||= []).push([c,i]); });
+  for (const g of [...GROUP_ORDER, "其它"]) {
+    if (!groups[g]) continue;
+    const d = document.createElement("div"); d.className = "grp";
+    d.innerHTML = `<b>${g}</b>`;
+    for (const [c,i] of groups[g]) {
+      const b = document.createElement("span");
+      b.className = "col" + (SEL.includes(i) ? " on" : "");
+      b.textContent = c; b.title = c;
+      b.onclick = () => {
+        const k = SEL.indexOf(i);
+        if (k >= 0) SEL.splice(k,1); else SEL.push(i);
+        b.classList.toggle("on"); drawPlot(); drawTable();
+      };
+      d.appendChild(b);
+    }
+    box.appendChild(d);
+  }
+}
+
+/* ── 自绘曲线（canvas，零依赖） ── */
+function drawPlot(){
+  const cv = $("plot");
+  const dpr = window.devicePixelRatio || 1;
+  const W = cv.clientWidth, Hh = cv.clientHeight;
+  cv.width = W*dpr; cv.height = Hh*dpr;
+  const g = cv.getContext("2d"); g.scale(dpr,dpr);
+  g.clearRect(0,0,W,Hh);
+  const cols = SEL.filter(i => i !== idx("frame_id"));
+  if (!cols.length) { $("plotinfo").textContent = "（选列后显示曲线）"; return; }
+
+  const PAD = { l: 62, r: 12, t: 12, b: 22 };
+  const pw = W-PAD.l-PAD.r, ph = Hh-PAD.t-PAD.b;
+  const X = i => i/(D.length-1||1) * pw + PAD.l;
+
+  // ⭐ 每条曲线独立归一化（不同量纲，共轴没法看）→ 各自 0~1
+  const series = cols.map((ci,k) => {
+    const v = col(ci); const s = stat(v);
+    const lo = Math.min(0, s.min), hi = Math.max(s.max, lo + 1e-9);
+    const hue = (k*67) % 360;
+    return { ci, v, lo, hi, color:`hsl(${hue} 85% 62%)`, name:H[ci],
+             Y: x => ph - (x-lo)/(hi-lo)*ph + PAD.t };
+  });
+
+  // 网格
+  g.strokeStyle = "#2a3138"; g.lineWidth = 1; g.font = "10px monospace"; g.fillStyle = "#8b95a3";
+  for (let r = 0; r <= 4; ++r) {
+    const y = PAD.t + ph*r/4;
+    g.beginPath(); g.moveTo(PAD.l, y); g.lineTo(PAD.l+pw, y); g.stroke();
+  }
+  g.textAlign = "right"; g.textBaseline = "middle";
+  g.fillText("归一化 0~1", PAD.l-8, PAD.t+ph/2);
+  g.textAlign = "center";
+  g.fillText("帧序号 →", PAD.l+pw/2, Hh-6);
+
+  // 曲线
+  series.forEach(s => {
+    g.strokeStyle = s.color; g.lineWidth = 1.2; g.beginPath();
+    for (let i=0;i<D.length;++i) {
+      const x = X(i), y = s.Y(s.v[i]);
+      i ? g.lineTo(x,y) : g.moveTo(x,y);
+    }
+    g.stroke();
+  });
+
+  // 图例
+  g.textAlign = "left"; g.textBaseline = "top";
+  series.forEach((s,k) => {
+    const y = PAD.t + 2 + k*13;
+    g.fillStyle = s.color; g.fillRect(PAD.l+4, y, 10, 3);
+    g.fillStyle = "#8b95a3";
+    g.fillText(`${s.name}  [${fmt(s.lo)}, ${fmt(s.hi)}]`, PAD.l+18, y-4);
+  });
+
+  $("plotinfo").textContent =
+    `⭐ 每条曲线【独立归一化】（量纲不同）· 已显示 ${series.length} 条 · 共 ${D.length} 帧`;
+
+  // 悬停
+  cv.onmousemove = ev => {
+    const rect = cv.getBoundingClientRect();
+    const x = ev.clientX - rect.left;
+    if (x < PAD.l || x > PAD.l+pw) { $("tip").style.display="none"; return; }
+    const i = Math.round((x-PAD.l)/pw * (D.length-1));
+    let h = `<b>帧 ${i}</b>`;
+    series.forEach(s => h += `<br><span style="color:${s.color}">■</span> ${s.name} = ${fmt(s.v[i])}`);
+    const t = $("tip"); t.innerHTML = h; t.style.display = "block";
+    t.style.left = Math.min(ev.clientX+14, innerWidth-190) + "px";
+    t.style.top  = (ev.clientY+14) + "px";
+  };
+  cv.onmouseleave = () => { $("tip").style.display = "none"; };
+}
+
+/* ── 逐帧表 ── */
+function drawTable(){
+  const t = $("tbl");
+  let show = [...SEL];
+  H.slice(0,12).forEach(i => { if (!show.includes(i)) show.push(i); });
+  show.sort((a,b)=>a-b);
+
+  const rows = D.map((r,i)=>i);
+  rows.sort((a,b) => {
+    const x = D[a][SORT.i], y = D[b][SORT.i];
+    return (x===y ? a-b : (x<y?-1:1)) * (SORT.asc ? 1 : -1);
+  });
+
+  let h = "<tr>" + show.map(i =>
+    `<th onclick="sortBy(${i})">${H[i]}${SORT.i===i ? (SORT.asc?" ▲":" ▼") : ""}</th>`).join("") + "</tr>";
+  for (const r of rows.slice(0, 400))
+    h += "<tr>" + show.map(i => {
+      const v = D[r][i];
+      const cls = v === 0 ? ' class="dim"' : '';
+      return `<td${cls}>${fmt(v)}</td>`;
+    }).join("") + "</tr>";
+  t.innerHTML = h;
+  if (rows.length > 400)
+    t.insertAdjacentHTML("afterend", "");
+}
+function sortBy(i){ SORT.asc = (SORT.i === i) ? !SORT.asc : true; SORT.i = i; drawTable(); }
+
+/* ═══════════════════ 拖放 ═══════════════════ */
+const drop = $("drop");
+["dragenter","dragover"].forEach(e => drop.addEventListener(e, ev => {
+  ev.preventDefault(); drop.classList.add("hot"); }));
+["dragleave","drop"].forEach(e => drop.addEventListener(e, ev => {
+  ev.preventDefault(); drop.classList.remove("hot"); }));
+drop.addEventListener("drop", ev => {
+  const f = ev.dataTransfer.files[0]; if (f) loadFile(f);
+});
+document.addEventListener("dragover", e => e.preventDefault());
+document.addEventListener("drop", e => {
+  e.preventDefault();
+  const f = e.dataTransfer && e.dataTransfer.files[0]; if (f) loadFile(f);
+});
+$("file").addEventListener("change", ev => { const f = ev.target.files[0]; if (f) loadFile(f); });
+function loadFile(f){
+  window.__fname = f.name;
+  const r = new FileReader();
+  r.onload = () => readCSV(r.result);
+  r.readAsText(f);
+}
+window.addEventListener("resize", () => { if (D.length) drawPlot(); });
+</script>
+</body>
+</html>

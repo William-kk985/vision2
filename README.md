@@ -84,6 +84,39 @@ python3 scripts/plot.py    run_frames.csv --preset plan
 python3 scripts/compare.py A_frames.csv B_frames.csv    # A/B 实验对比
 ```
 
+#### 没有下位机 / 没有相机时
+
+| 情况 | 行为 | 命令 |
+|---|---|---|
+| **串口不存在** | ⭐ **自动降级为虚拟下位机**（不再崩） | 直接跑即可 |
+| **必须真实下位机** | 没串口就失败退出（同济行为） | `--strict-board` |
+| **显式用虚拟板** | 不碰串口 | `--no-board` |
+| **只用录像** | 不碰相机、不碰串口 | `--video=录像.avi --force-mode=1` |
+
+```bash
+tools/scripts/run.sh infantry --video=demo.avi --force-mode=1   # 录像回放
+tools/scripts/run.sh infantry --no-board                        # 显式虚拟板
+tools/scripts/run.sh infantry --strict-board                    # 没下位机就失败
+# --force-mode: 0=IDLE 1=自瞄 2=小符 3=大符
+```
+
+⚠️ **虚拟下位机的限制**：IMU 姿态恒为单位四元数、弹速取 yaml 配置值
+⇒ **EKF 的 yaw/ω 预测、弹道误差、命中判定都不可信**；但**检测/跟踪/解算/规划的内部量可以照常看**。
+
+#### 关于 `/dev/video*`
+
+⚠️ 本项目用**工业相机 SDK**（海康 `MV_CC` / 迈德威视），**不是 V4L2**。
+插着 USB 摄像头时 `ls /dev/video*` 有设备是**正常的**，与本项目无关。
+若程序报 `Not found camera!` → 那是 **SDK 没找到相机**，**不是** `/dev/video*` 的问题
+（排查：相机供电/USB 带宽/MVS 客户端是否占用）。
+
+#### 串口权限
+
+```bash
+sudo usermod -a -G dialout $USER      # 加组后需重新登录
+udevadm info -a -n /dev/ttyACM0 | grep -E '({serial}|{idVendor}|{idProduct})'   # 拿 ID 写 udev 规则
+```
+
 ### ⭐ 可插拔的算法槽位
 
 `core/auto_aim/target/` 有 **3 个策略槽位**（角速度估计 / 过程噪声 / 观测滤波），

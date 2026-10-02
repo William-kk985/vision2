@@ -59,11 +59,7 @@ public:
   : mode_(mode), bullet_speed_(static_cast<float>(bullet_speed))
   {
     tools::logger()->warn(
-      "[VirtualBoard] 使用虚拟下位机（{}）\n"
-      "  能做什么: 看检测/跟踪/解算/规划的内部量（CSV / 窗口 / PlotJuggler）、验证主链路不崩\n"
-      "  不能做什么: IMU 姿态恒为单位四元数、弹速固定 {:.1f} m/s\n"
-      "    EKF 的 yaw/ω 预测、弹道误差、命中判定都不可信\n"
-      "  想恢复『没下位机就失败』: 加 --strict-board",
+      "[VirtualBoard] 虚拟下位机（{}，弹速 {:.1f} m/s）：无 IMU，EKF 预测/弹道/命中不可信",
       reason, static_cast<double>(bullet_speed_));
   }
 

@@ -41,7 +41,7 @@ Tracker::Tracker(const std::string & config_path, Solver & solver)
     tools::logger()->info("[Tracker] priority_mode = {} （已启用，偏离同济默认）",
                           to_string(priority_mode_));
   } else {
-    tools::logger()->info("[Tracker] 未配置 priority_mode → 保持同济行为（不设优先级）");
+    tools::logger()->debug("[Tracker] 未配置 priority_mode（同济行为）");
   }
 }
 

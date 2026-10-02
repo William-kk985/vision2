@@ -14,7 +14,7 @@ ReplayBoard::ReplayBoard(
   if (!pose_path.empty()) {
     pose_.open(pose_path);
     if (pose_.is_open())
-      tools::logger()->info("[ReplayBoard] 位姿文件: {}", pose_path);
+      tools::logger()->debug("[ReplayBoard] 位姿文件: {}", pose_path);
     else
       tools::logger()->warn("[ReplayBoard] 打不开位姿文件 {} → 用单位四元数", pose_path);
   }

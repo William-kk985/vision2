@@ -95,14 +95,14 @@ void guard_on_startup(int log_days, const std::string & records_dir)
   // ── ② 报告现状（**只报告，不清理录像**）──
   const auto lg = query_disk("logs");
   if (lg.ok)
-    tools::logger()->info(
+    tools::logger()->debug(
       "[disk] logs/ {} 个文件 {}（清理阈值 {} 天）", lg.files, human(lg.dir_bytes), log_days);
 
   // ⭐ 录像：**只报"能录多久"，不清理**（比赛复盘/取证要用，交使用者自行管理）
   const auto rc = query_disk(records_dir);
   if (rc.ok && rc.free_bytes) {
     constexpr uint64_t kRate = static_cast<uint64_t>(1.5 * 1024 * 1024);   // 实测 1.5 MB/s
-    tools::logger()->info(
+    tools::logger()->debug(
       "[disk] {}/ {} 个文件 {} · 分区剩余 {} · 可录约 {} 分钟（1.5 MB/s）· 不自动清理",
       records_dir, rc.files, human(rc.dir_bytes), human(rc.free_bytes), rc.free_bytes / kRate / 60);
   }

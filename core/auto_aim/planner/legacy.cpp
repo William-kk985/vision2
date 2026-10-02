@@ -12,8 +12,9 @@ bool Aimer::tongji_compat() { return g_tongji_compat; }
 void Aimer::set_tongji_compat(bool on)
 {
   g_tongji_compat = on;
-  tools::logger()->warn(
-    "[Aimer] 同济兼容模式 = {} （E5 小陀螺判据用 ekf_x()[{}]）", on ? "开" : "关", on ? 8 : 7);
+  // 主程序已用 info 报过 tongji 模式；这里只补一句实现细节，降到 debug 避免重复。
+  tools::logger()->debug(
+    "[Aimer] E5 小陀螺判据用 ekf_x()[{}]", on ? 8 : 7);
 }
 }  // namespace auto_aim
 

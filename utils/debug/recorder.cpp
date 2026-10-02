@@ -48,8 +48,7 @@ Recorder::Recorder(double fps, bool enabled, size_t queue_cap)
       "[Recorder] 录像已开启 → {} / {}（{} fps，队列容量 {}{}）", video_path_, text_path_,
       fps_, queue_.capacity(), "");
   } else {
-    tools::logger()->info(
-      "[Recorder] 录像未开启（要录请传 `--record` 或热键开启）—— 不会产生 records/ 文件");
+    tools::logger()->debug("[Recorder] 录像未开启（--record 开启）");
   }
 }
 

@@ -20,7 +20,7 @@ Planner::Planner(const std::string & config_path)
   const std::string impl =
     yaml["trajectory_impl"] ? yaml["trajectory_impl"].as<std::string>() : "ideal";
   trajectory_ = make_trajectory(impl);
-  tools::logger()->info("[Planner] trajectory_impl = {} ({})", impl, trajectory_->name());
+  tools::logger()->debug("[Planner] trajectory_impl = {} ({})", impl, trajectory_->name());
 
   setup_yaw_solver(config_path);
   setup_pitch_solver(config_path);
@@ -34,7 +34,7 @@ void Planner::reload(const YAML::Node & yaml)
   decision_speed_ = tools::read<double>(yaml, "decision_speed");
   high_speed_delay_time_ = tools::read<double>(yaml, "high_speed_delay_time");
   low_speed_delay_time_ = tools::read<double>(yaml, "low_speed_delay_time");
-  tools::logger()->info(
+  tools::logger()->debug(
     "[Planner] 热重载: fire_thresh={:.4f} yaw_off={:.3f}° pitch_off={:.3f}°", fire_thresh_,
     yaw_offset_ * 57.3, pitch_offset_ * 57.3);
 }

@@ -63,7 +63,7 @@ std::string resolve_device(ov::Core & core, const std::string & requested)
   const bool ok = std::any_of(devs.begin(), devs.end(),
                               [&](const std::string & d) { return matches(d, want); });
   if (ok) {
-    tools::logger()->info("[Device] 使用 '{}'（可用: {}）", want, describe_devices(core));
+    tools::logger()->debug("[Device] 使用 '{}'（可用 {}）", want, describe_devices(core));
     return want;
   }
 

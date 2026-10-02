@@ -51,8 +51,8 @@ void ArmorFilter::load(const YAML::Node & yaml)
 
   auto node = yaml["armor_filter"];
   if (!node) {
-    tools::logger()->info(
-      "[ArmorFilter] 无 armor_filter 段 → 保持同济行为（仅颜色过滤，enemy_color={} 取自顶层）",
+    tools::logger()->debug(
+      "[ArmorFilter] 无 armor_filter 段（仅颜色过滤，enemy_color={}）",
       (cfg_.enemy_color == Color::red ? "red" : "blue"));
     return;
   }

@@ -109,44 +109,19 @@ if [ "$ROBOT" = "sentry" ]; then
   ok "ROS_LOG_DIR=$ROS_LOG_DIR  （⚠️ 修 ~/.ros/log 只读的坑）"
 fi
 
-# ── ③.5 ⭐⭐ 串口预检（没硬件时**提前**告知，别等程序崩）──
-if [[ ! " ${EXTRA[*]-} " =~ " --video" ]] && [[ ! " ${EXTRA[*]-} " =~ " --video=" ]]; then
-  say "串口预检（机器人在不在？）"
+# ── ③.5 串口预检（只说结论；细节见 README「零硬件运行」）──
+if [[ ! " ${EXTRA[*]-} " =~ " --video" ]]; then
   COM_PORT="$(grep -m1 '^com_port:' "$PARAMS" 2>/dev/null | sed 's/.*"\(.*\)".*/\1/' || true)"
   COM_PORT="${COM_PORT:-/dev/gimbal}"
   if [ -e "$COM_PORT" ]; then
     ok "串口 $COM_PORT 存在"
   else
-    warn "**找不到串口 $COM_PORT**（参数文件里的 com_port）"
-    avail="$(ls /dev/ttyUSB* /dev/ttyACM* 2>/dev/null | tr '\n' ' ' || true)"
-    if [ -n "$avail" ]; then
-      warn "本机可用串口: $avail"
-      warn "→ 改 params/$ROBOT.yaml 的 com_port，或用 udev 把下位机映射成 $COM_PORT"
-    else
-      warn "本机**没有任何** /dev/ttyUSB* / ttyACM* 设备（没接硬件）"
-    fi
-    echo
-    ok "→ ⭐ **程序会自动降级为虚拟下位机**（W54，不再崩）—— 可以直接启动试试"
-    echo "        ⚠️ 但虚拟板的 IMU 恒为单位四元数 → **EKF 预测/弹道/命中不可信**"
-    echo
-    echo "      其它跑法："
-    echo "        tools/scripts/run.sh $ROBOT --video=录像.avi --force-mode=1   # 录像回放"
-    echo "        tools/scripts/run.sh $ROBOT --no-board                        # 显式虚拟板"
-    echo "        tools/scripts/run.sh $ROBOT --strict-board                    # 没下位机就失败（同济行为）"
-    echo "        # --force-mode: 0=IDLE 1=自瞄 2=小符 3=大符"
-    echo "        # 想看数据: 再加 --csv=run1  然后用 scripts/analyze.py 分析"
-    echo
+    warn "找不到串口 $COM_PORT → 自动降级为虚拟下位机（无 IMU，EKF/命中不可信）"
   fi
 fi
 
-# ── ③.6 ⭐ 摄像头预检（插了但没识别出来是常见问题）──
-if [[ ! " ${EXTRA[*]-} " =~ " --video" ]] && [[ ! " ${EXTRA[*]-} " =~ " --video=" ]]; then
-  if ls /dev/video* >/dev/null 2>&1; then
-    ok "发现视频设备: $(ls /dev/video* 2>/dev/null | tr '\n' ' ')"
-    echo "        ⚠️ 但本项目用**工业相机 SDK**（海康 MV_CC / 迈德威视），不是 V4L2 /dev/video*"
-    echo "           若程序报 'Not found camera!' → 那是 SDK 没找到相机，不是 /dev/video* 的问题"
-  fi
-fi
+
+# ── ③.6 `/dev/video*` 预检已删：本项目用工业相机 SDK，不是 V4L2（见 README）──
 
 # ── ③.7 ⭐⭐⭐ 相机占用预检（海康相机【不独占】，MVS 能同时打开但抢流！）──
 if [[ ! " ${EXTRA[*]-} " =~ " --video" ]] && [[ ! " ${EXTRA[*]-} " =~ " --video=" ]]; then

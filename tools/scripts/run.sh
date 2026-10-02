@@ -148,6 +148,44 @@ if [[ ! " ${EXTRA[*]-} " =~ " --video" ]] && [[ ! " ${EXTRA[*]-} " =~ " --video=
   fi
 fi
 
+# ── ③.7 ⭐⭐⭐ 相机占用预检（海康相机【不独占】，MVS 能同时打开但抢流！）──
+if [[ ! " ${EXTRA[*]-} " =~ " --video" ]] && [[ ! " ${EXTRA[*]-} " =~ " --video=" ]]; then
+  # ⚠️ 用 `cut` 而不是 `sed`（sed 的贪婪匹配在这里会返回空，实测踩到）
+  CNAME="$(grep -m1 '^camera_name:' "$PARAMS" 2>/dev/null | cut -d: -f2 | tr -d ' "' || true)"
+  if [ "${CNAME:-}" = "hikrobot" ] || [ "${CNAME:-}" = "mindvision" ]; then
+    say "相机占用预检（${CNAME}）"
+    # ⚠️ 用 **可执行文件名** 匹配，不用 `pgrep -f`（后者会误报命令行里恰好含 "MVS" 的进程，
+    #    比如本脚本自己、或 `grep MVS`）—— 实测踩到过误报。
+    RIVALS=""
+    for _pid in $(pgrep -f 'MVS|MvCamera' 2>/dev/null); do
+      [ "$_pid" = "$$" ] && continue
+      _exe="$(readlink -f "/proc/$_pid/exe" 2>/dev/null || true)"
+      _base="$(basename "${_exe:-}" 2>/dev/null || true)"
+      case "$_base" in
+        *MVS*|*MvCamera*|*mvviewer*|*MvViewer*)
+          RIVALS="${RIVALS}${_pid} ${_exe}
+" ;;
+      esac
+    done
+    RIVALS="${RIVALS%$'\n'}"
+    if [ -n "$RIVALS" ]; then
+      warn "⚠️ **发现可能占用工业相机的进程**："
+      echo "$RIVALS" | sed 's/^/        /'
+      echo
+      warn "海康 USB 相机**不独占** —— MVS 客户端能和本程序**同时 OpenDevice**，"
+      warn "但**只有一个能真正取到流**。若程序报 \`0x80000007\`（无数据）→ **就是它！**"
+      echo "        建议先执行：  pkill -f MVS"
+      echo
+      if [ "${HZMIR_ALLOW_CAM_CONFLICT:-0}" != 1 ]; then
+        echo "  （5 秒后继续；Ctrl-C 停下去关掉它们，或 HZMIR_ALLOW_CAM_CONFLICT=1 跳过此等待）"
+        sleep 5
+      fi
+    else
+      ok "没发现占用相机的进程（MVS 等）"
+    fi
+  fi
+fi
+
 # ── ④ tty / 热键 提示 ──
 say "运行"
 if [ -t 0 ]; then

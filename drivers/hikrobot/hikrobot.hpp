@@ -33,7 +33,11 @@ private:
   std::thread daemon_thread_;
   std::atomic<bool> daemon_quit_;
 
-  void * handle_;
+  // ⭐⭐⭐ W56：**必须初始化** —— 同济原版是裸的 `void * handle_;`（垃圾值）。
+  //   当 `capture_start()` 在 `MV_CC_CreateHandle` 之前就失败（如 `Not found camera!`）时，
+  //   后续 `capture_stop()` 会拿**未初始化的 handle** 去调 `MV_CC_StopGrabbing` → **UB**，
+  //   可能操作到不该操作的设备（实测：相机被留在 grabbing → **红灯常亮**）。
+  void * handle_ = nullptr;
   std::thread capture_thread_;
   std::atomic<bool> capturing_;
   std::atomic<bool> capture_quit_;

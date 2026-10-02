@@ -129,11 +129,44 @@ tools/scripts/check-hw.sh
 
 ---
 
+## `camera-reset.sh` —— 相机复位（海康红灯）
+
+```bash
+tools/scripts/camera-reset.sh
+```
+
+### 海康相机的灯语
+
+| 灯 | 含义 |
+|---|---|
+| **蓝灯** | 已上电、**未被取流**（idle，正常待机） |
+| ⚠️ **红灯** | **正在取流（grabbing）/ 被占用** |
+
+### 为什么会变红
+
+```
+程序 StartGrabbing        → 红灯
+正常退出 StopGrabbing+Close→ 蓝灯 ✅
+⚠️ StopGrabbing 失败 / handle 未初始化 → **灯不灭**
+```
+
+⭐ **本项目 W56 已修**（`capture_stop()` 改成「尽力清理不中途 return」+ 析构显式清理
++ `handle_` 初始化）。**但已经卡住的相机需要本脚本或拔插来复位。**
+
+⭐ 脚本会：① 检查 `lsusb` ② **检查有没有进程占着**（不关掉 reset 也白搭）
+③ 用 libusb 做 USB reset ④ 验证。
+
+> ⚠️ **reset 前一定要先关掉占用进程**（MVS 客户端 / 我们的程序），否则 reset 完
+> 立刻又被 grabbing → 灯再次变红。
+
+---
+
 ## 目录里还有什么
 
 | 文件 | 作用 |
 |---|---|
 | **`check-hw.sh`** | ⭐⭐ **硬件诊断**（相机 / 串口 / usbfs / udev）—— 见下 |
+| **`camera-reset.sh`** | ⭐⭐ **相机复位**（清除海康「红灯常亮」）—— 见下 |
 | `watchdog.sh` | 进程崩溃自动重启（搬自同济，改进版：路径自适应 + 指数退避 + 原因记录） |
 | `split_video.py` | 切录像（做 A/B 实验用） |
 | `build.sh` / `run.sh` | ⭐ 本文件介绍的这两个 |

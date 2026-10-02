@@ -9,7 +9,8 @@ using namespace std::chrono_literals;
 namespace io
 {
 HikRobot::HikRobot(double exposure_ms, double gain, const std::string & vid_pid)
-: exposure_us_(exposure_ms * 1e3), gain_(gain), queue_(1), daemon_quit_(false), vid_(-1), pid_(-1)
+: exposure_us_(exposure_ms * 1e3), gain_(gain), queue_(1), handle_(nullptr),
+  daemon_quit_(false), vid_(-1), pid_(-1)
 {
   set_vid_pid(vid_pid);
   if (libusb_init(NULL)) tools::logger()->warn("Unable to init libusb!");
@@ -39,7 +40,19 @@ HikRobot::~HikRobot()
 {
   daemon_quit_ = true;
   if (daemon_thread_.joinable()) daemon_thread_.join();
-  tools::logger()->info("HikRobot destructed.");
+
+  // ⭐⭐ W56：**析构里显式清理** —— 原来只靠 daemon 线程收尾，
+  //   一旦 daemon 在 `capture_start()` 里失败/提前返回，**相机就会被留在 grabbing → 红灯**。
+  //   `capture_stop()` 现在是幂等的（handle_ == nullptr 直接返回）。
+  capture_stop();
+
+  if (handle_ != nullptr) {   // 兜底：万一 capture_stop 里 DestroyHandle 失败
+    MV_CC_StopGrabbing(handle_);
+    MV_CC_CloseDevice(handle_);
+    MV_CC_DestroyHandle(handle_);
+    handle_ = nullptr;
+  }
+  tools::logger()->info("HikRobot destructed（已 StopGrabbing + CloseDevice + DestroyHandle）");
 }
 
 void HikRobot::read(cv::Mat & img, std::chrono::steady_clock::time_point & timestamp)
@@ -60,6 +73,17 @@ void HikRobot::read(cv::Mat & img, std::chrono::steady_clock::time_point & times
 
 void HikRobot::capture_start()
 {
+  // ⭐⭐ W56：**幂等** —— 若上一轮的 handle 还在（重连路径会走到这里），
+  //   先彻底清理，否则会 **句柄泄漏 + 同一台相机被重复 OpenDevice**。
+  if (handle_ != nullptr) {
+    tools::logger()->debug("[HikRobot] capture_start 前发现残留 handle → 先清理");
+    capture_quit_ = true;
+    if (capture_thread_.joinable()) capture_thread_.join();
+    MV_CC_StopGrabbing(handle_);
+    MV_CC_CloseDevice(handle_);
+    if (MV_CC_DestroyHandle(handle_) == MV_OK) handle_ = nullptr;
+  }
+
   capturing_ = false;
   capture_quit_ = false;
 
@@ -164,28 +188,35 @@ void HikRobot::capture_start()
 
 void HikRobot::capture_stop()
 {
+  // ⭐⭐⭐ W56：**尽力清理，绝不中途 return**（这是"相机红灯不灭"的根因）
+  //
+  // 改前：`StopGrabbing` 失败就 `return` → `CloseDevice`/`DestroyHandle` 都不做
+  //   → ⚠️ **相机永远留在 grabbing/被占用状态 → 红灯常亮**，且句柄泄漏。
+  //   日志实测：`MV_CC_StopGrabbing failed: 0x80000300`（MV_E_CALLORDER）后设备没关。
+  //
+  // 现在：每一步都 **尝试 + 记录**，无论成败都继续下一步。
   capture_quit_ = true;
   if (capture_thread_.joinable()) capture_thread_.join();
+
+  if (handle_ == nullptr) { capturing_ = false; return; }   // ⭐ 没开过就别瞎调
 
   unsigned int ret;
 
   ret = MV_CC_StopGrabbing(handle_);
-  if (ret != MV_OK) {
+  // ⚠️ 0x80000300 = MV_E_CALLORDER（本来就没在取流）→ **不是错误**，别当失败
+  if (ret != MV_OK && ret != 0x80000300)
     tools::logger()->warn("MV_CC_StopGrabbing failed: {:#x}", ret);
-    return;
-  }
+  else if (ret == 0x80000300)
+    tools::logger()->debug("[HikRobot] StopGrabbing: 本来就没在取流（0x80000300），忽略");
 
   ret = MV_CC_CloseDevice(handle_);
-  if (ret != MV_OK) {
-    tools::logger()->warn("MV_CC_CloseDevice failed: {:#x}", ret);
-    return;
-  }
+  if (ret != MV_OK) tools::logger()->warn("MV_CC_CloseDevice failed: {:#x}", ret);
 
   ret = MV_CC_DestroyHandle(handle_);
-  if (ret != MV_OK) {
-    tools::logger()->warn("MV_CC_DestroyHandle failed: {:#x}", ret);
-    return;
-  }
+  if (ret != MV_OK) tools::logger()->warn("MV_CC_DestroyHandle failed: {:#x}", ret);
+  else handle_ = nullptr;   // ⭐ 只在这里置空（DestroyHandle 成功）
+
+  capturing_ = false;
 }
 
 void HikRobot::set_float_value(const std::string & name, double value)

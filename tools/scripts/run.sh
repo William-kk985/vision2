@@ -126,16 +126,25 @@ if [[ ! " ${EXTRA[*]-} " =~ " --video" ]] && [[ ! " ${EXTRA[*]-} " =~ " --video=
       warn "本机**没有任何** /dev/ttyUSB* / ttyACM* 设备（没接硬件）"
     fi
     echo
-    warn "═══ 没硬件也能跑（录像回放）═══"
-    echo "      tools/scripts/run.sh $ROBOT --video=录像.avi --force-mode=1"
-    echo "      # --force-mode: 0=IDLE 1=自瞄 2=小符 3=大符"
-    echo "      # 想顺便看数据: 再加 --csv=run1  然后用 scripts/analyze.py 分析"
+    ok "→ ⭐ **程序会自动降级为虚拟下位机**（W54，不再崩）—— 可以直接启动试试"
+    echo "        ⚠️ 但虚拟板的 IMU 恒为单位四元数 → **EKF 预测/弹道/命中不可信**"
     echo
-    if [ "${HZMIR_ALLOW_NO_HW:-0}" != 1 ]; then
-      echo "  （5 秒后仍会继续启动，程序自己会报错并退出；Ctrl-C 停）"
-      echo "  （直接跳到录像模式请 Ctrl-C 后改用上面的命令）"
-      sleep 5
-    fi
+    echo "      其它跑法："
+    echo "        tools/scripts/run.sh $ROBOT --video=录像.avi --force-mode=1   # 录像回放"
+    echo "        tools/scripts/run.sh $ROBOT --no-board                        # 显式虚拟板"
+    echo "        tools/scripts/run.sh $ROBOT --strict-board                    # 没下位机就失败（同济行为）"
+    echo "        # --force-mode: 0=IDLE 1=自瞄 2=小符 3=大符"
+    echo "        # 想看数据: 再加 --csv=run1  然后用 scripts/analyze.py 分析"
+    echo
+  fi
+fi
+
+# ── ③.6 ⭐ 摄像头预检（插了但没识别出来是常见问题）──
+if [[ ! " ${EXTRA[*]-} " =~ " --video" ]] && [[ ! " ${EXTRA[*]-} " =~ " --video=" ]]; then
+  if ls /dev/video* >/dev/null 2>&1; then
+    ok "发现视频设备: $(ls /dev/video* 2>/dev/null | tr '\n' ' ')"
+    echo "        ⚠️ 但本项目用**工业相机 SDK**（海康 MV_CC / 迈德威视），不是 V4L2 /dev/video*"
+    echo "           若程序报 'Not found camera!' → 那是 SDK 没找到相机，不是 /dev/video* 的问题"
   fi
 fi
 

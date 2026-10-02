@@ -9,7 +9,8 @@
 #include "io/camera/camera.hpp"
 #include "io/camera/video.hpp"        // ⭐ 录像回放相机
 #include "io/board/board.hpp"         // ⭐ IBoard 统一接口
-#include "io/board/gimbal/gimbal.hpp"   // ⭐ W31：io::Gimbal 已直接实现 IBoard
+#include "io/board/gimbal/gimbal.hpp"
+#include "io/board/make_board.hpp"   // ⭐ W54：下位机自动感应   // ⭐ W31：io::Gimbal 已直接实现 IBoard
 #include "io/board/replay.hpp"        // ⭐ 录像回放的「下位机」
 #include "drivers/dm_imu/dm_imu.hpp"
 // ⭐ 显式补上：同济 standard_mpc.cpp **没有** include yolo.hpp，
@@ -64,7 +65,9 @@ const std::string keys =
   "{debug-window   | false | ⭐ L3：启动就开可视化窗口（需 DISPLAY）}"
   "{tongji         | true | ⭐⭐ 同济兼容模式：true(默认)=完全同济行为；false=启用本项目优化}"
   "{force-mode     | -1 | ⭐ 录像模式强制档位：0=IDLE 1=自瞄 2=小符 3=大符（便于零硬件验证打符）}"
-  "{strict-device  | false | ⭐ 严格设备模式：true=同济行为(设备不可用就抛异常)；false=回退CPU}";
+  "{strict-device  | false | ⭐ 严格设备模式：true=同济行为(设备不可用就抛异常)；false=回退CPU}"
+  "{no-board       | false | ⭐⭐ 强制虚拟下位机（不碰串口；只有摄像头时用）}"
+  "{strict-board   | false | ⭐⭐ 串口不存在就失败退出（同济行为）；默认自动降级虚拟板}";
 
 using namespace std::chrono_literals;
 
@@ -125,8 +128,12 @@ int main(int argc, char * argv[])
     tools::logger()->info("[infantry] 录像回放模式: {}", video_path);
   } else {
     camera = std::make_unique<io::Camera>(config_path);
-    board = std::make_unique<io::Gimbal>(config_path);   // ⭐ W31：直接是 IBoard
-    tools::logger()->info("[infantry] 真实硬件模式");
+    // ⭐⭐ W54：**下位机自动感应** —— 串口存在用真板子；
+    //   不存在就**降级虚拟板**（只有摄像头时也能跑），而不是 exit(1)。
+    //   要恢复同济的"没下位机就失败" → `--strict-board`
+    board = io::make_board(
+      config_path, cli.get<bool>("no-board"), cli.get<bool>("strict-board"),
+      cli.get<double>("bullet-speed"), -1, "infantry");
   }
 
   auto_aim::YOLO yolo(config_path, true);

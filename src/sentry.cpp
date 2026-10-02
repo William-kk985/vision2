@@ -78,7 +78,9 @@ const std::string keys =
   "{record         | false | ⭐⭐ 录像到 records/（默认**不录**；录会占一个核做 MJPG 编码）}"
   "{pj             | false | ⭐ 是否发 PlotJuggler UDP}"
   "{tongji         | true | ⭐⭐ 同济兼容模式（默认 true = 完全同济行为）}"
-  "{strict-device  | false | ⭐ 严格设备模式（true = 设备不可用就抛异常）}";
+  "{strict-device  | false | ⭐ 严格设备模式（true = 设备不可用就抛异常）}"
+  "{no-board       | false | ⭐⭐ 强制虚拟下位机（不碰串口；只有摄像头时用）}"
+  "{strict-board   | false | ⭐⭐ 串口不存在就失败退出（同济行为）；默认自动降级虚拟板}";
 
 using namespace std::chrono_literals;
 

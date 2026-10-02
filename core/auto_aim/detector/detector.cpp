@@ -44,7 +44,10 @@ std::list<Armor> Detector::detect(const cv::Mat & bgr_img, int frame_count)
   //   实测（640×360）：有 DISPLAY 时 `imshow` ≈ 0.70 ms、加 `waitKey` ≈ 1.34 ms/帧；
   //   无 DISPLAY（赛场无头）≈ 0.016 ms。**而它完全绕过按键 1 / --debug-window。**
   //   ⇒ 现在没人要图（没按 1、没传 --debug-window）就**连这句都不执行**。
-  if (tools::l3_image_wanted()) cv::imshow("binary_img", binary_img);
+  if (tools::l3_image_wanted()) {
+    cv::imshow("binary_img", binary_img);
+    tools::register_l3_window("binary_img");   // ⭐ W77：登记，关闸时统一销毁
+  }
 
   // 获取轮廓点
   std::vector<std::vector<cv::Point>> contours;
@@ -389,6 +392,7 @@ void Detector::show_result(
     cv::resize(detection, detection, {}, 0.5, 0.5);
     // cv::imshow("threshold", binary_img2);
     cv::imshow("detection", detection);
+    tools::register_l3_window("detection");   // ⭐ W77：登记，关闸时统一销毁
   }
 }
 

@@ -367,6 +367,7 @@ void YOLOV8::draw_detections(
   if (tools::l3_image_wanted()) {
     cv::resize(detection, detection, {}, 0.5, 0.5);  // 显示时缩小图片尺寸
     cv::imshow("detection", detection);
+    tools::register_l3_window("detection");   // ⭐ W77：登记，关闸时统一销毁
   }
 }
 

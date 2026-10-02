@@ -35,7 +35,10 @@
 #ifndef HZMIR_UTILS_DEBUG_L3_GATE_HPP
 #define HZMIR_UTILS_DEBUG_L3_GATE_HPP
 
+#include <algorithm>
 #include <atomic>
+#include <string>
+#include <vector>
 
 namespace tools
 {
@@ -60,6 +63,43 @@ inline void set_l3_image_wanted(bool on) noexcept
 inline bool l3_image_wanted() noexcept
 {
   return detail::l3_image_wanted_flag().load(std::memory_order_acquire);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ⭐⭐⭐ W77：**L3 窗口注册表** —— 解决「关窗后 `detection` 窗口不消失」
+//
+// ## 问题
+// `WindowSink` 自己建的窗口（`infantry`）在析构时会 `destroyWindow` ✅（W76 修的），
+// ⚠️ 但 detector/yolo 里那 5 处 `cv::imshow("detection"/"binary_img", ...)` 建的窗口
+//    **不归任何人管** → 门控关闭（按键 `1`）后它们**留在屏幕上**（画面冻住）。
+//
+// ## 方案
+// 谁 `imshow` 谁**登记窗口名**；门控**关闭**时由 `SinkHub::refresh_l3_gate()`
+// （那里已经有 OpenCV）统一 `destroyWindow`。
+//
+// ⚠️ 本文件**只存名字字符串、不碰 OpenCV** —— 保持 `core/` 侧零 GUI 依赖。
+// ═══════════════════════════════════════════════════════════════════════════
+
+namespace detail
+{
+inline std::vector<std::string> & l3_window_names()
+{
+  static std::vector<std::string> names;
+  return names;
+}
+}  // namespace detail
+
+/// @brief 登记一个 L3 窗口（由 `cv::imshow` 的调用方在 `imshow` 后调用，幂等）
+inline void register_l3_window(const std::string & name)
+{
+  auto & v = detail::l3_window_names();
+  if (std::find(v.begin(), v.end(), name) == v.end()) v.push_back(name);
+}
+
+/// @brief 已登记的 L3 窗口名（`SinkHub` 关闸时用它们逐个 `destroyWindow`）
+inline const std::vector<std::string> & l3_windows() noexcept
+{
+  return detail::l3_window_names();
 }
 
 }  // namespace tools

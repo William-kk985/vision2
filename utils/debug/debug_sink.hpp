@@ -32,6 +32,7 @@
 
 #include "core/debug.hpp"
 #include "utils/debug/l3_gate.hpp"   // ⭐ W61：全局 L3 门控
+#include "utils/log/logger.hpp"   // ⭐ W61：全局 L3 门控
 
 namespace tools
 {
@@ -134,12 +135,28 @@ public:
 private:
   /// ⭐ W61：把「有没有 sink 要图」同步到全局门控（供 detector/yolo 这类深层代码查）
   void refresh_l3_gate()
-  {
-    bool want = false;
-    for (const auto & s : sinks_)
-      if (s->wants_image()) { want = true; break; }
-    tools::set_l3_image_wanted(want);
-  }
+    {
+      bool want = false;
+      for (const auto & s : sinks_)
+        if (s->wants_image()) { want = true; break; }
+      const bool was = tools::l3_image_wanted();
+      tools::set_l3_image_wanted(want);
+
+      // ⭐⭐⭐ W77：门控**由开转关**时，销毁 detector/yolo 自己开的窗口
+      //   （`detection` / `binary_img`）—— 它们**不归 `WindowSink` 管**，
+      //   没人销毁就会一直留在屏幕上（用户实测：按 1 后 `detection` 窗口没掉）。
+      //   `WindowSink` 自己的窗口由它的析构负责（W76）。
+      if (was && !want && !tools::l3_windows().empty()) {
+        for (const auto & n : tools::l3_windows()) {
+          try {
+            cv::destroyWindow(n);
+          } catch (const std::exception & e) {
+            tools::logger()->warn("[L3] 销毁窗口 '{}' 失败: {}", n, e.what());
+          }
+        }
+        cv::waitKey(1);   // OpenCV 的销毁是排队式的，要 pump 一次事件循环
+      }
+    }
 
   mutable std::shared_mutex mtx_;
   std::vector<std::shared_ptr<IDebugSink>> sinks_;

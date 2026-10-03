@@ -140,7 +140,7 @@ void print_effective_config(
       {"camera_config", "相机配置路径"},
       {"priority_mode", "优先级模式（缺省=同济行为）"},
       {"trajectory_impl", "弹道实现（缺省 ideal=同济）"},
-      {"yolo_name", "检测器"},
+      // ⚠️ `yolo_name` 在下面单独打（要带上"三个模型在不在"）
       {"auto_fire", "是否由自瞄控制射击"},
       {"judge_distance", "远近判据距离"},
       {"model_device", "推理设备"},
@@ -149,10 +149,31 @@ void print_effective_config(
       if (!y[k]) { detail::print_kv(os, k, "（未配置 → 用内置默认）", note); continue; }
       detail::print_kv(os, k, detail::yaml_scalar(y, k, "?"), note);
     }
+
+    // ⭐⭐⭐ W106：`yolo_name` + **三个检测器各自的可用性**
+    //   ⚠️ 为什么要单独打："没换过"不代表"不能用" —— v8/v11 的模型路径
+    //     通常**早就在 yaml 里配好了**，换 `yolo_name` 就能切（⭐ 不用重编）。
+    //   ⚠️ 这里**只报"yaml 里配了没有"**，不碰文件系统（真正的加载失败由启动日志报）。
+    detail::print_kv(os, "yolo_name",
+                     y["yolo_name"] ? detail::yaml_scalar(y, "yolo_name", "?")
+                                    : "（未配置 → yolov5）",
+                     "⭐ 运行期切换检测器（改这个键即可，不用重编）");
+    {
+      const std::pair<const char *, const char *> models[] = {
+        {"yolov5", "yolov5_model_path"},
+        {"yolov8", "yolov8_model_path"},
+        {"yolo11", "yolo11_model_path"}};
+      for (const auto & [nm, key] : models) {
+        const bool has = y[key] && !detail::yaml_scalar(y, key, "").empty();
+        detail::print_kv(os, std::string("  → ") + nm,
+                         has ? detail::yaml_scalar(y, key, "?") : "（yaml 未配路径）",
+                         has ? "✅ 可切换" : "⬜ 不可用");
+      }
+    }
   }
 
   // ⭐ 相机配置（多层合并后展平 —— 用 io::Camera 自己的解析逻辑保证一致）
-  detail::print_group(os, "③ 相机（三层合并：品牌默认 < 兵种相机配置 < 兵种 yaml 同名键）");
+  detail::print_group(os, "③ 相机（⭐ 两层合并：params/cameras/<品牌>.yaml < params/robots/<兵种>.yaml）");
   {
     const std::string cam_path = detail::yaml_scalar(y, "camera_config", "");
     YAML::Node cam;

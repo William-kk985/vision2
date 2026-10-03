@@ -2,6 +2,11 @@ add_library(tinympcstatic STATIC
     admm.cpp
     tiny_api.cpp
     codegen.cpp
+    # ⭐⭐⭐ W101（原 F2）：`rho_benchmark.cpp` **不能排除** ——
+    #   ⚠️ `admm.cpp`（核心求解器）**会调用**它里面的
+    #      `benchmark_rho_adaptation()` / `update_matrices_with_derivatives()`。
+    #   ⇒ 我第一版把它移出构建，链接直接报 undefined reference（**已验证**）。
+    #   ⇒ 改为**直接修它头文件里的未初始化成员**（见 rho_benchmark.hpp）。
     rho_benchmark.cpp
 )
 

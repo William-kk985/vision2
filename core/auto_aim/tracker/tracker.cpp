@@ -76,6 +76,9 @@ TrackerResult Tracker::track(
     r.dbg.armor_count = static_cast<int>(armors.size());
     r.dbg.priority_mode = static_cast<int>(priority_mode_);
     r.dbg.filtered_out = n_armors_before - static_cast<int>(armors.size());
+    // ⭐ W101（原 F8）：**Solver 的调试快照随 TrackerResult 一起带出**
+    //   （`solve()` 就在本函数内部被调 ⇒ 这里最清楚；原来外部要 `last_debug()` 去取）
+    r.solver_dbg = solver_.last_debug();
     // ⚠️ `invincible_count` / `focus_target_count` 由主循环填（它持有 ROS2 原始 id 列表）
     return r;
   };

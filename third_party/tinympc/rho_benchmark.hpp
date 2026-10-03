@@ -2,11 +2,25 @@
 #include <cstdint>
 #include "types.hpp"
 
+// ⭐⭐⭐ W101（原 F2）：**给成员加默认初始化**，消除未定义行为（UB）。
+//
+// ⚠️ 原来这四个成员**都没有初值**：
+//     struct RhoAdapter { tinytype rho_min; tinytype rho_max; bool clip; bool matrices_initialized; };
+//   而 `admm.cpp` 里 `solve()` 会 `if (!adapter->matrices_initialized) { ... }`
+//   —— ⚠️ **读的是未初始化内存**（可能是 `true`，于是跳过初始化矩阵那一步 ⇒ 后续算出垃圾）。
+//   C++ 标准：读未初始化的标量 = **UB**（不是"恰好为 0"）。
+//
+// ⭐ 为什么改 `third_party/`（破例，且只此一处）：
+//   · 这是 **TinyMPC 自带代码的 bug**，不是设计选择；
+//   · 我们的纪律是「不修改上游**行为**」—— 加**初值**不改变任何算法语义，
+//     只把"随机值"变成"确定的 0/false"（而 `matrices_initialized=false` 正是
+//     作者本意：**还没初始化**）。
+//   · 保守起见只动这一处，并在 CMakeLists / 提交里都记明。
 struct RhoAdapter {
-    tinytype rho_min;
-    tinytype rho_max;
-    bool clip;
-    bool matrices_initialized;
+    tinytype rho_min = 0;
+    tinytype rho_max = 0;
+    bool clip = false;
+    bool matrices_initialized = false;   // ⭐ 默认"未初始化"（作者本意）
     
     // Pre-allocated matrices for formatting
     tinyMatrix A_matrix;

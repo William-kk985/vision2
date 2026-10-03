@@ -52,7 +52,6 @@
 #include "utils/config/tongji_flags.hpp"   // ⭐ W100：tongji 拆槽位
 #include "utils/log/logger.hpp"
 #include "utils/math/math_tools.hpp"
-#include "utils/debug/plotter.hpp"
 #include "utils/debug/recorder.hpp"
 // ⭐ W16：Debug 数据面（W8 建好，这次接进主程序）
 #include "core/auto_aim/detector/det_stats.hpp"
@@ -207,7 +206,6 @@ int main(int argc, char * argv[])
   if (cli.get<bool>("rtprio")) elevate_priority();
 
   tools::Exiter exiter;
-  tools::Plotter plotter;
   // ⭐⭐⭐ 「源代码以同济为准」：本开关集中控制**硬编码在源码里**的偏差
   //   默认 true = 完全同济行为。yaml 里的优化开关（弹道/过滤器/优先级）另算。
     // ⭐⭐⭐ W100：`--tongji` 拆成独立槽位（原 B3/B4）——
@@ -469,7 +467,7 @@ int main(int argc, char * argv[])
         fd.tracker = trk.dbg;                  // ⭐ 一行替代原来的 6 处手写
         fd.tracker.t_track_us = expense.us("track");
         // ⭐⭐ W71：`sol_*` 四列（原来永远是 0）—— Solver 在 Tracker 内部被调用
-        fd.solver = tracker.solver().last_debug();
+        fd.solver = trk.solver_dbg;   // ⭐ W101（原 F8）：随 TrackerResult 带出
         // ⭐⭐ W70：填 `tgt_*`（原来 `fd.target.*` **从没被赋值** → CSV 里 13 列永远 0）
         //   EKF 状态布局（见 target.cpp）：x vx y vy z vz a w r l h
         if (!targets.empty()) {

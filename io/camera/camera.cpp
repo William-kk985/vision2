@@ -5,8 +5,16 @@
 #include <stdexcept>
 #include <vector>
 
-#include "drivers/hikrobot/hikrobot.hpp"
-#include "drivers/mindvision/mindvision.hpp"
+// ⭐⭐⭐ W101（原 F7）：**按需 include** —— 没装某厂商 SDK 时它的 `.cpp` 不参与编译，
+//   头文件也就不该被引用（否则 `#include` 先失败，比链接失败更难懂）。
+//   ⚠️ 宏 `HZMIR_HAS_XXX` 由 `drivers/CMakeLists.txt` **探测 SDK 后定义**。
+//   本文件是**装配点** ⇒ 在这里用 `#ifdef` 符合宏规范（允许的 4 处之一）。
+#ifdef HZMIR_HAS_HIKROBOT
+#  include "drivers/hikrobot/hikrobot.hpp"
+#endif
+#ifdef HZMIR_HAS_MINDVISION
+#  include "drivers/mindvision/mindvision.hpp"
+#endif
 #include "io/camera/video.hpp"   // ⭐ 录像回放
 #include "utils/log/logger.hpp"
 #include "utils/yaml/yaml.hpp"
@@ -42,6 +50,12 @@ struct MergedYaml
     return n ? n.as<T>() : fallback;
   }
 
+#ifdef HZMIR_HAS_HIKROBOT
+  // ⭐⭐⭐ W101（原 F7）：**只在有海康 SDK 时才需要它** ——
+  //   返回类型 `CameraParam` 定义在 `drivers/hikrobot/hikrobot.hpp`，
+  //   ⚠️ 缺 SDK 时该头不会被 include ⇒ 这里若不保护就是**编译错误**（实测踩到）。
+  //   ⭐ `camera_params`（float/enum/int 三组通用参数）**只有海康驱动实现**，
+  //     迈德威视/USB 相机不消费它。
   /// @brief 合并两组 `camera_params`（同名时【兵种】优先）
   std::vector<CameraParam> params() const
   {
@@ -71,6 +85,7 @@ struct MergedYaml
     }
     return out;
   }
+#endif  // HZMIR_HAS_HIKROBOT
 };
 }  // namespace
 
@@ -142,10 +157,22 @@ Camera::Camera(
   auto exposure_ms = y.read<double>("exposure_ms", 2.0);
 
   if (camera_name == "mindvision") {
+#ifdef HZMIR_HAS_MINDVISION
     auto gamma = y.read<double>("gamma", 0.6);
     auto vid_pid = y.read<std::string>("vid_pid", "");
     camera_ = std::make_unique<MindVision>(exposure_ms, gamma, vid_pid);
+#else
+    throw std::runtime_error(
+      "camera_name=mindvision，但**构建时没找到迈德威视 SDK** ⇒ 该驱动未被编译。\n"
+      "  怎么办：① 装 SDK 到 drivers/mindvision/{include,lib/<arch>}/ 后重新 cmake\n"
+      "          ② 或把 yaml 的 camera_name 改成 hikrobot / usbcamera\n"
+      "          ③ 只跑录像回放则用 --video=<路径>.avi（不需要相机）");
+#endif
   } else if (camera_name == "hikrobot") {
+    // ⭐⭐⭐ W101（原 F7）：**整块放进 `#ifdef`** —— 缺 SDK 时
+    //   `HikRobot` 类型、`CameraParam`、`y.params()` 都不存在，
+    //   ⚠️ 只保护 `make_unique` 那一行是不够的（实测：`CameraParam` 未声明）。
+#ifdef HZMIR_HAS_HIKROBOT
     auto gain = y.read<double>("gain", 16.0);
     auto vid_pid = y.read<std::string>("vid_pid", "");
     auto fps = y.read<double>("fps", 30.0);
@@ -156,6 +183,13 @@ Camera::Camera(
       tools::logger()->info("[Camera] camera_params 共 {} 项（相机专配 + 兵种覆盖）", extra.size());
 
     camera_ = std::make_unique<HikRobot>(exposure_ms, gain, vid_pid, fps, extra, dump_params);
+#else
+    throw std::runtime_error(
+      "camera_name=hikrobot，但**构建时没找到海康 MVS SDK** ⇒ 该驱动未被编译。\n"
+      "  怎么办：① 装 MVS 到 drivers/hikrobot/{include,lib/<arch>}/ 后重新 cmake\n"
+      "          ② 或把 yaml 的 camera_name 改成 usbcamera\n"
+      "          ③ 只跑录像回放则用 --video=<路径>.avi（不需要相机）");
+#endif
   } else {
     throw std::runtime_error(
       "Unknow camera_name: " + camera_name + "!  (支持: mindvision / hikrobot / video)");

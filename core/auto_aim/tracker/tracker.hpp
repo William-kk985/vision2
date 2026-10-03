@@ -8,6 +8,7 @@
 
 #include "core/types.hpp"
 #include "core/auto_aim/solver/solver.hpp"
+#include "core/auto_aim/solver/solver_debug.hpp"   // ⭐ W101
 #include "core/auto_aim/tracker/tracker_debug.hpp"   // ⭐ W98
 #include "core/auto_aim/target/target.hpp"
 #include "core/auto_aim/tracker/filter.hpp"
@@ -25,6 +26,16 @@ struct TrackerResult
 {
   std::list<Target> targets;
   TrackerDebug dbg;
+
+  // ⭐⭐⭐ W101（原 F8）：**顺手把 Solver 的调试快照也带出来**。
+  //
+  // ⚠️ 原来 `Solver::solve()` 是 `const`，把调试量存进 `mutable last_dbg_`，
+  //   外部靠 `tracker.solver().last_debug()` **主动去取** —— 那是**半个 Result 模式**
+  //   （数据是出来了，但要人记得取；忘了就静默为默认值）。
+  // ⭐ 而 `solve()` 是在 **`Tracker::track()` 内部**被调用的 ⇒ **Tracker 最清楚结果**
+  //   ⇒ 让它带出来，主循环一行 `fd.solver = trk.solver_dbg;`。
+  //   `SolverDebug` 是零依赖 POD，放这里不违反任何纪律。
+  SolverDebug solver_dbg;
 };
 
 class Tracker

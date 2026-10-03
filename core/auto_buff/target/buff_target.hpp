@@ -13,7 +13,6 @@
 #include "utils/ekf/extended_kalman_filter.hpp"
 #include "utils/log/logger.hpp"
 #include "utils/math/math_tools.hpp"
-#include "utils/debug/plotter.hpp"
 #include "utils/wheels/fit/ransac_sine_fitter.hpp"
 
 namespace auto_buff

@@ -282,7 +282,7 @@ int run_sentry(
       fd.tracker = trk.dbg;                  // ⭐ W98：一行替代手写
       fd.tracker.t_track_us = expense.us("track");
       // ⭐⭐ W71：`sol_*` 四列（原来永远是 0）
-      fd.solver = tracker.solver().last_debug();
+      fd.solver = trk.solver_dbg;   // ⭐ W101（原 F8）：随 TrackerResult 带出
       // ⭐⭐ W70：填 `tgt_*`（原来 `fd.target.*` 从没被赋值 → CSV 里 13 列永远 0）
       if (!targets.empty())
         auto_aim::fill_target_debug(fd.target, targets.front(), fd.solver.t_solve_us);

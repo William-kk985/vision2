@@ -7,7 +7,6 @@ add_library(hzmir_utils STATIC
   concurrency/exiter.cpp
   ekf/extended_kalman_filter.cpp
   debug/img_tools.cpp
-  debug/plotter.cpp
   debug/recorder.cpp
   debug/csv_sink.cpp
   debug/plotjuggler_sink.cpp

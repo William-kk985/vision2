@@ -9,7 +9,6 @@
 #include "utils/concurrency/exiter.hpp"
 #include "utils/log/logger.hpp"
 #include "utils/math/math_tools.hpp"
-#include "utils/debug/plotter.hpp"
 // ⭐ W8：Debug 数据面
 #include "core/debug.hpp"
 #include "utils/debug/csv_sink.hpp"
@@ -39,7 +38,6 @@ int main(int argc, char * argv[])
   }
 
   tools::Exiter exiter;
-  tools::Plotter plotter;                     // 旧路径（同济 plotter，无 timestamp）
 
   // ⭐ W8：新 Debug 数据面（SinkHub 可热插拔）
   tools::SinkHub hub;
@@ -62,37 +60,21 @@ int main(int argc, char * argv[])
     auto plan = planner.plan(target, 22);
     expense.end("plan");
 
-    nlohmann::json data;
-    data["t"] = tools::delta_time(std::chrono::steady_clock::now(), t0);
-
-    data["target_yaw"] = plan.target_yaw;
-    data["target_pitch"] = plan.target_pitch;
-
-    data["plan_yaw"] = plan.yaw;
-    data["plan_yaw_vel"] = plan.yaw_vel;
-    data["plan_yaw_acc"] = plan.yaw_acc;
-
-    data["plan_pitch"] = plan.pitch;
-    data["plan_pitch_vel"] = plan.pitch_vel;
-    data["plan_pitch_acc"] = plan.pitch_acc;
-
-    plotter.plot(data);   // 旧路径保留（对照）
+    // ⭐⭐⭐ W101（原 F6）：**这里原来是"新旧路径对照"** —— 旧路径是
+    //   `tools::Plotter().plot(json)`（同济的 plotter，无 timestamp、每帧建 socket、
+    //   且**绕过 SinkHub**）。⚠️ 对照的目的已经达到（新路径 `PlotJugglerSink` 胜出），
+    //   而旧 plotter **已删除** ⇒ 这段 json 组装 + 调用一并去掉。
+    //   ⭐ 新路径在下面：填 `FrameDebug` → `hub.on_frame(fd)` → 各 sink。
+    const auto t_frame_us =
+      static_cast<int64_t>(tools::delta_time(std::chrono::steady_clock::now(), t0) * 1e6);
 
     // ⭐ W8：填 FrameDebug（L0 耗时 + L1 快照，~ns 级成本）+ 发布
     auto_aim::FrameDebug fd;
     fd.frame_id = frame_id++;
-    fd.t_frame_us = static_cast<int64_t>(data["t"].get<double>() * 1e6);
+    fd.t_frame_us = t_frame_us;
+    // ⭐⭐ W98/W101：**路由映射收进 `Plan::fill_debug()`**（原来这里手写 9 行）
+    plan.fill_debug(fd.planner, fd.shooter, fd.controller);
     fd.planner.t_plan_us = expense.us("plan");
-    // ⭐ W8：现在 Plan 暴露了算法内部量
-    fd.planner.t_fly = plan.t_fly;
-    fd.planner.overlap_ratio = plan.overlap;
-    fd.planner.solver_iters = plan.yaw_iters;
-    fd.planner.acc_max = plan.acc_max;
-    fd.shooter.traj_err_at_fire = plan.traj_err;
-    fd.shooter.fire_thresh = plan.fire_thresh;
-    fd.shooter.should_fire = plan.fire;
-    fd.controller.cmd_yaw = plan.yaw;
-    fd.controller.cmd_pitch = plan.pitch;
     fd.tracker.filtered_out = 0;
     fd.tracker.priority_mode = 3;
     hub.on_frame(fd);

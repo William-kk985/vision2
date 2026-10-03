@@ -52,18 +52,27 @@
 
 `3` 把每帧的 **20 个字段**打成 JSON，**UDP 发到 `127.0.0.1:9870`**（`--pj=true` 可启动即开）。
 
-```bash
-# ① 装 PlotJuggler（本仓库实测可用的两条）
-sudo apt install ros-humble-plotjuggler-ros    # ⭐ 推荐：本项目就是 ROS 2 Humble（apt 里有现成包）
-sudo snap install plotjuggler                  # 或者用 snap（本机 snap 可用）
+⚠️ **不要装 `ros-humble-plotjuggler-ros`** —— 那是 **ROS 集成版**（rosbag/topic 插件），
+本项目**走 UDP，用不上它**，而且它会拉一堆 `-dev` 包、版本还旧（2.3.1）。
 
-# ② 打开 PlotJuggler → 选数据源
-#    "UDP Server"：
+```bash
+# ① 装 PlotJuggler —— 选一个（都【不依赖 ROS】）
+#   ⭐ 首选：官方 .deb（4.0.0，2026-09 发布；⭐ 不依赖 ROS）
+wget https://github.com/PlotJuggler/PlotJuggler/releases/download/4.0.0/plotjuggler4_4.0.0-1_amd64.deb
+sudo apt install ./plotjuggler4_4.0.0-1_amd64.deb
+#   或者 AppImage（不用装，双击/`chmod +x` 后直接跑）
+wget https://github.com/PlotJuggler/PlotJuggler/releases/download/4.0.0/PlotJuggler-4.0.0-x86_64.AppImage
+chmod +x PlotJuggler-4.0.0-x86_64.AppImage && ./PlotJuggler-4.0.0-x86_64.AppImage
+#   或者 snap（官方作者发布，但包较大 ~935 MB）
+sudo snap install plotjuggler
+
+# ② 打开 PlotJuggler → 选数据源 "UDP Server"：
 #      · IP           0.0.0.0
 #      · Port         9870          ← ⭐ 必须一致
 #      · Protocol     json
-#      · ⭐ 勾选 "use timestamp if available"，字段名填 **timestamp**
-#        （⚠️ 本项目发的字段名就是 `timestamp`；官方教程里的例子用 `ts`，别照抄）
+#      · ⭐ 勾选 "use timestamp if available"，字段名填 timestamp
+#        （⚠️ 本项目发的字段名就是 `timestamp`；官方教程的例子用 `ts`，别照抄）
+
 # ③ 跑程序，按 3（或 --pj=true）
 tools/scripts/run.sh infantry --pj=true
 ```

@@ -615,13 +615,14 @@ int main(int argc, char * argv[])
       cv::putText(
         overlay, cv::format("f%u %s", fd.frame_id, tracker.state().c_str()), {12, 40},
         cv::FONT_HERSHEY_SIMPLEX, 1.0, {0, 255, 255}, 2);
-      // ⭐⭐ W115：**分辨率对齐 `detection` 窗口**（它也缩到 0.5）——
-      //   ⚠️ 原来 `aim` 是全尺寸（如 1440×1080）、`detection` 是 0.5× ⇒ **两个窗口大小不一**，
-      //     而且**全尺寸下 3px 的线显得很细**（用户反馈"detection 更清晰"）。
-      //   ⭐ 现在两者都缩 0.5 ⇒ **窗口大小一致、线相对更粗、也更省内存**。
-      cv::Mat out_img;
-      cv::resize(overlay, out_img, {}, 0.5, 0.5);
-      hub.on_image("aim", out_img, fd.t_frame_us);
+      // ⭐⭐⭐ W116：**这里【不】resize** —— 缩放交给各个 sink 自己决定
+      //   ⚠️ W115 我在这里加了一句 `resize 0.5`，**和 `WindowSink` 自带的 `scale_=0.5` 叠加**
+      //     ⇒ 窗口里实际显示 **360×270**，再被 `WINDOW_NORMAL` 放大回去 ⇒ **插值 ⇒ 糊**。
+      //   ⭐ 分工：**发布端给全尺寸原图**，由 sink 各取所需：
+      //     · `WindowSink`：`scale_`（默认 0.5）⇒ 720×540，配 `WINDOW_AUTOSIZE` ⇒ **1:1 清晰**
+      //     · `ImageSink` ：存**全尺寸**（调参时能放大看细节）
+      //     · PlotJuggler / CSV：不涉及图
+      hub.on_image("aim", overlay, fd.t_frame_us);
     }
     hub.on_series("planner.t_fly", fd.frame_id, fd.planner.t_fly);
     hub.on_series("planner.overlap", fd.frame_id, fd.planner.overlap_ratio);

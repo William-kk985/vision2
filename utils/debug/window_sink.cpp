@@ -18,7 +18,13 @@ WindowSink::WindowSink(std::string window, double scale)
       "[WindowSink] 当前环境无显示（DISPLAY 未设置或 OpenCV 无 GUI 后端）→ 按键 1 不会开窗");
     return;
   }
-  cv::namedWindow(window_, cv::WINDOW_NORMAL);
+  // ⭐⭐⭐ W116：**`WINDOW_AUTOSIZE` 而不是 `WINDOW_NORMAL`**
+  //   ⚠️ `WINDOW_NORMAL` 允许任意缩放 ⇒ OpenCV 会用**线性插值**把图拉到窗口尺寸
+  //     ⇒ **糊**。实测：同分辨率下 `detection`（走 `imshow` 隐式 `AUTOSIZE`）
+  //     肉眼明显比 `aim` 清晰（用户反馈）。
+  //   ⭐ `AUTOSIZE` = **窗口尺寸跟着图走、1:1 像素**（和 `detection` 一致）。
+  //   ⚠️ 代价：窗口不能手动拖大 —— 但**调试要的是"像素级看清"，不是"能拖大"**。
+  cv::namedWindow(window_, cv::WINDOW_AUTOSIZE);
   opened_ = true;
   tools::logger()->info("[WindowSink] 窗口 '{}' 已开（scale={:.2f}）", window_, scale_);
 }

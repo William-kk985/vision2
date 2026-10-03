@@ -31,6 +31,15 @@
  * | 会不会让人误判 | ⚠️ **会**（以为功能坏了） | ✅ **不会** |
  * ⇒ 判据是：**关掉后是否会让用户误判"功能坏了"**。日志不会，功能开关会。
  *
+ * ## ⭐ 反查：别人一般会去哪里找你（W103 补）
+ * ```
+ *   core/debug.hpp            ← 【数据面】FrameDebug 聚合（⭐ 零宏，不是开关）
+ *   utils/log/debug_config.hpp ← ⭐⭐ **你在这里** —— 日志开关总控
+ *   utils/log/log_filter.hpp   ← 【运行期】--log-off / --log-only
+ *   utils/debug/debug_sink.hpp ← 【数据去向】SinkHub
+ * ```
+ * ⭐ 快速自查：跑 `--print-config`，第 ④ 节会列出**当前哪些 `LOG_*` 是开的**。
+ *
  * ## 怎么加一个新模块
  * 1. 下面「开关」段加一行 `#define HZMIR_LOG_你的模块`
  * 2. 在对应的 `#ifdef` 段加一对宏：

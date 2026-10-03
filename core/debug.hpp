@@ -23,6 +23,22 @@
  * ⚠️ 角色头是**纯数据**，只依赖 `<cstdint>`，**不 include 本文件**。
  * （W50 之前本文件注释里说"会形成循环依赖" —— **那是错的**，已纠正。）
  *
+ * ## ⚠️⚠️ 本文件【没有任何开关】—— 找开关请看别处（W103 补的指路牌）
+ *
+ * 名字里带 "debug" 的文件有好几个，**职责完全不同**，别找错：
+ * ```
+ * core/debug.hpp                    ← 你在这里：⭐【数据面】FrameDebug 的聚合（零宏）
+ * utils/log/debug_config.hpp        ← ⭐⭐【日志开关总控】`HZMIR_LOG_*` / `LOG_*`
+ * utils/log/log_filter.hpp          ← 【运行期】按模块过滤（--log-off / --log-only）
+ * utils/debug/debug_sink.hpp        ← 【数据去向】SinkHub + IDebugSink
+ * utils/debug/{csv,plotjuggler,window,image}_sink.hpp / recorder.hpp
+ *                                      ← 各个 sink 的实现（热插拔的那些）
+ * utils/config/{tongji_flags,stage_gate,print_config}.hpp
+ *                                      ← 【入口开关】--tongji / --stop-after / --print-config
+ * ```
+ * ⭐ **想开某个模块的细节日志** ⇒ 改 `utils/log/debug_config.hpp` 里的一行（`#define` 取消注释）后重编。
+ * ⭐ **想看当前生效的开关** ⇒ 跑 `--print-config`（第 ④ 节会列出哪些 `LOG_*` 开着）。
+ *
  * ## 设计原则（doc 09 §14.1）
  *   ⭐ **L0~L2 常驻、零宏**（~ns 级，永远开）；**只有 L3 昂贵通道用宏**
  *

@@ -374,7 +374,17 @@ int main(int argc, char * argv[])
     solver.set_R_gimbal2world(q);
     expense.end("perceive");
 
-    std::vector<cv::Rect> dbg_boxes;   // ⭐ W19：L3 overlay 用（只有真要图时才画）
+    // ⭐⭐⭐ W112：**L3 overlay 的绘制素材** —— 原来只存 `cv::Rect`（外接正矩形），
+    //   ⚠️ **丢了四点轮廓和标签** ⇒ `aim` 窗口比同济的 `detection` 窗口信息少。
+    //   ⭐ 现在存**四点 + 中心 + 标签**，对齐同济的 `draw_detections`。
+    //   ⚠️ **只在真要图时才填**（`hub.wants_image()`）⇒ 没人看图时**零开销**。
+    struct DbgArmor
+    {
+      std::vector<cv::Point2f> points;   // ⭐ 模型输出的四点（连起来是装甲板四边形）
+      cv::Point2f center;                // 标签画在哪
+      std::string label;                 // ⭐ "0.95 blue 3 big"
+    };
+    std::vector<DbgArmor> dbg_armors;
 
     // ⭐ W16：本帧调试快照
     auto_aim::FrameDebug fd;
@@ -414,7 +424,19 @@ int main(int argc, char * argv[])
         expense.end("detect");
         fd.detector = det.dbg;                               // ⭐ 一行，不可能忘
         fd.detector.t_infer_us = expense.us("detect");
-        for (const auto & a : armors) dbg_boxes.push_back(a.box);
+        // ⭐⭐ W112：**只在真要图时才填**（原来无条件填 `Rect`，白花）
+        if (hub.wants_image()) {
+          for (const auto & a : armors) {
+            const int ci = static_cast<int>(a.color), ni = static_cast<int>(a.name),
+                      ti = static_cast<int>(a.type);
+            dbg_armors.push_back(
+              {a.points, a.center,
+               cv::format("%.2f %s %s %s", a.confidence,
+                          (ci >= 0 && ci < (int)auto_aim::COLORS.size()) ? auto_aim::COLORS[ci].c_str() : "?",
+                          (ni >= 0 && ni < (int)auto_aim::ARMOR_NAMES.size()) ? auto_aim::ARMOR_NAMES[ni].c_str() : "?",
+                          (ti >= 0 && ti < (int)auto_aim::ARMOR_TYPES.size()) ? auto_aim::ARMOR_TYPES[ti].c_str() : "?")});
+          }
+        }
       }
 
       std::list<auto_aim::Target> targets;  // ⭐ 同上
@@ -528,7 +550,14 @@ int main(int argc, char * argv[])
     // ⭐ W19：L3 图像通道 —— **只有真有 L3 sink 时才构造 overlay**（否则零成本）
     if (hub.wants_image() && !img.empty()) {
       cv::Mat overlay = img.clone();
-      for (const auto & b : dbg_boxes) cv::rectangle(overlay, b, {0, 255, 0}, 2);
+      // ⭐⭐⭐ W112：**画四点轮廓 + 标签**（对齐同济 `detection` 窗口）
+      //   ⚠️ 原来画的是 `cv::rectangle(a.box)` = 四点的**外接正矩形**
+      //     ⇒ **装甲板有倾角时，正矩形比实际四边形"胖一圈"**，且完全没有标签。
+      //   ⭐ `draw_points` 内部是 `cv::drawContours` ⇒ **把四点连成闭合四边形**（可斜）。
+      for (const auto & d : dbg_armors) {
+        if (d.points.size() >= 2) tools::draw_points(overlay, d.points, {0, 255, 0}, 2);
+        tools::draw_text(overlay, d.label, d.center, {0, 255, 0}, 0.6, 1);
+      }
       cv::putText(
         overlay, cv::format("f%u %s", fd.frame_id, tracker.state().c_str()), {12, 40},
         cv::FONT_HERSHEY_SIMPLEX, 1.0, {0, 255, 255}, 2);

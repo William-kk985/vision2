@@ -68,7 +68,7 @@
 //       "objectness 通过 N → 输出 M（滤掉 not_armor/conf/type）"（每 30 帧一条）
 //   · `--print-config` / CSV 的 `det_obj_peak` + `det_score_thr`（⭐ 还能看趋势）
 // ⭐ 这个宏留给【真正的细节】（逐帧 anchor 分布等）—— 开了会**每帧刷屏**。
-#define HZMIR_LOG_YOLO            // ⭐ YOLO 逐帧细节（**每帧 2 行**）—— 开了能看到：
+// #define HZMIR_LOG_YOLO            // ⭐ YOLO 逐帧细节（**每帧 2 行**）—— 开了能看到：
 //   ① 纯推理耗时（`infer()` 那一行；⚠️ 跟 CSV 的 `det_t_infer_us` 不是一回事，
 //      那个是主循环 `Expense` 测的**整段 detect**）
 //   ② **两道门槛**：`obj {score_threshold_} → conf {min_confidence_}`（+ NMS 阈值）

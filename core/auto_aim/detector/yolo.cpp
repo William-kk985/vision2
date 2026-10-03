@@ -30,7 +30,7 @@ YOLO::YOLO(const std::string & config_path, bool debug)
   }
 }
 
-std::list<Armor> YOLO::detect(const cv::Mat & img, int frame_count)
+DetectorResult YOLO::detect(const cv::Mat & img, int frame_count)   // ⭐ W98
 {
   return yolo_->detect(img, frame_count);
 }

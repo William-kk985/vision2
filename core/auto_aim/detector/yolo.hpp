@@ -4,13 +4,15 @@
 #include <opencv2/opencv.hpp>
 
 #include "core/types.hpp"
+#include "core/auto_aim/detector/detector.hpp"   // ⭐ W98：DetectorResult
 
 namespace auto_aim
 {
 class YOLOBase
 {
 public:
-  virtual std::list<Armor> detect(const cv::Mat & img, int frame_count) = 0;
+  /// ⭐⭐ W98：返回 `DetectorResult`（结果 + 调试快照），见 `detector.hpp`
+  virtual DetectorResult detect(const cv::Mat & img, int frame_count) = 0;
 
   virtual std::list<Armor> postprocess(
     double scale, cv::Mat & output, const cv::Mat & bgr_img, int frame_count) = 0;
@@ -21,7 +23,7 @@ class YOLO
 public:
   YOLO(const std::string & config_path, bool debug = true);
 
-  std::list<Armor> detect(const cv::Mat & img, int frame_count = -1);
+  DetectorResult detect(const cv::Mat & img, int frame_count = -1);
 
   std::list<Armor> postprocess(
     double scale, cv::Mat & output, const cv::Mat & bgr_img, int frame_count);

@@ -343,15 +343,12 @@ int main(int argc, char * argv[])
     /// 自瞄
     if (mode.load() == io::GimbalMode::AUTO_AIM) {
       expense.begin("detect");
-      auto armors = yolo.detect(img);
+      // ⭐⭐ W98：**结果 + 调试快照一起返回** —— 不再"手写填 + 读全局旁路"
+      auto det = yolo.detect(img);
+      auto & armors = det.armors;
       expense.end("detect");
-      fd.detector.armor_count = static_cast<int>(armors.size());
-      // ⭐⭐ W64：**填上从没被赋值过的两列**（原来 CSV 里 det_best_conf / det_nms 永远是 0）
-      {
-        const auto & st = auto_aim::last_detect_stats();
-        fd.detector.nms_survivors = st.nms_survivors;      // NMS 存活数（过滤前）
-        fd.detector.best_confidence = st.best_conf;        // 最高置信度
-      }
+      fd.detector = det.dbg;                               // ⭐ 一行，不可能忘
+      fd.detector.t_infer_us = expense.us("detect");
       for (const auto & a : armors) dbg_boxes.push_back(a.box);
       fd.detector.t_infer_us = expense.us("detect");
 

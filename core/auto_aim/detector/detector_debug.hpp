@@ -35,6 +35,7 @@ struct DetectorDebug
   int armor_count = 0;
   double best_confidence = 0;
   int nms_survivors = 0;
+    int n_pass = 0;            ///< 过 objectness 门槛的候选数（YOLO 系填）
   int64_t t_infer_us = 0;   // ⭐ L0 本段耗时（学哈工程 DebugExpense）
 };
 

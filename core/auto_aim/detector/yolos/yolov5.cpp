@@ -65,11 +65,11 @@ YOLOV5::YOLOV5(const std::string & config_path, bool debug)
     model, device_, ov::hint::performance_mode(ov::hint::PerformanceMode::LATENCY));
 }
 
-std::list<Armor> YOLOV5::detect(const cv::Mat & raw_img, int frame_count)
+DetectorResult YOLOV5::detect(const cv::Mat & raw_img, int frame_count)
 {
   if (raw_img.empty()) {
     tools::logger()->warn("Empty img!, camera drop!");
-    return std::list<Armor>();
+    return DetectorResult{};   // ⭐ W98
   }
 
   cv::Mat bgr_img;
@@ -107,10 +107,10 @@ std::list<Armor> YOLOV5::detect(const cv::Mat & raw_img, int frame_count)
   auto output_shape = output_tensor.get_shape();
   cv::Mat output(output_shape[1], output_shape[2], CV_32F, output_tensor.data());
 
-  return parse(scale, output, raw_img, frame_count);
+    return parse(scale, output, raw_img, frame_count);   // ⭐ W98：parse 直接带出 dbg
 }
 
-std::list<Armor> YOLOV5::parse(
+DetectorResult YOLOV5::parse(
   double scale, cv::Mat & output, const cv::Mat & bgr_img, int frame_count)
 {
   // for each row: xywh + classess
@@ -251,18 +251,17 @@ std::list<Armor> YOLOV5::parse(
   }
   if (debug_) draw_detections(bgr_img, armors, frame_count);
 
-  // ⭐⭐ W64：把本帧统计带出去（main 会填进 `FrameDebug::detector`）
-  {
-    DetectStats st;
-    st.n_pass = n_pass;
-    st.nms_survivors = nms_survivors;
-    st.n_out = static_cast<int>(armors.size());
-    for (const auto & a : armors)
-      if (a.confidence > st.best_conf) st.best_conf = a.confidence;
-    set_last_detect_stats(st);
-  }
-
-  return armors;
+  // ⭐⭐ W98：统计**随返回值带出**（原来写进全局 `last_detect_stats()`，
+  //   主循环再回头读 —— 那条旁路正是 `best_confidence`/`nms_survivors`
+  //   长期为 0 的原因，W64 才补上。现在结构上不可能忘。）
+  DetectorResult r;
+  r.dbg.n_pass = n_pass;
+  r.dbg.nms_survivors = nms_survivors;
+  r.dbg.armor_count = static_cast<int>(armors.size());
+  for (const auto & a : armors)
+    if (a.confidence > r.dbg.best_confidence) r.dbg.best_confidence = a.confidence;
+  r.armors = std::move(armors);
+  return r;
 }
 
 bool YOLOV5::check_name(const Armor & armor) const
@@ -341,7 +340,7 @@ double YOLOV5::sigmoid(double x)
 std::list<Armor> YOLOV5::postprocess(
   double scale, cv::Mat & output, const cv::Mat & bgr_img, int frame_count)
 {
-  return parse(scale, output, bgr_img, frame_count);
+  return parse(scale, output, bgr_img, frame_count).armors;   // ⭐ W98：postprocess 只关心结果
 }
 
 }  // namespace auto_aim

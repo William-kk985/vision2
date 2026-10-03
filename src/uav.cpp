@@ -180,7 +180,8 @@ int run_uav(io::CameraBase & camera, Board & cboard, const std::string & config_
       const Eigen::Vector3d ypr = tools::eulers(solver.R_gimbal2world(), 2, 1, 0);
 
       expense.begin("detect");
-      auto armors = detector.detect(img);
+      auto det = detector.detect(img);        // ⭐⭐ W98：结果 + dbg 一起返回
+      auto & armors = det.armors;
       expense.end("detect");
       expense.begin("track");
       auto targets = tracker.track(armors, t);
@@ -188,14 +189,7 @@ int run_uav(io::CameraBase & camera, Board & cboard, const std::string & config_
 
       command = aimer.aim(targets, t, cboard.bullet_speed);
       command.shoot = shooter.shoot(command, aimer, targets, ypr);
-
-      fd.detector.armor_count = static_cast<int>(armors.size());
-      // ⭐⭐ W64：**填上从没被赋值过的两列**（原来 CSV 里 det_best_conf / det_nms 永远是 0）
-      {
-        const auto & st = auto_aim::last_detect_stats();
-        fd.detector.nms_survivors = st.nms_survivors;      // NMS 存活数（过滤前）
-        fd.detector.best_confidence = st.best_conf;        // 最高置信度
-      }
+      fd.detector = det.dbg;                               // ⭐ W98：一行，不可能忘
       fd.detector.t_infer_us = expense.us("detect");
       fd.tracker.t_track_us = expense.us("track");
       // ⭐⭐ W71：`sol_*` 四列（原来永远是 0）

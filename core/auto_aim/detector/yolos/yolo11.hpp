@@ -18,7 +18,7 @@ class YOLO11 : public YOLOBase
 public:
   YOLO11(const std::string & config_path, bool debug);
 
-  std::list<Armor> detect(const cv::Mat & bgr_img, int frame_count) override;
+  DetectorResult detect(const cv::Mat & bgr_img, int frame_count) override;   // ⭐ W98
 
   std::list<Armor> postprocess(
     double scale, cv::Mat & output, const cv::Mat & bgr_img, int frame_count) override;
@@ -51,8 +51,7 @@ private:
   bool check_type(const Armor & armor) const;
 
   cv::Point2f get_center_norm(const cv::Mat & bgr_img, const cv::Point2f & center) const;
-
-  std::list<Armor> parse(double scale, cv::Mat & output, const cv::Mat & bgr_img, int frame_count);
+  DetectorResult parse(double scale, cv::Mat & output, const cv::Mat & bgr_img, int frame_count);   // ⭐ W98
 
   void save(const Armor & armor) const;
   void draw_detections(const cv::Mat & img, const std::list<Armor> & armors, int frame_count) const;

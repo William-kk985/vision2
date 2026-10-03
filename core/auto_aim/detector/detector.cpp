@@ -31,7 +31,7 @@ Detector::Detector(const std::string & config_path, bool debug)
   std::filesystem::create_directory(save_path_);
 }
 
-std::list<Armor> Detector::detect(const cv::Mat & bgr_img, int frame_count)
+DetectorResult Detector::detect(const cv::Mat & bgr_img, int frame_count)
 {
   // 彩色图转灰度图
   cv::Mat gray_img;
@@ -124,7 +124,12 @@ std::list<Armor> Detector::detect(const cv::Mat & bgr_img, int frame_count)
 
   if (debug_) show_result(binary_img, bgr_img, lightbars, armors, frame_count);
 
-  return armors;
+  // ⭐⭐ W98：结果 + 调试快照一起返回（传统检测器只填 armor_count；
+  //   `best_confidence` / `nms_survivors` / `n_pass` 是 YOLO 系专有，这里保持 0）
+  DetectorResult r;
+  r.dbg.armor_count = static_cast<int>(armors.size());
+  r.armors = std::move(armors);
+  return r;
 }
 
 bool Detector::detect(Armor & armor, const cv::Mat & bgr_img)

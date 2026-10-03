@@ -8,16 +8,38 @@
 
 #include "core/types.hpp"
 #include "core/auto_aim/classifier/classifier.hpp"
+#include "core/auto_aim/detector/detector_debug.hpp"
 
 namespace auto_aim
 {
+
+/// ⭐⭐ W98：`detect()` 的返回值 —— **识别结果 + 调试快照一起返回**。
+///
+/// ## 为什么（8 个角色 debug 头里都写着的"下一步可做"）
+/// 原来调试数据的流法是「角色算完 → 主循环手工从各处取值填 `FrameDebug`」：
+/// ```
+/// auto armors = yolo.detect(img);
+/// fd.detector.armor_count = armors.size();          // ⚠️ 手写
+/// const auto & st = auto_aim::last_detect_stats();  // ⚠️ 还要读一个全局旁路
+/// fd.detector.nms_survivors = st.nms_survivors;
+/// ```
+/// ⇒ 实测后果：**`best_confidence` / `nms_survivors` 从未被赋值**（W64），
+///   `fd.target.*` 13 列永远是 0（W70）—— 每修一次要改 **4 个主循环**。
+///
+/// 现在：**角色在返回时把 dbg 一起带出来** ⇒ 主循环一行 `fd.detector = r.dbg;`，
+/// **结构上不可能忘填**（不填就编译不过）。
+struct DetectorResult
+{
+  std::list<Armor> armors;
+  DetectorDebug dbg;
+};
 
 class Detector
 {
 public:
   Detector(const std::string & config_path, bool debug = true);
 
-  std::list<Armor> detect(const cv::Mat & bgr_img, int frame_count = -1);
+  DetectorResult detect(const cv::Mat & bgr_img, int frame_count = -1);
 
   bool detect(Armor & armor, const cv::Mat & bgr_img);
 

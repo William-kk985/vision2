@@ -1,6 +1,6 @@
 /**
  * @file core/auto_aim/detector/det_stats.hpp
- * @brief ⭐⭐ **检测统计日志的开关**（W63）
+ * @brief ⭐ **检测统计日志的开关**（W63；W98 剥离了统计本体）
  *
  * ## 为什么需要
  * W62 给 YOLO 加了「逐帧候选 → 各步过滤」统计（非常好用 —— 实测直接区分出了
@@ -12,8 +12,24 @@
  * |---|---|
  * | ⭐ **`--det-stats=false`** | **硬关**（不受日志级别影响） |
  * | **日志级别** | 统计走 `debug` 级 → `HZMIR_LOG_LEVEL=info` 或按 `d` 循环即可静音 |
+ * | ⭐ **`--log-off=yolov5`** | 按模块静音（W95，运行期热键 `n` 也可） |
  *
  * ⭐ 默认 **开**（`debug` 级别下可见）—— 因为它对调试**很有价值**。
+ *
+ * ## ⚠️ W98 的变更：统计本体已移出本文件
+ * 原来这里还有个**全局旁路** `DetectStats` + `set_last_detect_stats()` /
+ * `last_detect_stats()`：
+ * ```
+ * // ❌ 旧：YOLO 写全局 → 主循环回头读
+ * set_last_detect_stats(st);                    // YOLO 内部
+ * const auto & st = last_detect_stats();        // 主循环
+ * fd.detector.nms_survivors = st.nms_survivors;
+ * ```
+ * ⚠️ 这条旁路正是 **`best_confidence` / `nms_survivors` 长期为 0**（W64 事故）的温床 ——
+ *   它不在类型系统里，忘了填**编译器不会报错**。
+ *
+ * ⇒ 现在统计**随 `DetectorResult::dbg` 一起返回**（见 `detector_debug.hpp`），
+ *   本文件只保留「要不要打这些日志」这一个开关。
  */
 #ifndef HZMIR_CORE_AUTO_AIM_DETECTOR_DET_STATS_HPP
 #define HZMIR_CORE_AUTO_AIM_DETECTOR_DET_STATS_HPP
@@ -44,45 +60,6 @@ inline bool det_stats_enabled() noexcept
   return detail::det_stats_flag().load(std::memory_order_acquire);
 }
 
-/// @brief ⭐⭐ 一帧的检测统计（供 `frame_debug` 填 CSV）
-///
-/// ## 为什么需要它（W64）
-/// `DetectorDebug::best_confidence` 和 `nms_survivors` **两者都从没被赋值过** →
-/// ⚠️ CSV 里 `det_best_conf` 和 `det_nms` **两列永远是 0**，误导分析。
-/// （`grep -rn nms_survivors` 只命中 test / csv_sink / 定义，**src 里零赋值**）
-///
-/// ⭐ 这些数只在 **YOLO 内部**（`detect()`）才知道：
-/// `n_pass` = objectness 通过的候选数、`nms_survivors` = NMS 存活数、`n_out` = 最终输出。
-/// ⇒ 用一个轻量全局通道带出来，主程序再填进 `FrameDebug`。
-struct DetectStats
-{
-  int n_pass = 0;         ///< objectness 通过后的候选数（"像装甲板"的）
-  int nms_survivors = 0;  ///< NMS 存活数（过滤前）
-  int n_out = 0;          ///< 最终输出（过 check_name/check_type 后）
-  double best_conf = 0;   ///< 最高置信度
-};
-
-namespace detail
-{
-inline DetectStats & last_stats_slot()
-{
-  static DetectStats st;
-  return st;
-}
-}  // namespace detail
-
-/// @brief 由 YOLO 在 `detect()` 末尾调用
-inline void set_last_detect_stats(const DetectStats & st) noexcept
-{
-  detail::last_stats_slot() = st;
-}
-
-/// @brief 主程序读取（填 `fd.detector.*`）
-inline const DetectStats & last_detect_stats() noexcept
-{
-  return detail::last_stats_slot();
-}
-
 }  // namespace auto_aim
 
-#endif  // HZMIR_CORE_AUTO_MAIM_DETECTOR_DET_STATS_HPP
+#endif  // HZMIR_CORE_AUTO_AIM_DETECTOR_DET_STATS_HPP

@@ -204,7 +204,8 @@ int run_sentry(
 
     if (cboard.mode == io::Mode::auto_aim) {
       expense.begin("detect");
-      auto armors = yolo.detect(img);
+      auto det = yolo.detect(img);            // ⭐⭐ W98：结果 + dbg 一起返回
+      auto & armors = det.armors;
       expense.end("detect");
 
       // ⭐⭐ 4 项横切能力（W7 已实现，**默认关闭 = 同济行为**）
@@ -257,13 +258,7 @@ int run_sentry(
       ros2->publish(auto_aim::target_info_for_nav(armors, targets));
 #endif
 
-      fd.detector.armor_count = static_cast<int>(armors.size());
-      // ⭐⭐ W64：**填上从没被赋值过的两列**（原来 CSV 里 det_best_conf / det_nms 永远是 0）
-      {
-        const auto & st = auto_aim::last_detect_stats();
-        fd.detector.nms_survivors = st.nms_survivors;      // NMS 存活数（过滤前）
-        fd.detector.best_confidence = st.best_conf;        // 最高置信度
-      }
+      fd.detector = det.dbg;                               // ⭐ 一行，不可能忘
       fd.detector.t_infer_us = expense.us("detect");
       fd.tracker.armor_count = static_cast<int>(armors.size());
       fd.tracker.priority_mode = static_cast<int>(tracker.priority_mode());

@@ -32,7 +32,6 @@ add_library(hzmir_auto_aim STATIC
   # ── 开火器 ──
   shooter/shooter.cpp
   # ── 控制器 ──
-  controller/gimbal_ctrl.cpp
 )
 
 target_link_libraries(hzmir_auto_aim PUBLIC

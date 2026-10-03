@@ -60,12 +60,14 @@ struct GimbalState
 /// @brief 下位机统一接口
 /// W119: log the FIRST control command -- confirm the "auto-aim -> MCU" link is alive.
 ///
-/// WHY HERE (not `Controller::to_command()`):
-///   `grep -rn "to_command" core/ src/` shows only the definition + declaration
-///   => `Controller::to_command()` is DEAD CODE: all four main loops call
-///      `board->send(plan.control, plan.fire, ...)` directly, bypassing Controller,
-///      so its deadband/hysteresis logic never takes effect.
-///   Putting it at the board layer covers all four robots + all board impls.
+/// WHY HERE (and not in a "Controller" layer):
+///   W120 deleted `core/auto_aim/controller/{controller.hpp,gimbal_ctrl.cpp}` --
+///   its `Controller::to_command()` was DEAD CODE (zero call sites; the four main
+///   loops call `board->send(...)` directly, exactly like upstream Tongji's
+///   `gimbal.send(...)`). Keeping an unused abstraction layering in the way of
+///   "algorithms follow Tongji" was misleading: reading it suggested a deadband
+///   existed when it did not. `controller_debug.hpp` is KEPT (debug fields).
+///   Putting this log at the board layer covers all four robots + all board impls.
 ///
 /// WHY THIS LOG: neither `Controller` nor `board->send()` had ANY log, so when the
 ///   gimbal does not move you cannot tell whether (1) send was never reached,

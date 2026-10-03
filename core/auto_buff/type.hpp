@@ -1,6 +1,7 @@
 #ifndef BUFF__TYPE_HPP
 #define BUFF__TYPE_HPP
 
+#include "core/auto_buff/buff_debug.hpp"   // ⭐ W98
 #include <algorithm>
 #include <deque>
 #include <eigen3/Eigen/Dense>  // 必须在opencv2/core/eigen.hpp上面
@@ -10,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "core/auto_buff/buff_debug.hpp"   // ⭐ W98
 #include "utils/math/math_tools.hpp"
 namespace auto_buff
 {
@@ -39,6 +41,13 @@ public:
 class PowerRune
 {
 public:
+  /// ⭐⭐ W98：把本 PowerRune 的调试量填进 `BuffDebug`
+  void fill_debug(auto_aim::BuffDebug & dbg) const
+  {
+    dbg.fanblade_count = static_cast<int>(fanblades.size());
+    dbg.solved = true;   // 检测到 = 解出来了（`spd` 由 Target 那侧覆盖）
+  }
+
   cv::Point2f r_center;
   std::vector<FanBlade> fanblades;  // 按target开始顺时针
 

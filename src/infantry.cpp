@@ -390,36 +390,28 @@ int main(int argc, char * argv[])
       buff_solver.solve(power_runes);
       expense.end("buff_solve");
 
-      fd.buff.rune_type = (mode.load() == io::GimbalMode::SMALL_BUFF) ? 0 : 1;
-      fd.buff.fanblade_count =
-        power_runes ? static_cast<int>(power_runes->fanblades.size()) : 0;
-      fd.buff.solved = power_runes.has_value();
+      // ⭐ W98：rune_type/fanblade_count/solved 由 helper 填
+
+      if (power_runes) power_runes->fill_debug(fd.buff);
 
       auto_aim::Plan buff_plan;
       if (mode.load() == io::GimbalMode::SMALL_BUFF) {
         buff_small_target.get_target(power_runes, t);
-        fd.buff.spd = buff_small_target.spd;
-        fd.buff.solved = !buff_small_target.is_unsolve();
+        buff_small_target.fill_debug(fd.buff);   // ⭐ W98：spd + solved
         auto target_copy = buff_small_target;
         buff_plan = buff_aimer.mpc_aim(target_copy, t, gs, true);
       } else if (mode.load() == io::GimbalMode::BIG_BUFF) {
         buff_big_target.get_target(power_runes, t);
-        fd.buff.spd = buff_big_target.spd;
-        fd.buff.solved = !buff_big_target.is_unsolve();
+        buff_big_target.fill_debug(fd.buff);   // ⭐ W98：spd + solved
         auto target_copy = buff_big_target;
         buff_plan = buff_aimer.mpc_aim(target_copy, t, gs, true);
       }
       fd.buff.t_us = std::chrono::duration_cast<std::chrono::microseconds>(
                        std::chrono::steady_clock::now() - tb0).count();
 
-      // 打符的 Plan 也是 auto_aim::Plan → 同样填 controller
-      fd.controller.cmd_yaw = buff_plan.yaw;
-      fd.controller.cmd_pitch = buff_plan.pitch;
-      fd.controller.control = buff_plan.control;
-      fd.controller.shoot = buff_plan.fire;
-      fd.planner.t_fly = buff_plan.t_fly;
-      fd.shooter.traj_err_at_fire = buff_plan.traj_err;
-      fd.shooter.should_fire = buff_plan.fire;
+      // ⭐ W98：打符的 Plan 也是 auto_aim::Plan → 复用同一个路由
+
+      buff_plan.fill_debug(fd.planner, fd.shooter, fd.controller);
       board->send(
         buff_plan.control, buff_plan.fire, buff_plan.yaw, buff_plan.yaw_vel, buff_plan.yaw_acc,
         buff_plan.pitch, buff_plan.pitch_vel, buff_plan.pitch_acc);

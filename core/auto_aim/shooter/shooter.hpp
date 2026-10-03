@@ -5,6 +5,7 @@
 
 #include "core/types.hpp"
 #include "core/auto_aim/planner/legacy.hpp"
+#include "core/auto_aim/shooter/shooter_debug.hpp"   // ⭐ W98
 
 namespace auto_aim
 {
@@ -13,23 +14,21 @@ class Shooter
 public:
   Shooter(const std::string & config_path);
 
-  bool shoot(
+  /// ⭐⭐ W98：返回 `ShootResult`（是否开火 + 调试快照）
+  ///
+  /// ## 从"访问器"到"返回值"
+  /// W72 已经加了 `Decision` + `last_decision()` 访问器 —— 那是**半个** Result 模式：
+  /// 数据是带出来了，但**要主循环主动去取** ⚠️（忘了取就静默为默认值）。
+  /// ⇒ 现在 `shoot()` 直接**返回**它，与 Detector/Tracker/Aimer 一致。
+  struct ShootResult
+  {
+    bool fire = false;
+    ShooterDebug dbg;
+  };
+  ShootResult shoot(
     const io::Command & command, const auto_aim::Aimer & aimer,
     const std::list<auto_aim::Target> & targets, const Eigen::Vector3d & gimbal_pos);
 
-  /// ⭐⭐ W72：**上一次 `shoot()` 的判据快照** —— 解决 `sht_blocked_*` 永远是 0
-  ///   原来 `shoot()` 只返回 bool，**外部完全不知道"为什么不开火"**。
-  struct Decision
-  {
-    bool fire = false;
-    bool blocked_by_invincible = false;  ///< ⚠️ 无敌在 Tracker 的 filter 层，这里是**透传**的标记
-    bool blocked_by_filter = false;      ///< ⭐ 判据没过（command 突变 / 云台没跟上 / 无瞄点）
-    bool blocked_by_no_target = false;   ///< 没目标
-    bool blocked_by_auto_fire_off = false;
-    bool blocked_by_no_control = false;
-    double tolerance = 0;                ///< 本次用的容差
-  };
-  const Decision & last_decision() const { return last_decision_; }
 
 private:
   io::Command last_command_;
@@ -37,7 +36,6 @@ private:
   double first_tolerance_;
   double second_tolerance_;
   bool auto_fire_;
-  Decision last_decision_;   // ⭐ W72
 };
 }  // namespace auto_aim
 

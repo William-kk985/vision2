@@ -37,6 +37,17 @@ struct ShooterDebug
   bool blocked_by_invincible = false;   // ⭐ W7
   bool blocked_by_filter = false;       // ⭐ W7
   int64_t t_since_last_fire_us = 0;
+
+  // ⭐⭐ W98：从 `Shooter::Decision` 并过来的字段。
+  //   原来 `shoot()` 只返回 `bool`，W72 额外加了 `Decision` + `last_decision()` 访问器
+  //   —— ⚠️ 那是**半个** Result 模式（数据带出来了，但要主循环主动去取，忘了就静默）。
+  //   现在 `shoot()` 直接返回本结构，`Decision` 已删。
+  //   ⚠️ 另注：这四个字段**只有 `uav` 走 `Shooter` 时才会被填**；
+  //      infantry/hero/sentry 走 `Plan::fire`（MPC 自带判据），这些保持 0。
+  bool blocked_by_no_target = false;
+  bool blocked_by_auto_fire_off = false;
+  bool blocked_by_no_control = false;
+  double tolerance = 0;                 ///< 本次用的开火容差
 };
 
 }  // namespace auto_aim

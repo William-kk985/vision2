@@ -270,13 +270,18 @@ int run_sentry(
       if (!targets.empty())
         auto_aim::fill_target_debug(fd.target, targets.front(), fd.solver.t_solve_us);
       fd.controller = aim_r.dbg;             // ⭐ W98：一行替代 4 处手写
+      // ⭐⭐⭐ W98 修复（**原有 bug**）：`t_frame_us` 原来在循环【末尾】才赋值，
+      //   而 `hub.on_frame(fd)` 在它**之前** —— ⚠️ 于是 sink 看到的 `t_frame_us` **恒为 0**
+      //   （实测：sentry 的 CSV `t_frame_us` 列 **0/687**；infantry/hero/uav 都是 687/687）。
+      //   ⚠️ 注意必须放在**这里**（detect/track 都已 `expense.end` 之后）——
+      //      若提到 `if (auto_aim)` 之前，`expense.us("detect"/"track")` 会读到**上一帧**的值。
+      fd.t_frame_us = expense.us("perceive") + expense.us("detect") + expense.us("track");
       hub.on_frame(fd);
     } else {
       cboard.send({false, false, 0, 0});
     }
 
     // ⭐ 帧总耗时 = 各正交段之和（budget_table 的假设）
-    fd.t_frame_us = expense.us("perceive") + expense.us("detect") + expense.us("track");
     expense.next_frame();
   }
 

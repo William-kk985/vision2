@@ -192,7 +192,9 @@ int run_uav(io::CameraBase & camera, Board & cboard, const std::string & config_
       auto aim_r = aimer.aim(targets, t, cboard.bullet_speed);   // ⭐ W98
       command = aim_r.command;
       aim_dbg = aim_r.dbg;
-      command.shoot = shooter.shoot(command, aimer, targets, ypr);
+      auto sht = shooter.shoot(command, aimer, targets, ypr);   // ⭐ W98
+      command.shoot = sht.fire;
+      fd.shooter = sht.dbg;        // ⭐ W98：uav 原来【完全没填】fd.shooter（全是 0）
       fd.detector = det.dbg;                               // ⭐ W98：一行，不可能忘
       fd.detector.t_infer_us = expense.us("detect");
       fd.tracker = trk.dbg;                  // ⭐ W98：一行替代手写
@@ -218,14 +220,12 @@ int run_uav(io::CameraBase & camera, Board & cboard, const std::string & config_
 
       if (mode == io::Mode::small_buff) {
         buff_small_target.get_target(power_runes, t);
-        fd.buff.spd = buff_small_target.spd;
-        fd.buff.solved = !buff_small_target.is_unsolve();
+        buff_small_target.fill_debug(fd.buff);   // ⭐ W98：spd + solved
         auto target_copy = buff_small_target;
         command = buff_aimer.aim(target_copy, t, cboard.bullet_speed, true);
       } else {
         buff_big_target.get_target(power_runes, t);
-        fd.buff.spd = buff_big_target.spd;
-        fd.buff.solved = !buff_big_target.is_unsolve();
+        buff_big_target.fill_debug(fd.buff);   // ⭐ W98：spd + solved
         auto target_copy = buff_big_target;
         command = buff_aimer.aim(target_copy, t, cboard.bullet_speed, true);
       }

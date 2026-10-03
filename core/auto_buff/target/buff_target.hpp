@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "core/auto_buff/detector/detector.hpp"
+#include "core/auto_buff/buff_debug.hpp"   // ⭐ W98
 #include "core/auto_buff/type.hpp"
 #include "utils/ekf/extended_kalman_filter.hpp"
 #include "utils/log/logger.hpp"
@@ -43,6 +44,15 @@ public:
   Eigen::Vector3d point_buff2world(const Eigen::Vector3d & point_in_buff) const;
 
   bool is_unsolve() const;
+
+  /// ⭐⭐ W98：把本目标的调试量填进 `BuffDebug`（主循环不再手写 `spd` / `solved`）
+  /// ⚠️ 只填**目标自身知道的**（spd / solved）；`rune_type` / `fanblade_count` /
+  ///   `t_us` 由 `PowerRune` 和主循环补。
+  void fill_debug(auto_aim::BuffDebug & dbg) const
+  {
+    dbg.spd = spd;
+    dbg.solved = !is_unsolve();
+  }
 
   Eigen::VectorXd ekf_x() const;
 

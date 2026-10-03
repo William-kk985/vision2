@@ -232,6 +232,44 @@ tools/scripts/run.sh infantry --strict-board                    # 没下位机�
 ⚠️ **虚拟下位机的限制**：IMU 姿态恒为单位四元数、弹速取 yaml 配置值
 ⇒ **EKF 的 yaw/ω 预测、弹道误差、命中判定都不可信**；但**检测/跟踪/解算/规划的内部量可以照常看**。
 
+#### ⭐⭐ 录制-回放离线调参（`tune.sh`）
+
+⭐ **录一次，反复回放调参** —— 不用每次改参数都上真机：
+
+```bash
+# ① 上真机录一段（20 秒）
+tools/scripts/tune.sh record infantry --name=spin_test --secs=20
+
+# ② 之后【反复】回放调参（核心价值）
+tools/scripts/tune.sh replay spin_test --tongji=false
+tools/scripts/tune.sh replay spin_test --nis-thresh=chi2
+tools/scripts/tune.sh replay spin_test --stop-after=detect    # 只看纯检测率
+
+# ③ 对比两次
+CSV_PREFIX=output/csv/base  tools/scripts/tune.sh replay spin_test >/dev/null
+CSV_PREFIX=output/csv/tuned tools/scripts/tune.sh replay spin_test --tongji=false >/dev/null
+tools/scripts/tune.sh compare base tuned
+```
+
+**其他子命令**：
+| 命令 | 作用 |
+|---|---|
+| `list` | 列出已录的段（名字/大小/位姿行数） |
+| `analyze <名字>` | 找（或生成）CSV 并出报告 |
+| `clean --days=7` | 清理旧录制（⭐ **.avi + .txt 整组删，不留孤儿**） |
+
+⭐ **环境变量**：`ROBOT=hero`（换兵种）· `CSV_PREFIX=xxx`（CSV 前缀）
+
+⭐ **`compare` 输出示例**（计数型看非零帧占比，数值型看均值）：
+```
+  指标                            base         tuned            变化
+  det_armor_count              75.7%         75.7%         +0.0pp
+  det_best_conf                0.681         0.681         +0.0%
+  t_frame_us               10403.689     10930.818         +5.1%   ← ⭐ 一眼看出变慢
+```
+
+---
+
 #### ⭐⭐⭐ 日志太吵？—— **编译期开关**（推荐）
 
 ⭐ **所有细节日志的开关都在一个文件**：`utils/log/debug_config.hpp`

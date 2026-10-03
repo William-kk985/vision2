@@ -57,6 +57,7 @@
 #include "utils/debug/plotjuggler_sink.hpp"
 #include "utils/debug/recorder.hpp"
 #include "utils/log/log_filter.hpp"
+#include "utils/config/stage_gate.hpp"   // ⭐ W100
 #include "utils/config/print_config.hpp"   // ⭐ W100
 #include "utils/config/tongji_flags.hpp"   // ⭐ W100：tongji 拆槽位
 #include "utils/log/logger.hpp"
@@ -83,6 +84,7 @@ const std::string keys =
   "{shoot-mode     | 2 | ⭐ 哨兵枪口：0=left 1=right 2=both}"
   "{csv            | | ⭐ Debug CSV 输出前缀}"
   "{record         | false | ⭐⭐ 录像到 output/video/（默认**不录**；录会占一个核做 MJPG 编码）}"
+  "{stop-after     | | ⭐⭐ 算法独立测试：跑到该阶段就停（perceive/detect/track/buff-detect/buff-solve/plan；空=全跑）}"
   "{pj             | false | ⭐ 是否发 PlotJuggler UDP}"
   "{pj-host        | 127.0.0.1 | ⭐ PlotJuggler 目标 IP（跨机器时填对方 IP）}"
   "{pj-port        | 9870 | ⭐ PlotJuggler 目标端口}"
@@ -137,7 +139,8 @@ int run_sentry(
   io::CameraBase & camera, Board & cboard, const auto_aim::Color /*enemy_color*/,
   const std::string & config_path, const std::string & csv_prefix, bool verbose_hotkeys,
   bool record, bool pj = false,
-  const std::string & pj_host = "127.0.0.1", uint16_t pj_port = 9870)
+  const std::string & pj_host = "127.0.0.1", uint16_t pj_port = 9870,
+  tools::Stage stop_after = tools::Stage::Plan)   // ⭐ W100：阶段门（A2）
 {
   auto_aim::YOLO yolo(config_path, true);
   auto_aim::Solver solver(config_path);
@@ -208,8 +211,10 @@ int run_sentry(
     fd.t_perceive_us = expense.us("perceive");
 
     if (cboard.mode == io::Mode::auto_aim) {
+      // ⭐⭐ W100（原 A2）：阶段门 —— `--stop-after=perceive` 时**不检测**
+      const bool do_detect = tools::stage_ok(stop_after, tools::Stage::Detect);
       expense.begin("detect");
-      auto det = yolo.detect(img);            // ⭐⭐ W98：结果 + dbg 一起返回
+      auto det = do_detect ? yolo.detect(img) : auto_aim::DetectorResult{};            // ⭐⭐ W98：结果 + dbg 一起返回
       auto & armors = det.armors;
       expense.end("detect");
 
@@ -248,16 +253,23 @@ int run_sentry(
       }
 #endif
 
+      // ⭐⭐ W100（原 A2）：阶段门 —— `--stop-after=detect` 时**不跟踪**
+      const bool do_track = tools::stage_ok(stop_after, tools::Stage::Track);
       expense.begin("track");
-      auto trk = tracker.track(armors, t);   // ⭐⭐ W98
+      auto trk = do_track ? tracker.track(armors, t)   // ⭐⭐ W98
+                          : auto_aim::TrackerResult{};
       auto & targets = trk.targets;
       expense.end("track");
 
       // ⚠️ 同济哨兵在此处会走 `decider.decide(...)` 做 **4 相机全向搜索**；
       //    本项目**单相机** → 直接自瞄（与步兵一致）
-      auto aim_r = aimer.aim(targets, t, cboard.bullet_speed, cboard.shoot_mode);   // ⭐ W98
+      // ⭐⭐ W100（原 A2）：**阶段门** —— `--stop-after=track/detect` 时不跑规划、不下发指令
+      const bool do_plan = tools::stage_ok(stop_after, tools::Stage::Plan);
+      auto aim_r = do_plan
+                     ? aimer.aim(targets, t, cboard.bullet_speed, cboard.shoot_mode)   // ⭐ W98
+                     : auto_aim::AimResult{};
       const io::Command & command = aim_r.command;
-      cboard.send(command);
+      if (do_plan) cboard.send(command);
 
       // ⭐ 上行给导航（同济 `ros2.publish(decider.get_target_info(armors, targets))`）
       //   payload = {x, y, 1, ArmorName+1}，⚠️ 第 4 位从 **1** 开始
@@ -312,6 +324,21 @@ int main(int argc, char * argv[])
     return 0;
   }
 
+
+  // ⭐⭐ W100（原 A2）：**算法独立测试模式** —— 跑到该阶段就停，截断后面的链路
+
+  //   ⭐ 用途：单独验证某一环（如"纯检测率"不受跟踪过滤影响）
+
+  const auto stop_after = tools::parse_stop_after(cli.get<std::string>("stop-after"));
+
+  if (tools::stage_truncated(stop_after))
+
+    tools::logger()->warn(
+
+      "[sentry] ⚠️ 算法独立测试：--stop-after={} ⇒ **链路被截断**，后面阶段不跑",
+
+      tools::stage_name(stop_after));
+
   // ⭐⭐⭐ W95：**按模块过滤日志必须尽早设置** —— 否则启动期日志
   //   （如 `[infantry] 同济兼容模式` / `[VideoCamera]` / `[ReplayBoard]`）
   //   会在过滤生效前就打出来（实测踩过）。
@@ -352,7 +379,7 @@ int main(int argc, char * argv[])
     tools::logger()->info("[sentry] 真实硬件模式（CBoard/CAN）");
     return run_sentry(camera, cboard, enemy_color, config_path, csv_prefix, true, cli.get<bool>("record"),
                      cli.get<bool>("pj"), cli.get<std::string>("pj-host"),
-                     static_cast<uint16_t>(cli.get<int>("pj-port")));
+                     static_cast<uint16_t>(cli.get<int>("pj-port")), stop_after);
   }
 
   // ── 录像回放（零硬件）──
@@ -376,7 +403,7 @@ int main(int argc, char * argv[])
                                                 : "both"));
   const int rc = run_sentry(camera, cboard, enemy_color, config_path, csv_prefix, true, cli.get<bool>("record"),
                      cli.get<bool>("pj"), cli.get<std::string>("pj-host"),
-                     static_cast<uint16_t>(cli.get<int>("pj-port")));
+                     static_cast<uint16_t>(cli.get<int>("pj-port")), stop_after);
   tools::logger()->info("[sentry] 录像播放完毕（共 {} 帧），退出", cboard.sent_count);
   return rc;
 }

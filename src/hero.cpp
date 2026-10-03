@@ -47,6 +47,7 @@
 #include "utils/concurrency/exiter.hpp"
 #include "utils/debug/img_tools.hpp"
 #include "utils/log/log_filter.hpp"
+#include "utils/config/stage_gate.hpp"   // ⭐ W100
 #include "utils/config/print_config.hpp"   // ⭐ W100
 #include "utils/config/tongji_flags.hpp"   // ⭐ W100：tongji 拆槽位
 #include "utils/log/logger.hpp"
@@ -140,6 +141,7 @@ const std::string keys =
   "{pj-host        | 127.0.0.1 | ⭐ PlotJuggler 目标 IP（跨机器时填对方 IP）}"
   "{pj-port        | 9870 | ⭐ PlotJuggler 目标端口}"
   "{debug-img      | false | ⭐ L3：启动就开存图（每 30 张 1 张，上限 500）}"
+  "{stop-after     | | ⭐⭐ 算法独立测试：跑到该阶段就停（perceive/detect/track/buff-detect/buff-solve/plan；空=全跑）}"
   "{debug-window   | false | ⭐ L3：启动就开可视化窗口（需 DISPLAY）}"
   "{tongji         | true | ⭐⭐ 同济兼容模式：true(默认)=完全同济行为；false=启用本项目优化}"
   "{nis-thresh     | | ⭐ 单独覆盖 NIS 失败阈值：tongji(0.711) / chi2(9.4877)；空=跟随 --tongji}"
@@ -165,6 +167,21 @@ int main(int argc, char * argv[])
     tools::print_effective_config(std::cout, cli, config_path, "hero");
     return 0;
   }
+
+
+  // ⭐⭐ W100（原 A2）：**算法独立测试模式** —— 跑到该阶段就停，截断后面的链路
+
+  //   ⭐ 用途：单独验证某一环（如"纯检测率"不受跟踪过滤影响）
+
+  const auto stop_after = tools::parse_stop_after(cli.get<std::string>("stop-after"));
+
+  if (tools::stage_truncated(stop_after))
+
+    tools::logger()->warn(
+
+      "[hero] ⚠️ 算法独立测试：--stop-after={} ⇒ **链路被截断**，后面阶段不跑",
+
+      tools::stage_name(stop_after));
 
   // ⭐⭐⭐ W95：**按模块过滤日志必须尽早设置** —— 否则启动期日志
   //   （如 `[infantry] 同济兼容模式` / `[VideoCamera]` / `[ReplayBoard]`）
@@ -424,35 +441,48 @@ int main(int argc, char * argv[])
 
     /// 自瞄
     if (mode.load() == io::GimbalMode::AUTO_AIM) {
-      expense.begin("detect");
-      // ⭐⭐ W98：**结果 + 调试快照一起返回** —— 不再"手写填 + 读全局旁路"
-      auto det = yolo.detect(img);
-      auto & armors = det.armors;
-      expense.end("detect");
-      fd.detector = det.dbg;                               // ⭐ 一行，不可能忘
-      fd.detector.t_infer_us = expense.us("detect");
-      for (const auto & a : armors) dbg_boxes.push_back(a.box);
-      fd.detector.t_infer_us = expense.us("detect");
+      // ⭐⭐⭐ W100（原 A2）：**阶段门** —— `--stop-after` 截断链路
+      //   ⚠️ 为什么是"截断前缀"而不是"跳过中间某步"：跟踪没有检测输出就没法跑
+      //      （数据流上"跳过"不成立），能截的只有前缀。
+      const bool do_detect = tools::stage_ok(stop_after, tools::Stage::Detect);
+      const bool do_track  = tools::stage_ok(stop_after, tools::Stage::Track);
+      const bool do_plan   = tools::stage_ok(stop_after, tools::Stage::Plan);
 
-      expense.begin("track");
-      auto trk = tracker.track(armors, t);   // ⭐⭐ W98：目标 + 调试快照一起返回
-      auto & targets = trk.targets;
-      expense.end("track");
-      fd.tracker = trk.dbg;                  // ⭐ 一行替代原来的 6 处手写
-      fd.tracker.t_track_us = expense.us("track");
-      // ⭐⭐ W71：`sol_*` 四列（原来永远是 0）—— Solver 在 Tracker 内部被调用
-      fd.solver = tracker.solver().last_debug();
-      // ⭐⭐ W70：填 `tgt_*`（原来 `fd.target.*` **从没被赋值** → CSV 里 13 列永远 0）
-      //   EKF 状态布局（见 target.cpp）：x vx y vy z vz a w r l h
-      if (!targets.empty()) {
-        auto_aim::fill_target_debug(fd.target, targets.front(), fd.solver.t_solve_us);
-        // ⭐⭐ W72：`tgt_invincible` + `sht_blocked_inv`（原来都是 0）
-        //   无敌在 Tracker 的 filter 层判定 → 这里查掩码是否含该目标的兵种
-        fd.target.invincible = tracker.invincible().has(targets.front().name);
-        fd.shooter.blocked_by_invincible = fd.target.invincible;
+      std::list<auto_aim::Armor> armors;    // ⭐ 提到外层：两个阶段共用
+      if (do_detect) {
+        expense.begin("detect");
+        // ⭐⭐ W98：**结果 + 调试快照一起返回** —— 不再"手写填 + 读全局旁路"
+        auto det = yolo.detect(img);
+        armors = std::move(det.armors);
+        expense.end("detect");
+        fd.detector = det.dbg;                               // ⭐ 一行，不可能忘
+        fd.detector.t_infer_us = expense.us("detect");
+        for (const auto & a : armors) dbg_boxes.push_back(a.box);
       }
 
-      if (!targets.empty())
+      std::list<auto_aim::Target> targets;  // ⭐ 同上
+      if (do_track) {
+        expense.begin("track");
+        auto trk = tracker.track(armors, t);   // ⭐⭐ W98：目标 + 调试快照一起返回
+        targets = std::move(trk.targets);
+        expense.end("track");
+        fd.tracker = trk.dbg;                  // ⭐ 一行替代原来的 6 处手写
+        fd.tracker.t_track_us = expense.us("track");
+        // ⭐⭐ W71：`sol_*` 四列（原来永远是 0）—— Solver 在 Tracker 内部被调用
+        fd.solver = tracker.solver().last_debug();
+        // ⭐⭐ W70：填 `tgt_*`（原来 `fd.target.*` **从没被赋值** → CSV 里 13 列永远 0）
+        //   EKF 状态布局（见 target.cpp）：x vx y vy z vz a w r l h
+        if (!targets.empty()) {
+          auto_aim::fill_target_debug(fd.target, targets.front(), fd.solver.t_solve_us);
+          // ⭐⭐ W72：`tgt_invincible` + `sht_blocked_inv`（原来都是 0）
+          //   无敌在 Tracker 的 filter 层判定 → 这里查掩码是否含该目标的兵种
+          fd.target.invincible = tracker.invincible().has(targets.front().name);
+          fd.shooter.blocked_by_invincible = fd.target.invincible;
+        }
+      }
+
+      // ⭐ 只有跑到 plan 阶段才喂目标给规划线程；否则喂 nullopt ⇒ **不发云台指令**
+      if (do_plan && !targets.empty())
         target_queue.push(targets.front());
       else
         target_queue.push(std::nullopt);

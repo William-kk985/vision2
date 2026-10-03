@@ -40,6 +40,7 @@
 #include "utils/concurrency/exiter.hpp"
 #include "utils/debug/img_tools.hpp"
 #include "utils/log/log_filter.hpp"
+#include "utils/config/stage_gate.hpp"   // ⭐ W100
 #include "utils/config/print_config.hpp"   // ⭐ W100
 #include "utils/config/tongji_flags.hpp"   // ⭐ W100：tongji 拆槽位
 #include "utils/log/logger.hpp"
@@ -69,6 +70,7 @@ const std::string keys =
   "{pj-host        | 127.0.0.1 | ⭐ PlotJuggler 目标 IP（跨机器时填对方 IP）}"
   "{pj-port        | 9870 | ⭐ PlotJuggler 目标端口}"
   "{record         | false | ⭐⭐ 录像到 output/video/（默认**不录**；录会占一个核做 MJPG 编码）}"
+  "{stop-after     | | ⭐⭐ 算法独立测试：跑到该阶段就停（perceive/detect/track/buff-detect/buff-solve/plan；空=全跑）}"
   "{tongji         | true | ⭐⭐ 同济兼容模式（默认 true = 完全同济行为）}"
   "{nis-thresh     | | ⭐ 单独覆盖 NIS 失败阈值：tongji(0.711) / chi2(9.4877)；空=跟随 --tongji}"
   "{yaw-rate-src   | | ⭐ 单独覆盖小陀螺判据用的 EKF 分量：x8(同济) / x7(修正)；空=跟随 --tongji}"
@@ -116,7 +118,8 @@ struct ReplayCBoard
 template <typename Board>
 int run_uav(io::CameraBase & camera, Board & cboard, const std::string & config_path,
             const std::string & csv_prefix, bool record,
-            bool pj = false, const std::string & pj_host = "127.0.0.1", uint16_t pj_port = 9870)
+            bool pj = false, const std::string & pj_host = "127.0.0.1", uint16_t pj_port = 9870,
+            tools::Stage stop_after = tools::Stage::Plan)   // ⭐ W100：阶段门（A2）
 {
   tools::Exiter exiter;
   // ⭐⭐ W48：录像**默认关**（录会占一个核做 MJPG 编码；要录传 --record）
@@ -185,19 +188,28 @@ int run_uav(io::CameraBase & camera, Board & cboard, const std::string & config_
       solver.set_R_gimbal2world(q);
       const Eigen::Vector3d ypr = tools::eulers(solver.R_gimbal2world(), 2, 1, 0);
 
+      // ⭐⭐ W100（原 A2）：阶段门 —— `--stop-after=perceive` 时**不检测**
+      const bool do_detect = tools::stage_ok(stop_after, tools::Stage::Detect);
       expense.begin("detect");
-      auto det = detector.detect(img);        // ⭐⭐ W98：结果 + dbg 一起返回
+      auto det = do_detect ? detector.detect(img) : auto_aim::DetectorResult{};        // ⭐⭐ W98：结果 + dbg 一起返回
       auto & armors = det.armors;
       expense.end("detect");
+      // ⭐⭐ W100（原 A2）：阶段门
+      const bool do_track = tools::stage_ok(stop_after, tools::Stage::Track);
       expense.begin("track");
-      auto trk = tracker.track(armors, t);   // ⭐⭐ W98
+      auto trk = do_track ? tracker.track(armors, t)   // ⭐⭐ W98
+                          : auto_aim::TrackerResult{};
       auto & targets = trk.targets;
       expense.end("track");
 
-      auto aim_r = aimer.aim(targets, t, cboard.bullet_speed);   // ⭐ W98
+      // ⭐⭐ W100（原 A2）：**阶段门** —— `--stop-after=track/detect` 时不跑规划
+      const bool do_plan = tools::stage_ok(stop_after, tools::Stage::Plan);
+      auto aim_r = do_plan ? aimer.aim(targets, t, cboard.bullet_speed)   // ⭐ W98
+                           : auto_aim::AimResult{};
       command = aim_r.command;
       aim_dbg = aim_r.dbg;
-      auto sht = shooter.shoot(command, aimer, targets, ypr);   // ⭐ W98
+      auto sht = do_plan ? shooter.shoot(command, aimer, targets, ypr)   // ⭐ W98
+                         : auto_aim::Shooter::ShootResult{};
       command.shoot = sht.fire;
       fd.shooter = sht.dbg;        // ⭐ W98：uav 原来【完全没填】fd.shooter（全是 0）
       fd.detector = det.dbg;                               // ⭐ W98：一行，不可能忘
@@ -272,6 +284,21 @@ int main(int argc, char * argv[])
     return 0;
   }
 
+
+  // ⭐⭐ W100（原 A2）：**算法独立测试模式** —— 跑到该阶段就停，截断后面的链路
+
+  //   ⭐ 用途：单独验证某一环（如"纯检测率"不受跟踪过滤影响）
+
+  const auto stop_after = tools::parse_stop_after(cli.get<std::string>("stop-after"));
+
+  if (tools::stage_truncated(stop_after))
+
+    tools::logger()->warn(
+
+      "[uav] ⚠️ 算法独立测试：--stop-after={} ⇒ **链路被截断**，后面阶段不跑",
+
+      tools::stage_name(stop_after));
+
   // ⭐⭐⭐ W95：**按模块过滤日志必须尽早设置** —— 否则启动期日志
   //   （如 `[infantry] 同济兼容模式` / `[VideoCamera]` / `[ReplayBoard]`）
   //   会在过滤生效前就打出来（实测踩过）。
@@ -310,7 +337,7 @@ int main(int argc, char * argv[])
     tools::logger()->info("[uav] 真实硬件模式（CBoard/CAN）");
     return run_uav(camera, cboard, config_path, csv_prefix, cli.get<bool>("record"),
             cli.get<bool>("pj"), cli.get<std::string>("pj-host"),
-            static_cast<uint16_t>(cli.get<int>("pj-port")));
+            static_cast<uint16_t>(cli.get<int>("pj-port")), stop_after);
   }
 
   // ── 录像回放（零硬件）──
@@ -327,7 +354,7 @@ int main(int argc, char * argv[])
     (m >= 0 && m < int(io::MODES.size())) ? io::MODES[m] : "?");
   const int rc = run_uav(camera, cboard, config_path, csv_prefix, cli.get<bool>("record"),
             cli.get<bool>("pj"), cli.get<std::string>("pj-host"),
-            static_cast<uint16_t>(cli.get<int>("pj-port")));
+            static_cast<uint16_t>(cli.get<int>("pj-port")), stop_after);
   tools::logger()->info("[uav] 录像播放完毕（共 {} 帧），退出", cboard.sent_count);
   return rc;
 }

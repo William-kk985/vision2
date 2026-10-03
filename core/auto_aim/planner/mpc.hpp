@@ -9,6 +9,9 @@
 
 #include <yaml-cpp/yaml.h>
 
+#include "core/auto_aim/controller/controller_debug.hpp"   // ⭐ W98
+#include "core/auto_aim/planner/planner_debug.hpp"          // ⭐ W98
+#include "core/auto_aim/shooter/shooter_debug.hpp"          // ⭐ W98
 #include "core/auto_aim/target/target.hpp"
 #include "core/auto_aim/trajectory/trajectory.hpp"   // ⭐ W15：弹道槽位（yaml 选实现）
 #include "third_party/tinympc/tiny_api.hpp"
@@ -51,6 +54,47 @@ struct Plan
   int   yaw_iters = 0;        // yaw solver 迭代次数
   int   pitch_iters = 0;      // pitch solver 迭代次数
   float acc_max = 0;          // 规划轨迹最大加速度（看有没有超物理上限）
+
+  // ⭐⭐ W98：**把本 Plan 的调试量路由到三个角色的 Debug 结构**
+  //
+  // ## 为什么放在这里（而不是各主循环手写）
+  // 原来 **4 个主循环各自手写 10 行**把 `Plan` 的字段拆到 `fd.planner` /
+  // `fd.shooter` / `fd.controller`：
+  // ```
+  // const auto & p = psnap.plan;
+  // fd.planner.t_fly = p.t_fly;              // ⚠️ ×4 份
+  // fd.planner.overlap_ratio = p.overlap;
+  // fd.shooter.traj_err_at_fire = p.traj_err;
+  // fd.controller.cmd_yaw = p.yaw;
+  // ...
+  // ```
+  // ⇒ 加一个新的调试量要改 **4 处**；漏一处就某个兵种看不到（W8/W73 都踩过）。
+  // ⇒ 现在**映射只有这一份**，且**贴着产它的算法**（改 `Plan` 的人一眼能看到）。
+  //
+  // ⚠️ 只填**来自 Plan 的**字段。主循环独有的（`blocked_by_invincible` /
+  //   `blocked_by_filter` / `t_since_last_fire_us` / `t_track_us` …）**不在这里**，
+  //   避免把主循环的状态覆盖掉。
+  //
+  // @param planner    `PlannerDebug`（t_fly / overlap_ratio / solver_iters / acc_max）
+  // @param shooter    `ShooterDebug`（traj_err_at_fire / fire_thresh / should_fire）
+  // @param controller `ControllerDebug`（cmd_yaw / cmd_pitch / control / shoot）
+  void fill_debug(
+    PlannerDebug & planner, ShooterDebug & shooter, ControllerDebug & controller) const
+  {
+    planner.t_fly = t_fly;
+    planner.overlap_ratio = overlap;
+    planner.solver_iters = yaw_iters;
+    planner.acc_max = acc_max;
+
+    shooter.traj_err_at_fire = traj_err;
+    shooter.fire_thresh = fire_thresh;
+    shooter.should_fire = fire;
+
+    controller.cmd_yaw = yaw;
+    controller.cmd_pitch = pitch;
+    controller.control = control;
+    controller.shoot = fire;
+  }
 };
 
 class Planner

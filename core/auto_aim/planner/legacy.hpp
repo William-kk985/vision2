@@ -5,6 +5,7 @@
 #include <chrono>
 #include <list>
 
+#include "core/auto_aim/controller/controller_debug.hpp"   // ⭐ W98
 #include "io/board/can/cboard.hpp"
 #include "core/types.hpp"
 #include "core/auto_aim/target/target.hpp"
@@ -18,16 +19,32 @@ struct AimPoint
   Eigen::Vector4d xyza;
 };
 
+/// ⭐⭐ W98：`aim()` 的返回值 —— **指令 + 控制器调试快照一起返回**
+///
+/// 原来 `aim()` 只返回 `io::Command`，主循环再手写 4 行把它拆进 `fd.controller`：
+/// ```
+/// fd.controller.cmd_yaw  = command.yaw;    // ⚠️ 四兵种各 4 行
+/// fd.controller.cmd_pitch = command.pitch;
+/// fd.controller.control  = command.control;
+/// fd.controller.shoot    = command.shoot;
+/// ```
+/// ⇒ 现在随返回值带出，**结构上不可能忘填**（同 Detector/Tracker 的 W98 改造）。
+struct AimResult
+{
+  io::Command command;
+  ControllerDebug dbg;
+};
+
 class Aimer
 {
 public:
   AimPoint debug_aim_point;
   explicit Aimer(const std::string & config_path);
-  io::Command aim(
+  AimResult aim(
     std::list<Target> targets, std::chrono::steady_clock::time_point timestamp, double bullet_speed,
     bool to_now = true);
 
-  io::Command aim(
+  AimResult aim(
     std::list<Target> targets, std::chrono::steady_clock::time_point timestamp, double bullet_speed,
     io::ShootMode shoot_mode, bool to_now = true);
 

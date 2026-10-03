@@ -432,17 +432,9 @@ int main(int argc, char * argv[])
       std::lock_guard<std::mutex> lk(psnap.mtx);
       if (psnap.valid) {
         const auto & p = psnap.plan;
+        // ⭐⭐ W98：**路由映射收进 `Plan::fill_debug()`**（原来四兵种各手写 10 行）
+        p.fill_debug(fd.planner, fd.shooter, fd.controller);
         fd.planner.t_plan_us = psnap.us;
-        fd.planner.t_fly = p.t_fly;             // ⭐ W8 暴露的算法内部量
-        fd.planner.overlap_ratio = p.overlap;
-        fd.planner.solver_iters = p.yaw_iters;
-        fd.planner.acc_max = p.acc_max;
-        fd.shooter.traj_err_at_fire = p.traj_err;
-        fd.shooter.fire_thresh = p.fire_thresh;
-        fd.shooter.should_fire = p.fire;
-        fd.controller.cmd_yaw = p.yaw;
-        fd.controller.cmd_pitch = p.pitch;
-        fd.controller.control = p.control;
         fd.controller.t_ctrl_us = psnap.ctl_us;   // ⭐ W73：board->send() 真实耗时
       }
     }

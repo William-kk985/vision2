@@ -47,11 +47,23 @@ Aimer::Aimer(const std::string & config_path)
   }
 }
 
-io::Command Aimer::aim(
+AimResult Aimer::aim(
   std::list<Target> targets, std::chrono::steady_clock::time_point timestamp, double bullet_speed,
   bool to_now)
 {
-  if (targets.empty()) return {false, false, 0, 0};
+  // ⭐⭐ W98：**统一出口** —— `aim()` 有 7 处 return（无目标/未收敛/正常…），
+  //   逐处手写填 dbg 必然漏。收成 lambda：指令 + 调试快照一起产出。
+  auto make = [](io::Command c) -> AimResult {
+    AimResult r;
+    r.command = c;
+    r.dbg.cmd_yaw = c.yaw;
+    r.dbg.cmd_pitch = c.pitch;
+    r.dbg.control = c.control;
+    r.dbg.shoot = c.shoot;
+    return r;
+  };
+
+  if (targets.empty()) return make({false, false, 0, 0});
   auto target = targets.front();
 
   auto ekf = target.ekf();
@@ -80,7 +92,7 @@ io::Command Aimer::aim(
   debug_aim_point = aim_point0;
   if (!aim_point0.valid) {
     // tools::logger()->debug("Invalid aim_point0.");
-    return {false, false, 0, 0};
+    return make({false, false, 0, 0});
   }
 
   Eigen::Vector3d xyz0 = aim_point0.xyza.head(3);
@@ -90,7 +102,7 @@ io::Command Aimer::aim(
     tools::logger()->debug(
       "[Aimer] Unsolvable trajectory0: {:.2f} {:.2f} {:.2f}", bullet_speed, d0, xyz0[2]);
     debug_aim_point.valid = false;
-    return {false, false, 0, 0};
+    return make({false, false, 0, 0});
   }
 
   // 迭代求解飞行时间 (最多10次，收敛条件：相邻两次fly_time差 <0.001)
@@ -108,7 +120,7 @@ io::Command Aimer::aim(
     auto aim_point = choose_aim_point(iteration_target[iter]);
     debug_aim_point = aim_point;
     if (!aim_point.valid) {
-      return {false, false, 0, 0};
+      return make({false, false, 0, 0});
     }
 
     // 计算新弹道
@@ -122,7 +134,7 @@ io::Command Aimer::aim(
         "[Aimer] Unsolvable trajectory in iter {}: speed={:.2f}, d={:.2f}, z={:.2f}", iter + 1,
         bullet_speed, d, xyz.z());
       debug_aim_point.valid = false;
-      return {false, false, 0, 0};
+      return make({false, false, 0, 0});
     }
 
     // 检查收敛条件
@@ -137,10 +149,10 @@ io::Command Aimer::aim(
   Eigen::Vector3d final_xyz = debug_aim_point.xyza.head(3);
   double yaw = std::atan2(final_xyz.y(), final_xyz.x()) + yaw_offset_;
   double pitch = -(current_traj.pitch + pitch_offset_);  //世界坐标系下pitch向上为负
-  return {true, false, yaw, pitch};
+  return make({true, false, yaw, pitch});
 }
 
-io::Command Aimer::aim(
+AimResult Aimer::aim(
   std::list<Target> targets, std::chrono::steady_clock::time_point timestamp, double bullet_speed,
   io::ShootMode shoot_mode, bool to_now)
 {
@@ -153,10 +165,13 @@ io::Command Aimer::aim(
     yaw_offset = yaw_offset_;
   }
 
-  auto command = aim(targets, timestamp, bullet_speed, to_now);
-  command.yaw = command.yaw - yaw_offset_ + yaw_offset;
-
-  return command;
+  // ⭐⭐ W98：本重载是"在第一个 aim() 的基础上补左右枪口偏置"。
+  //   直接转发 `AimResult`，只改 command 的 yaw，**并同步 dbg** —— 否则
+  //   `fd.controller.cmd_yaw` 会记成**修正前**的值（旧代码正是这么错的）。
+  auto r = aim(targets, timestamp, bullet_speed, to_now);
+  r.command.yaw = r.command.yaw - yaw_offset_ + yaw_offset;
+  r.dbg.cmd_yaw = r.command.yaw;   // ⭐ 同步
+  return r;
 }
 
 AimPoint Aimer::choose_aim_point(const Target & target)

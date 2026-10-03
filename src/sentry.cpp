@@ -250,7 +250,8 @@ int run_sentry(
 
       // ⚠️ 同济哨兵在此处会走 `decider.decide(...)` 做 **4 相机全向搜索**；
       //    本项目**单相机** → 直接自瞄（与步兵一致）
-      const io::Command command = aimer.aim(targets, t, cboard.bullet_speed, cboard.shoot_mode);
+      auto aim_r = aimer.aim(targets, t, cboard.bullet_speed, cboard.shoot_mode);   // ⭐ W98
+      const io::Command & command = aim_r.command;
       cboard.send(command);
 
       // ⭐ 上行给导航（同济 `ros2.publish(decider.get_target_info(armors, targets))`）
@@ -268,10 +269,7 @@ int run_sentry(
       // ⭐⭐ W70：填 `tgt_*`（原来 `fd.target.*` 从没被赋值 → CSV 里 13 列永远 0）
       if (!targets.empty())
         auto_aim::fill_target_debug(fd.target, targets.front(), fd.solver.t_solve_us);
-      fd.controller.cmd_yaw = command.yaw;
-      fd.controller.cmd_pitch = command.pitch;
-      fd.controller.control = command.control;
-      fd.controller.shoot = command.shoot;
+      fd.controller = aim_r.dbg;             // ⭐ W98：一行替代 4 处手写
       hub.on_frame(fd);
     } else {
       cboard.send({false, false, 0, 0});

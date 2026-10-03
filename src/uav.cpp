@@ -173,6 +173,7 @@ int run_uav(io::CameraBase & camera, Board & cboard, const std::string & config_
     fd.t_cam_wait_us = expense.us("cam_wait");   // W86: blocking wait, not CPU
     fd.t_perceive_us = expense.us("perceive");
     io::Command command{};   // ⭐ W34：契约层已给默认值（原来是未初始化的）
+    auto_aim::ControllerDebug aim_dbg{};   // ⭐ W98：aim() 带出的控制器调试快照
 
     /// 自瞄（⚠️ uav 的 outpost 也走自瞄 —— 与同济一致）
     if (mode == io::Mode::auto_aim || mode == io::Mode::outpost) {
@@ -188,7 +189,9 @@ int run_uav(io::CameraBase & camera, Board & cboard, const std::string & config_
       auto & targets = trk.targets;
       expense.end("track");
 
-      command = aimer.aim(targets, t, cboard.bullet_speed);
+      auto aim_r = aimer.aim(targets, t, cboard.bullet_speed);   // ⭐ W98
+      command = aim_r.command;
+      aim_dbg = aim_r.dbg;
       command.shoot = shooter.shoot(command, aimer, targets, ypr);
       fd.detector = det.dbg;                               // ⭐ W98：一行，不可能忘
       fd.detector.t_infer_us = expense.us("detect");
@@ -237,10 +240,7 @@ int run_uav(io::CameraBase & camera, Board & cboard, const std::string & config_
     }
 
     cboard.send(command);
-    fd.controller.cmd_yaw = command.yaw;
-    fd.controller.cmd_pitch = command.pitch;
-    fd.controller.control = command.control;
-    fd.controller.shoot = command.shoot;
+    fd.controller = aim_dbg;               // ⭐ W98：一行替代 4 处手写
     fd.t_frame_us = expense.us("perceive") + expense.us("detect") + expense.us("track");
     hub.on_frame(fd);
     expense.next_frame();

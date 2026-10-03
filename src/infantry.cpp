@@ -42,7 +42,7 @@
 #include "utils/system/host_info.hpp"
 #include "utils/system/thread_tuning.hpp"   // ⭐ W82   // ⭐ W81：本机核数 + 建议
 #include "core/auto_aim/target/target_debug_fill.hpp"   // ⭐ W70   // ⭐ W63
-#include "core/debug.hpp"
+#include "core/debug_node.hpp"
 #include "utils/debug/csv_sink.hpp"
 #include "utils/debug/hotkeys.hpp"   // ⭐ W18：终端热键
 #include "utils/config/hot_reloader.hpp"   // ⭐ W21：配置热重载

@@ -1,102 +1,147 @@
 /**
  * @file core/debug.hpp
- * @brief ⭐⭐ Debug **聚合层** —— 只做 `FrameDebug` 的组装
+ * @brief ⭐⭐⭐ **开关与实验总控** —— 项目的「编译期开关」都在这里（W104）
  *
- * ## W50（改进方案 A）：Debug 结构**跟角色走**了
- * 各角色的 Debug 快照**由角色自己拥有**，住在各自目录：
+ * ## ⚠️ 先分清：名字像 debug 的文件，职责完全不同
  * ```
- * core/auto_aim/detector/detector_debug.hpp     DetectorDebug
- * core/auto_aim/solver/solver_debug.hpp         SolverDebug
- * core/auto_aim/tracker/tracker_debug.hpp       TrackerDebug
- * core/auto_aim/target/target_debug.hpp         TargetDebug
- * core/auto_aim/planner/planner_debug.hpp       PlannerDebug
- * core/auto_aim/shooter/shooter_debug.hpp       ShooterDebug
- * core/auto_aim/controller/controller_debug.hpp ControllerDebug
- * core/auto_buff/buff_debug.hpp                 BuffDebug
+ * core/debug.hpp              ← ⭐【你在这里】开关与实验总控（纯宏、零依赖）
+ * core/debug_node.hpp         ← 【数据面】FrameDebug 聚合 8 个角色的快照（零宏）
+ * utils/log/debug_config.hpp  ← 【展开器】把本文件的开关翻译成 LOG_xxx(...) 宏
+ * utils/log/log_filter.hpp    ← 【运行期】按模块过滤（--log-off / --log-only）
+ * utils/debug/debug_sink.hpp  ← 【数据去向】SinkHub + IDebugSink
+ * utils/debug/*_sink.hpp      ← 各 sink 实现（热插拔的那些）
  * ```
- * 本文件**只做两件事**：① include 它们 ② 定义 `FrameDebug` 聚合。
+ * ⭐ **本文件【零依赖】**（不 include 任何东西）⇒ 谁都能 include，包括 `utils/`。
  *
- * ## ⭐ 依赖方向（单向，无环）
+ * ## ⭐⭐⭐ 三层「测试/调试」策略（本文件是中间那层）
  * ```
- * <角色>/xxx_debug.hpp  →  core/debug.hpp  →  FrameDebug
+ * ┌─ 正式代码（core/…/<角色>/）───────── 长期维护，**以同济为准**
+ * │
+ * ├─ ⭐⭐ 本文件（宏 + 重新编译）────────── **中间层**：算法的【临时添加 / 替换】
+ * │     · 想试一个新算法？→ 实现在 test/function/exp_*.{hpp,cpp}，
+ * │       在这里加一行 `#define HZMIR_EXP_xxx`，在**相应文件**加 `#ifdef` 入口。
+ * │     · ⚠️ **验证完必须【转正或删除】**（见 §二 的规则）
+ * │
+ * └─ test/ ───────────────────────────── 单一测试 / 较大的改动测试
  * ```
- * ⚠️ 角色头是**纯数据**，只依赖 `<cstdint>`，**不 include 本文件**。
- * （W50 之前本文件注释里说"会形成循环依赖" —— **那是错的**，已纠正。）
+ * ⚠️ **为什么需要中间层**：直接在正式代码里手改做实验，**很容易忘记改回来**
+ *   （"这个 0.7 是谁改的？"）。放这儿 ⇒ **一行开关，可发现、可一键还原**。
  *
- * ## ⚠️⚠️ 本文件【没有任何开关】—— 找开关请看别处（W103 补的指路牌）
- *
- * 名字里带 "debug" 的文件有好几个，**职责完全不同**，别找错：
+ * ## ⭐ 设计取舍：为什么用【宏 + 重编译】而不是运行期热插拔
  * ```
- * core/debug.hpp                    ← 你在这里：⭐【数据面】FrameDebug 的聚合（零宏）
- * utils/log/debug_config.hpp        ← ⭐⭐【日志开关总控】`HZMIR_LOG_*` / `LOG_*`
- * utils/log/log_filter.hpp          ← 【运行期】按模块过滤（--log-off / --log-only）
- * utils/debug/debug_sink.hpp        ← 【数据去向】SinkHub + IDebugSink
- * utils/debug/{csv,plotjuggler,window,image}_sink.hpp / recorder.hpp
- *                                      ← 各个 sink 的实现（热插拔的那些）
- * utils/config/{tongji_flags,stage_gate,print_config}.hpp
- *                                      ← 【入口开关】--tongji / --stop-after / --print-config
+ * 日志      → 运行期可切（--log-off）+ 编译期宏（零成本）  ← 两种都要
+ * 算法      → ⭐ **只用编译期宏**
  * ```
- * ⭐ **想开某个模块的细节日志** ⇒ 改 `utils/log/debug_config.hpp` 里的一行（`#define` 取消注释）后重编。
- * ⭐ **想看当前生效的开关** ⇒ 跑 `--print-config`（第 ④ 节会列出哪些 `LOG_*` 开着）。
+ * ⭐ 理由（用户明确要求）：
+ *   · **最终只会留下一套算法** —— 其他都是测试期的，验证完就删 ⇒ 不需要"装着两套随时切"
+ *   · 运行期热插拔会让"当前跑的是哪套"变得**不确定**，而算法对比最怕这个
+ *   · ⚠️ **但【兼容性】要保留**：开关**默认都关**（= 完全同济行为），
+ *     且旧的 `trajectory_impl` / `detector_impl` 那类**运行期**槽位仍然保留（那是"配置"，不是"实验"）
  *
- * ## 设计原则（doc 09 §14.1）
- *   ⭐ **L0~L2 常驻、零宏**（~ns 级，永远开）；**只有 L3 昂贵通道用宏**
+ * ## ⚠️ 与「宏纪律」的关系
+ * 纪律是「宏只干 ①编不编 ②默认值 ③互斥检查」，且 **`#ifdef` 只允许在【装配点】**。
+ * 本文件的开关属于 **①编不编** ✅；而它们的 `#ifdef` **只出现在装配点**
+ * （角色的构造/工厂处）—— ⚠️ **不许散落到算法 .cpp 里**。
  *
- * 级别：
- *   L0 耗时/帧号/模式      ~100 ns/帧   永远开
- *   L1 每角色一个快照结构  ~50 ns/帧    永远开
- *   L2 多帧序列（曲线）     ~50 ns/项    永远开（走 IDebugSink::on_series）
- *   L3 存图/显示            ~ms          ⭐ **纯运行期门控**（`SinkHub::wants_image()`，无宏）
+ * ## 用法速查
+ * ```bash
+ * ./src/infantry --print-config params/robots/infantry.yaml   # 看当前哪些开关是开的
+ * ```
  */
 #ifndef HZMIR_CORE_DEBUG_HPP
 #define HZMIR_CORE_DEBUG_HPP
 
-#include <cstdint>
+// ═══════════════════════════════════════════════════════════════════════════
+// §一 日志开关（编译期）
+//
+// `#define` = 开，注释掉 = 关（⭐ **默认【全关】**）。
+// ⭐ 为什么用宏：关掉时**整条语句连参数一起消失**（实测 1.65 ns/次 vs
+//   运行期过滤 89 ns/次，**快 54×**）。含昂贵参数的日志收益最大。
+// ⚠️ 展开成 `LOG_xxx(...)` 的地方在 `utils/log/debug_config.hpp`。
+// ⭐ 建议：默认【关】的是「每帧刷屏」的细节；【开】的是低频的状态变化。
+// ═══════════════════════════════════════════════════════════════════════════
 
-#include "core/types.hpp"
+// ── 检测链路（⚠️ 每帧 1~2 条，最吵）──
+// #define HZMIR_LOG_YOLO            // YOLO 逐帧候选/过滤统计（objectness → NMS → 输出）
+// #define HZMIR_LOG_DETECTOR        // 传统检测器的灯条/装甲板配对细节
 
-// ⭐⭐ W50：各角色的 Debug 快照（住在角色自己目录）
-#include "core/auto_aim/controller/controller_debug.hpp"
-#include "core/auto_aim/detector/detector_debug.hpp"
-#include "core/auto_aim/planner/planner_debug.hpp"
-#include "core/auto_aim/shooter/shooter_debug.hpp"
-#include "core/auto_aim/solver/solver_debug.hpp"
-#include "core/auto_aim/target/target_debug.hpp"
-#include "core/auto_aim/tracker/tracker_debug.hpp"
-#include "core/auto_buff/buff_debug.hpp"
+// ── 跟踪 / 估计（⚠️ EKF 细节很能刷）──
+// #define HZMIR_LOG_EKF             // EKF 新息（NIS）/ 收敛 / 发散判定
+// #define HZMIR_LOG_TRACKER         // 跟踪状态机切换（lost/detecting/tracking/temp_lost）
+// #define HZMIR_LOG_TARGET          // 目标选择/跳变/小陀螺判据
 
-namespace auto_aim
-{
+// ── 规划 / 射击 ──
+// #define HZMIR_LOG_PLANNER         // MPC 迭代/弹道/重合度
+// #define HZMIR_LOG_AIMER           // 瞄点选择/延迟补偿
+// #define HZMIR_LOG_SHOOTER         // 开火判据为什么没过
 
-/// ⭐ 一帧的完整调试快照（L0 + L1）
-struct FrameDebug
-{
-  // ── L0 常驻 ──
-  int64_t t_frame_us = 0;
-  // ⭐⭐ W86：**把「等相机」从 perceive 里拆出来**。
-  //   原来 `t_perceive_us` 含 `camera->read()` 的**阻塞等待** —— 真机 30fps 下
-  //   那一段约 **28 ms**（= 33.3 ms 帧周期 − 5.3 ms 推理），看起来像"perceive 极贵"，
-  //   实际是**在等相机**，不耗 CPU。拆开后：
-  //     · `t_cam_wait_us` = 阻塞等帧（不耗 CPU，等于帧率上限）
-  //     · `t_perceive_us` = 真正的活（board 读 + recorder 入队 + set_R_gimbal2world）
-  int64_t t_cam_wait_us = 0;
-  int64_t t_perceive_us = 0;
-  int64_t t_decide_us = 0;
-  uint32_t frame_id = 0;
-  uint8_t mode = 0;
-  uint8_t game_state = 0;
+// ── 打符 ──
+// #define HZMIR_LOG_BUFF            // 打符检测/拟合/预测
 
-  // ── L1 快照（⭐ 各角色自带，定义在各自目录）──
-  DetectorDebug detector;
-  SolverDebug solver;
-  TrackerDebug tracker;
-  TargetDebug target;
-  PlannerDebug planner;
-  ShooterDebug shooter;
-  ControllerDebug controller;
-  BuffDebug buff;
-};
+// ── 硬件 / 板卡 ──
+// #define HZMIR_LOG_CAMERA          // 相机 SDK 参数/带宽/丢帧
+// #define HZMIR_LOG_BOARD           // 下位机收发（⚠️ 每帧都发，很吵）
+// #define HZMIR_LOG_IMU             // IMU 数据/时间戳对齐
 
-}  // namespace auto_aim
+// ── 轮子（utils/wheels/）──
+// #define HZMIR_LOG_TI              // 时序积分器（TemporalIntegrator）
+// #define HZMIR_LOG_TGD             // 传统检测的 TGD（目标引导检测）
+
+// ── 调试体系自身 ──
+// #define HZMIR_LOG_SINK            // sink 生命周期（挂上/摘掉/队列深度）
+
+// ═══════════════════════════════════════════════════════════════════════════
+// §二 ⭐⭐ 算法实验（编译期）—— 「临时添加 / 替换算法」用这一层
+//
+// ## 规则（⚠️ 三条都要满足）
+//   ① 实现放 **`test/function/exp_<名字>.{hpp,cpp}`**（⭐ 一眼能看出是实验）
+//   ② 在这里加一行 `#define HZMIR_EXP_<名字>`
+//   ③ 在**相应文件**加 `#ifdef` 入口（⚠️ 装配点，不许散落到算法内部）
+//      ── `CMake` 会**自动解析本文件**：定义了哪个 `HZMIR_EXP_*`，就自动
+//         ① 全项目定义该宏 ② 把对应的 `exp_*.cpp` 加进构建
+//      ⇒ **不需要手改 CMakeLists**
+//
+// ## ⚠️ 生命周期（这是"中间层"的关键）
+//   **实验【验证完】必须二选一**：
+//     · **转正** ⇒ 实现搬进 `core/…/<角色>/`，删掉开关和 `#ifdef` 入口
+//     · **放弃** ⇒ 删掉 `exp_*.cpp` + 这行开关 + `#ifdef` 入口
+//   ⚠️ **不许长期挂在这儿** —— 否则它就从"实验"变成了"没人敢删的隐藏功能"。
+//
+// ## ⭐ 关掉开关时是【真·零残留】
+//   `exp_*.cpp` **不参与编译**（CMake 层面就不加），`#ifdef` 里的代码**不存在**
+//   ⇒ 不会有"编进去了但没跑"的死代码，也不会有运行期分支。
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── 实验：传统检测器的落图（⭐ 机制演示 + 真实需求）──
+// ⚠️ 背景：`Detector::save()` 目前是**无条件**的（`detector.cpp` 的 check_name/check_type）
+//   —— 置信度不过/类型异常就落一张 JPEG（"用于分类器迭代"）。
+//   ⚠️ 而**三个 YOLO 版本的同类调用是注释掉的** ⇒ 两边不一致。
+//   ⭐ 默认**保持同济行为（= 落图）**；开了这个开关才**关掉**落图（跑批时省盘 + 省时间）。
+// #define HZMIR_EXP_NO_TRAD_SAVE    // ⭐ 关掉传统检测器的落图（跑批调参时开）
+
+// ── 实验模板（复制这一段改）──
+// #define HZMIR_EXP_EXAMPLE_XXX     // 一句话说清这个实验在试什么
+//
+//   实现：test/function/exp_example.cpp
+//   入口：core/auto_aim/<角色>/<角色>.cpp 的装配点
+//   ```cpp
+//   #ifdef HZMIR_EXP_EXAMPLE_XXX
+//     // ⭐ 实验路径（⚠️ 打一条 warn，免得忘了自己开着实验）
+//     tools::logger()->warn("[Xxx] ⚠️ 实验模式：HZMIR_EXP_EXAMPLE_XXX");
+//     ...实验实现...
+//   #else
+//     ...正式路径...
+//   #endif
+//   ```
+
+// ═══════════════════════════════════════════════════════════════════════════
+// §三 兼容开关（编译期）
+//
+// ⚠️ 与 §二 的区别：§二 是「临时实验」，§三 是「**长期的兼容/回退路径**」。
+//    §三 的开关**可以长期存在**（它保证"随时能回到同济行为"）。
+// ⭐ 现状：本项目在**源码里硬编码**的偏差，由 **`--tongji`（运行期）** 集中控制
+//   （见 `utils/config/tongji_flags.hpp`），所以这里**暂时是空的**。
+//   若将来有「只能在编译期决定」的兼容点，加在这里。
+// ═══════════════════════════════════════════════════════════════════════════
 
 #endif  // HZMIR_CORE_DEBUG_HPP

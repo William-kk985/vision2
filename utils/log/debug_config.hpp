@@ -1,6 +1,15 @@
 /**
  * @file utils/log/debug_config.hpp
- * @brief ⭐⭐⭐ **细节日志的集中开关**（W99）—— 「一行一个模块，定义=开 / 注释=关」
+ * @brief **开关【展开器】** —— 把 `core/debug.hpp` 的开关翻译成 `LOG_xxx(...)` 宏（W104）
+ *
+ * ## ⚠️ 开关**不在本文件**了
+ * ```
+ * core/debug.hpp              ← ⭐⭐【开关与实验总控】所有 #define 都在那
+ * utils/log/debug_config.hpp  ← ⭐【你在这里】只负责【展开】（需要 logger()）
+ * core/debug_node.hpp         ← 【数据面】FrameDebug（零宏）
+ * ```
+ * ⭐ 为什么拆开：`core/debug.hpp` 要**零依赖**（让 `utils/` 也能 include 它拿开关）。
+ *   而展开需要 `tools::logger()` ⇒ 展开只能留在 `utils/log/`。
  *
  * ## 为什么需要（替代"运行期热键切模块"）
  * W95 做了运行期按模块过滤（`--log-off` / 热键 `n`）—— **灵活，但有两个问题**：
@@ -57,41 +66,14 @@
 
 #include "utils/log/logger.hpp"
 
-// ═══════════════════════════════════════════════════════════════
-// ⭐⭐⭐ 开关：`#define` = 开，注释掉 = 关
+// ⭐⭐⭐ W104：**开关已经搬到 `core/debug.hpp`（开关与实验总控）**
 //
-// ⚠️ 建议默认【关】的是「每帧刷屏」的细节日志；【开】的是低频的状态变化。
-//    调哪个模块就打开哪个，调完记得关回去（否则长时间跑批会刷屏）。
-// ═══════════════════════════════════════════════════════════════
-
-// ── 检测链路（⚠️ 每帧 1~2 条，最吵）──
-// #define HZMIR_LOG_YOLO            // YOLO 逐帧候选/过滤统计（objectness → NMS → 输出）
-// #define HZMIR_LOG_DETECTOR        // 传统检测器的灯条/装甲板配对细节
-
-// ── 跟踪 / 估计（⚠️ EKF 细节很能刷）──
-// #define HZMIR_LOG_EKF             // EKF 新息（NIS）/ 收敛 / 发散判定
-// #define HZMIR_LOG_TRACKER         // 跟踪状态机切换（lost/detecting/tracking/temp_lost）
-// #define HZMIR_LOG_TARGET          // 目标选择/跳变/小陀螺判据
-
-// ── 规划 / 射击 ──
-// #define HZMIR_LOG_PLANNER         // MPC 迭代/弹道/重合度
-// #define HZMIR_LOG_AIMER           // 瞄点选择/延迟补偿
-// #define HZMIR_LOG_SHOOTER         // 开火判据为什么没过
-
-// ── 打符 ──
-// #define HZMIR_LOG_BUFF            // 打符检测/拟合/预测
-
-// ── 硬件 / 板卡 ──
-// #define HZMIR_LOG_CAMERA          // 相机 SDK 参数/带宽/丢帧
-// #define HZMIR_LOG_BOARD           // 下位机收发（⚠️ 每帧都发，很吵）
-// #define HZMIR_LOG_IMU             // IMU 数据/时间戳对齐
-
-// ── 轮子（utils/wheels/）──
-// #define HZMIR_LOG_TI               // 时序积分器（TemporalIntegrator）
-// #define HZMIR_LOG_TGD              // 传统检测的 TGD（目标引导检测）
-
-// ── 调试体系自身 ──
-// #define HZMIR_LOG_SINK            // sink 生命周期（挂上/摘掉/队列深度）
+// 本文件现在**只干一件事**：把那些开关**展开**成 `LOG_xxx(...)` 宏。
+// ⚠️ 为什么展开不能也搬到 `core/debug.hpp`：展开需要 `tools::logger()`，
+//   而 `core/debug.hpp` 是**零依赖**的（谁都能 include）⇒ 展开留在这里。
+//
+// ⭐ 想开某个模块的日志 ⇒ 改 **`core/debug.hpp` 的 §一**（不是本文件）
+#include "core/debug.hpp"
 
 // ═══════════════════════════════════════════════════════════════
 // 宏定义（⚠️ 下面的格式统一：关时展开成【空】，连参数都不求值）

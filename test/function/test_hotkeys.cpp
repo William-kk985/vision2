@@ -6,7 +6,7 @@
 #include <filesystem>
 #include <string>
 
-#include "core/debug.hpp"
+#include "core/debug_node.hpp"
 #include "utils/debug/csv_sink.hpp"
 #include "utils/debug/debug_sink.hpp"
 #include "utils/debug/hotkeys.hpp"

@@ -47,6 +47,46 @@ else()
   set(_hzm_ros2_default OFF)
 endif()
 option(HZMIR_WITH_ROS2 "启用 ROS2 导航桥（需要 ament/rclcpp/std_msgs/sp_msgs）" ${_hzm_ros2_default})
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ⭐⭐⭐ W104：**算法实验开关的自动解析**（`core/debug.hpp` §二）
+#
+# ## 为什么要自动解析（而不是每次手改 CMakeLists）
+# 一个实验要动三处：① `core/debug.hpp` 加开关 ② `test/function/exp_*.cpp` 写实现
+# ③ CMake 把那个 .cpp 挂进构建 + 定义宏。
+# ⚠️ 第 ③ 步最容易**忘**（忘了就链接不到符号，报错还不好懂）。
+# ⇒ 让 CMake **直接读 `core/debug.hpp`**：定义了哪个 `HZMIR_EXP_*`，
+#   就自动 ① 全项目定义该宏 ② 把 `test/function/exp_<小写名字>.cpp` 加进构建。
+#
+# ⭐ 与已删除的 `config.hpp` 的区别（那次删对了，这次不一样）：
+#   旧 `config.hpp` 的宏**啥也没干**（实测只有 1 个真在用）⇒ 解析它是**纯装饰**。
+#   这里的 `HZMIR_EXP_*` **真的决定编不编** ⇒ 自动解析是**消除一个易错手步骤**。
+# ═══════════════════════════════════════════════════════════════════════════
+set(HZMIR_EXP_DEFS)
+set(HZMIR_EXP_SRCS)
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/core/debug.hpp" _hzm_exp_lines
+     REGEX "^[ \t]*#[ \t]*define[ \t]+HZMIR_EXP_[A-Za-z0-9_]+")
+foreach(_line IN LISTS _hzm_exp_lines)
+  string(REGEX MATCH "HZMIR_EXP_[A-Za-z0-9_]+" _name "${_line}")
+  list(APPEND HZMIR_EXP_DEFS "${_name}")
+  # ⭐ 约定：宏 `HZMIR_EXP_FOO_BAR` → 实现文件 `test/function/exp_foo_bar.cpp`
+  string(TOLOWER "${_name}" _low)
+  string(REPLACE "hzmir_exp_" "exp_" _file "${_low}")
+  set(_src "${CMAKE_CURRENT_SOURCE_DIR}/test/function/${_file}.cpp")
+  if(EXISTS "${_src}")
+    list(APPEND HZMIR_EXP_SRCS "${_src}")
+    message(STATUS "  🧪 实验开关: ${_name}  →  test/function/${_file}.cpp")
+  else()
+    message(STATUS "  🧪 实验开关: ${_name}  ⚠️ 找不到 test/function/${_file}.cpp（只定义宏）")
+  endif()
+endforeach()
+if(HZMIR_EXP_DEFS)
+  add_compile_definitions(${HZMIR_EXP_DEFS})
+  message(STATUS "  🧪 实验模式：【已开启】—— ⚠️ 这不是同济默认行为，验证完请转正或删除")
+else()
+  message(STATUS "  🧪 实验模式：⬜ 全关（= 同济默认）")
+endif()
+
 if(HZMIR_WITH_ROS2)
   find_package(ament_cmake REQUIRED)
   find_package(rclcpp REQUIRED)

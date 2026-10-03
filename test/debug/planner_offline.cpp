@@ -10,7 +10,7 @@
 #include "utils/log/logger.hpp"
 #include "utils/math/math_tools.hpp"
 // ⭐ W8：Debug 数据面
-#include "core/debug.hpp"
+#include "core/debug_node.hpp"
 #include "utils/debug/csv_sink.hpp"
 #include "utils/debug/debug_sink.hpp"
 #include "utils/debug/expense.hpp"

@@ -178,6 +178,19 @@ void print_effective_config(
       detail::print_kv(os, "camera_params", "已配置（见该 yaml）");
   }
 
+  // ═══ ③.5 ⭐⭐ 实验开关（core/debug.hpp §二）═══
+  detail::print_group(os, "③.5 🧪 实验开关（core/debug.hpp §二；⚠️ 开了就【不是】同济行为）");
+  {
+    int on = 0;
+#ifdef HZMIR_EXP_NO_TRAD_SAVE
+    { detail::print_kv(os, "HZMIR_EXP_NO_TRAD_SAVE", "开", "关掉传统检测器落图"); ++on; }
+#endif
+    if (on == 0)
+      os << "    （全部【关】= 同济默认）⭐ 要试新算法就改 core/debug.hpp §二\n";
+    else
+      os << "    ⚠️ 共 " << on << " 个实验【开】—— 结论出来后请【转正】或【删除】\n";
+  }
+
   // ═══ ④ 编译期开关 ═══
   detail::print_group(os, "④ 编译期开关（改 utils/log/debug_config.hpp 后重编）");
   {

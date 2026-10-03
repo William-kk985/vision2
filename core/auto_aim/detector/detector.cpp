@@ -1,3 +1,4 @@
+#include "test/function/exp_no_trad_save.hpp"   // ⭐ W104：实验层（core/debug.hpp §二）
 #include "utils/system/paths.hpp"   // ⭐ W102：落图路径
 #include "utils/debug/l3_gate.hpp"   // ⭐ W61：全局 L3 门控
 #include "detector.hpp"
@@ -269,7 +270,9 @@ bool Detector::check_name(const Armor & armor) const
   auto confidence_ok = armor.confidence > min_confidence_;
 
   // 保存不确定的图案，用于分类器的迭代
-  if (name_ok && !confidence_ok) save(armor);
+  // ⭐ W104：实验开关 `HZMIR_EXP_NO_TRAD_SAVE` 可关掉落图（跑批调参时省盘 + 省时间）
+  //   ⚠️ 默认**保持同济行为（= 落图）**；这是"中间实验层"，见 core/debug.hpp §二
+  if (!hzmir_exp::no_trad_save() && name_ok && !confidence_ok) save(armor);
 
   // 出现 5号 则显示 debug 信息。但不过滤。
   if (armor.name == ArmorName::five) LOG_DETECTOR("See pattern 5");
@@ -287,7 +290,7 @@ bool Detector::check_type(const Armor & armor) const
   if (!name_ok) {
     tools::logger()->debug(
       "see strange armor: {} {}", ARMOR_TYPES[armor.type], ARMOR_NAMES[armor.name]);
-    save(armor);
+    if (!hzmir_exp::no_trad_save()) save(armor);
   }
 
   return name_ok;

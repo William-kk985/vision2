@@ -30,7 +30,7 @@
 
 #include <opencv2/opencv.hpp>
 
-#include "core/debug.hpp"
+#include "core/debug_node.hpp"
 #include "utils/debug/l3_gate.hpp"   // ⭐ W61：全局 L3 门控
 #include "utils/log/logger.hpp"   // ⭐ W61：全局 L3 门控
 

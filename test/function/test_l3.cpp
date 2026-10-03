@@ -7,7 +7,7 @@
 #include <memory>
 #include <opencv2/opencv.hpp>
 
-#include "core/debug.hpp"
+#include "core/debug_node.hpp"
 #include "utils/debug/debug_sink.hpp"
 #include "utils/debug/image_sink.hpp"
 #include "utils/debug/window_sink.hpp"

@@ -398,6 +398,103 @@ python3 scripts/compare.py output/csv/yolo_yolov5_frames.csv \
 ⭐ **识别器的输出定义**（同济 README §3.3）：**装甲板的四个顶点像素坐标 + 图案类别**
 ⇒ 所以三个模型都是"四点 + 分类"，但**分类方案不同**（下表）。
 
+#### ⭐⭐⭐ 三个模型的**类别定义**（逐类列出）
+
+⭐ **它们做的是【同一个任务类型】：装甲板「四点检测 + 分类」**
+（同济 README §3.3：识别器输出**四个顶点像素坐标 + 图案类别**）
+⚠️ **但"分类方案"完全不同**，所以**类别数也不同**：
+
+##### `yolov5` — **13 类 = 4 颜色 + 9 编号（解耦）**
+
+输出布局（22 列）：
+```
+[0..7]   4 个关键点（x,y）×4          ← 四点
+[8]      objectness（sigmoid 后）      ← ⭐ 这就是 det_obj_peak 读的那一列
+[9..12]  ⭐ 4 个【颜色】类
+[13..21] ⭐ 9 个【编号】类
+```
+
+| 组 | 类序（**模型输出顺序，不是枚举顺序**） |
+|---|---|
+| **颜色 4** | `0=blue` · `1=red` · `2=extinguish` · `3=`⚠️ *(purple，代码里落到 else)* |
+| **编号 9** | `0=sentry` · `1=one` · `2=two` · `3=three` · `4=four` · `5=five` · `6=outpost` · `7=base` · `8=not_armor` |
+
+⚠️ **注意编号的类序和 `ArmorName` 枚举【不一样】**（枚举是 `one,two,three,four,five,sentry,outpost,base,not_armor`）——
+代码里用 `ArmorName(num_id - 1)` 做了平移。**换模型时必须对上这个映射。**
+
+##### ⭐⭐⭐ 训练时的类别定义（来自同济的标注工具）
+
+⭐ **`TongjiSuperPower/LabelRoboMaster`**（同济改自 SJTU 交龙的 `MonthMoonBird/LabelRoboMaster`）
+的 `labeldialog.cpp` 给出了**训练时的类别名单**（⚠️ 同济**没改**交龙那份）：
+
+```cpp
+static const QString Armor_names[] = {"Sentry", "Hero", "Engineer", "3-Infantry", "4-Infantry", "5-Infantry",
+                                      "Outpost", "Base-small", "Base-big",
+                                      "3-Balance", "4-Balance", "5-Balance"};   // ⭐ 12 类
+static const QString Color_names[] = {"Blue", "Red", "Extinguish", "Purple"};   // ⭐ 4 类
+```
+
+⭐ **两个关键解读**：
+1. ⭐ **`3-Balance / 4-Balance / 5-Balance` = 平衡步兵** ⇒ **这就是 `type = big` 的来源**
+   （平衡步兵用大装甲 ⇒ `armor_properties` 里 `three/four/five × big` 那 9 条）
+2. ⭐ **`Color_names` 的顺序 = `Blue, Red, Extinguish, Purple`**
+   ⇒ ⭐ **正好对上 `yolov5` 路径的 `color_id == 0 ? blue : color_id == 1 ? red`** ✅
+
+⭐ **并且**：该工具的 README 明写 **「我们对 YOLOv11 所需的输入标签格式进行了适配」**
+⇒ ⭐ **`yolo11` 才是他们在【持续训】的方向**（`assets/yolo11_buff_int8.xml` 也是它）。
+
+⚠️ **`Armor_names` 12 类 ≠ `armor_properties` 38 条**（名称体系不同：工具用 `Hero/Engineer/Balance`，
+运行期用 `one/two/three/four/five`）—— **两者的精确对应关系需要训练时的 label 定义才能确定**，
+⭐ 这里**如实标注为未确认**。
+
+##### `yolo11` — **38 类 = `armor_properties` 的 38 条**（直接编码合法组合）
+
+⭐ **完整的 38 类**（`idx` = 模型的 class id，因为代码用 `armor_properties[class_id]` 查表）：
+
+| idx | color | name | type | | idx | color | name | type |
+|---|---|---|---|---|---|---|---|---|
+| 0 | blue | sentry | small | | 19 | red | outpost | small |
+| 1 | red | sentry | small | | 20 | extinguish | outpost | small |
+| 2 | extinguish | sentry | small | | 21 | blue | base | **big** |
+| 3 | blue | one | small | | 22 | red | base | **big** |
+| 4 | red | one | small | | 23 | extinguish | base | **big** |
+| 5 | extinguish | one | small | | 24 | ⭐ **purple** | base | **big** |
+| 6 | blue | two | small | | 25 | blue | base | small |
+| 7 | red | two | small | | 26 | red | base | small |
+| 8 | extinguish | two | small | | 27 | extinguish | base | small |
+| 9 | blue | three | small | | 28 | ⭐ **purple** | base | small |
+| 10 | red | three | small | | 29 | blue | three | **big** |
+| 11 | extinguish | three | small | | 30 | red | three | **big** |
+| 12 | blue | four | small | | 31 | extinguish | three | **big** |
+| 13 | red | four | small | | 32 | blue | four | **big** |
+| 14 | extinguish | four | small | | 33 | red | four | **big** |
+| 15 | blue | five | small | | 34 | extinguish | four | **big** |
+| 16 | red | five | small | | 35 | blue | five | **big** |
+| 17 | extinguish | five | small | | 36 | red | five | **big** |
+| 18 | blue | outpost | small | | 37 | extinguish | five | **big** |
+
+⭐ **为什么 38 条不是"4×9=36"**：因为只有**合法组合**入表 ——
+`base` 有 big/small 两种 + 4 种颜色；`three/four/five` 有 big/small；其余只有 small 且无 purple。
+
+##### `yolov8` — **2 类** ⚠️ 分类能力最弱
+
+⚠️ **2 类不足以表达装甲板语义**（当 `armor_properties` 索引用只能命中 `[0..1]`，两条都是 `sentry`）
+⇒ ⭐ **必须靠外挂分类器补**（它的 `parse()` 里调了 `classifier_.classify()`）。
+
+##### 外挂分类器 `tiny_resnet.onnx` — **9 类 = `ArmorName` 枚举**
+
+```cpp
+// classifier.cpp: cv::Mat outputs(1, 9, CV_32F, ...);
+//                armor.name = static_cast<ArmorName>(label_id);   ← 直接当枚举
+```
+| 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|
+| one | two | three | four | five | sentry | outpost | base | not_armor |
+
+⭐ **它输入的是 `armor.pattern`（32×32 灰度图案）** —— 只看**图案**，不看颜色。
+
+---
+
 #### ⭐⭐ 那 `yolov5` 到底能不能识别"全部"？
 
 ⭐ **能，但有两个【继承自同济】的简化**（⚠️ **不是我们的 bug**，`armor.cpp:175` 逐字相同）：

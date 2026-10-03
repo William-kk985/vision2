@@ -1,3 +1,4 @@
+#include "utils/system/paths.hpp"   // ⭐ W102：落图路径
 #include "utils/debug/l3_gate.hpp"   // ⭐ W61：全局 L3 门控
 #include "detector.hpp"
 
@@ -27,8 +28,11 @@ Detector::Detector(const std::string & config_path, bool debug)
   min_confidence_ = yaml["min_confidence"].as<double>();
   max_rectangular_error_ = yaml["max_rectangular_error"].as<double>() / 57.3;  // degree to rad
 
-  save_path_ = "patterns";
-  std::filesystem::create_directory(save_path_);
+  // ⭐⭐⭐ W102：**路径走 `paths`（`output/patterns`），不再硬编码仓库顶层**
+  //   ⚠️ 原来 `save_path_ = "patterns"` ⇒ 运行期产物堆在仓库根目录，
+  //     而且 `git add -A` 会把它们**提交进 git**（实测已经发生过：106 个 JPEG / 1.8 MB）。
+  //   ⚠️ 建目录改成**惰性**（见 `save()`）—— 原来构造时无条件建，跑一次就多个空目录。
+  save_path_ = tools::paths::patterns();
 }
 
 DetectorResult Detector::detect(const cv::Mat & bgr_img, int frame_count)
@@ -359,6 +363,12 @@ cv::Point2f Detector::get_center_norm(const cv::Mat & bgr_img, const cv::Point2f
 
 void Detector::save(const Armor & armor) const
 {
+  // ⭐ W102：**惰性建目录**（原来构造函数里无条件建 ⇒ 不落图也多个空目录）
+  static bool dir_ready = false;
+  if (!dir_ready) {
+    tools::paths::ensure_dir(save_path_);
+    dir_ready = true;
+  }
   auto file_name = fmt::format("{:%Y-%m-%d_%H-%M-%S}", std::chrono::system_clock::now());
   auto img_path = fmt::format("{}/{}_{}.jpg", save_path_, armor.name, file_name);
   cv::imwrite(img_path, armor.pattern);

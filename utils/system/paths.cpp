@@ -26,6 +26,9 @@ std::string video() { return std::string(root()) + "/video"; }
 std::string images() { return std::string(root()) + "/images"; }
 std::string csv() { return std::string(root()) + "/csv"; }
 
+// ⭐ W102：传统检测器的图案样本目录
+std::string patterns() { return std::string(root()) + "/patterns"; }
+
 // ⭐ W102：海康 SDK 日志目录（SDK 会自己创建，但我们也建一下更稳）
 std::string mvs_log() { return std::string(root()) + "/mvs_log"; }
 
@@ -51,6 +54,8 @@ void ensure_all()
   ensure_dir(images());
   ensure_dir(csv());
   ensure_dir(mvs_log());
+  // ⚠️ `patterns()` 不在这里建 —— 它有 `--save-patterns` 开关，
+  //    开了才建（否则每次启动都白建一个空目录）
 
   // ⭐⭐⭐ W102：**把海康 SDK 的 `./MvSdkLog/` 用软链接收进 output/**
   //

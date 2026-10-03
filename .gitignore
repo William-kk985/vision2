@@ -50,6 +50,7 @@ logs/
 records/
 debug_imgs/
 MvSdkLog/
+patterns/
 *_frames.csv
 *_series.csv
 *.avi

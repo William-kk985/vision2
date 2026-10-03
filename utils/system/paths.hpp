@@ -50,6 +50,13 @@ std::string images();
 /// CSV 目录（`output/csv`）
 std::string csv();
 
+/// ⭐⭐⭐ W102：**传统检测器落的"图案样本"**（`output/patterns`）
+///
+/// ⚠️ 原来硬编码 `save_path_ = "patterns"` ⇒ **仓库顶层多一个目录**，
+/// 而且它是**运行期产物**（`Detector::save()` 在置信度不过/类型异常时逐张落 JPEG，
+/// 用于离线迭代分类器）⇒ 本该在 `output/` 下。
+std::string patterns();
+
 /// ⭐⭐⭐ W102：**海康 SDK 的日志目录**（`output/mvs_log`）
 ///
 /// ⚠️ 原来 SDK 按 **CWD** 写 `./MvSdkLog/` ⇒ 顶层多一个目录，还不在 `output/` 里。

@@ -1,3 +1,4 @@
+#include "utils/system/paths.hpp"   // ⭐ W102：落图路径
 #include "yolov5.hpp"
 #include "../det_stats.hpp"   // ⭐ W63：检测统计开关
 #include "utils/debug/l3_gate.hpp"   // ⭐ W61：全局 L3 门控
@@ -39,8 +40,10 @@ YOLOV5::YOLOV5(const std::string & config_path, bool debug)
   roi_ = cv::Rect(x, y, width, height);
   offset_ = cv::Point2f(x, y);
 
-  save_path_ = "imgs";
-  std::filesystem::create_directory(save_path_);
+  // ⭐⭐⭐ W102：**路径走 `paths`（`output/images`），不再硬编码仓库顶层 `imgs/`**
+  //   ⚠️ 原来 `create_directory("imgs")` 在**构造时**就执行 ⇒ 跑一次就在仓库根建个 `imgs/`
+  //     （实测确实被建出来过，空的）。改成惰性（见 `save()`）。
+  save_path_ = tools::paths::images();
   auto model = core_.read_model(model_path_);
   ov::preprocess::PrePostProcessor ppp(model);
   auto & input = ppp.input();
@@ -324,6 +327,12 @@ void YOLOV5::draw_detections(
 
 void YOLOV5::save(const Armor & armor) const
 {
+  // ⭐ W102：惰性建目录（原来构造时就建 ⇒ 不落图也多个空目录）
+  static bool dir_ready = false;
+  if (!dir_ready) {
+    tools::paths::ensure_dir(save_path_);
+    dir_ready = true;
+  }
   auto file_name = fmt::format("{:%Y-%m-%d_%H-%M-%S}", std::chrono::system_clock::now());
   auto img_path = fmt::format("{}/{}_{}.jpg", save_path_, armor.name, file_name);
   cv::imwrite(img_path, tmp_img_);

@@ -13,7 +13,6 @@
  * ⭐ **W34 新增**：`--video` 零硬件验证 + `--tongji` 兼容开关 + Debug CSV
  * ⭐ **W34 顺带修**：`io::Command buff_command;` 原来是**未初始化**的（E2 家族，已在契约层修）
  */
-#include "config.hpp"   // ⭐ 唯一宏入口（宏规范 ①）
 
 #include <chrono>
 #include <opencv2/opencv.hpp>
@@ -52,9 +51,6 @@
 #include "utils/debug/debug_setup.hpp"   // ⭐ W49：一行装配
 #include "utils/ov/device.hpp"
 
-#ifndef HZMIR_CONFIG_HPP
-#  error "src/uav.cpp 必须先 #include \"config.hpp\"（宏规范 ①：唯一宏入口）"
-#endif
 
 const std::string keys =
   "{help h usage ? |                  | 输出命令行参数说明}"
@@ -277,6 +273,12 @@ int main(int argc, char * argv[])
     const auto log_only = cli.get<std::string>("log-only");
     if (!log_off.empty())  tools::set_log_modules_off(tools::parse_module_list(log_off));
     if (!log_only.empty()) tools::set_log_modules_only(tools::parse_module_list(log_only));
+
+    // ⭐ 打一条状态（用 logger，能同时验证过滤已生效）
+
+    if (!log_off.empty() || !log_only.empty())
+
+      tools::logger()->info("[log] {}", tools::log_filter_status());
   }
   const auto video_path = cli.get<std::string>("video");
   const auto csv_prefix = cli.get<std::string>("csv");

@@ -12,7 +12,6 @@
 #include <sched.h>
 
 #include <algorithm>
-#include "config.hpp"   // ⭐ W19 修复：原来没 include → 整个宏体系从未生效
 
 #include <chrono>
 #include <cstring>
@@ -120,10 +119,6 @@ static void elevate_priority()
     tools::logger()->info("[hero] 调度优先级已提到 -20");
 }
 
-// ⭐ W19 编译期自检：确认 `config.hpp` 真的被包含（否则宏静默失效，就像修复前那样）
-#ifndef HZMIR_CONFIG_HPP
-#  error "src/hero.cpp 必须先 #include \"config.hpp\"（宏规范 ①：唯一宏入口）"
-#endif
 
 const std::string keys =
   "{help h usage ? | | 输出命令行参数说明}"
@@ -168,6 +163,12 @@ int main(int argc, char * argv[])
     const auto log_only = cli.get<std::string>("log-only");
     if (!log_off.empty())  tools::set_log_modules_off(tools::parse_module_list(log_off));
     if (!log_only.empty()) tools::set_log_modules_only(tools::parse_module_list(log_only));
+
+    // ⭐ 打一条状态（用 logger，能同时验证过滤已生效）
+
+    if (!log_off.empty() || !log_only.empty())
+
+      tools::logger()->info("[log] {}", tools::log_filter_status());
   }
   if (cli.has("help") || !cli.has("@config-path")) {
     cli.printMessage();

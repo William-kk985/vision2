@@ -44,7 +44,7 @@
 | ① L0/L1 常驻 | `core/debug.hpp` 的 `FrameDebug` | 零宏、近零开销 |
 | ② 运行期 sink 热插拔 | `SinkHub` + pub/sub | **生产者不知道消费者** |
 | ③ 运行期 logger 级别 | 热键 `d` | 不用重编 |
-| ④ 编译期宏 | **只剩 `config.hpp` 一处** | `CMakeLists` 强制 `-include` |
+| ④ 编译期宏 | ⚠️ **已删除**（`config.hpp` 是空壳，W96 删掉） | 现在只有 CMake 的 `-DHZMIR_WITH_ROS2` |
 | ⑤ `test/` 独立程序 | **20 个 ctest 用例** | 算法级调试 |
 | ⑥ 离线可视化 | `scripts/{analyze,plot,compare}.py` | ⭐ **对比 A-B**，零 pandas 依赖 |
 
@@ -397,7 +397,6 @@ udevadm info -a -n /dev/ttyACM0 | grep -E '({serial}|{idVendor}|{idProduct})'   
 │   ├── video/             日志（含 ros/）
 │   ├── images/            录像 .avi + 同名 .txt 位姿
 │   └── csv/              存图 .png
-├── config.hpp            ⭐ 唯一的编译期宏入口（+ 互斥检查）
 ├── core/                 契约层 + 业务角色
 │   ├── types.hpp         ⭐ 零依赖契约（Armor / Target / Command …）
 │   ├── debug.hpp         六层调试的数据面

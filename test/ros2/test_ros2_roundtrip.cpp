@@ -17,7 +17,7 @@
  * ```
  * ⭐ 这样「ROS2 层是否真的通」就有了**机器可验证的结论**，而不是"看着像通了"。
  *
- * ⚠️ 需要 `HAS_ROS2`（`-DHZMIR_WITH_ROS2=ON`）；否则本文件不参与构建。
+ * ⚠️ 需要 `-DHZMIR_WITH_ROS2=ON`；否则本文件不参与构建。
  * ⚠️ 运行需 `ROS_LOG_DIR` 指向**可写**目录（rclcpp 默认写 `~/.ros/log/`）。
  */
 #include <atomic>

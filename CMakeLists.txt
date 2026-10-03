@@ -25,28 +25,34 @@ if(_hzm_bindir_lc MATCHES "dbg|debug")
   endif()
 endif()
 
-# ⭐⭐ W35：ROS2 导航桥（可选）
-#   ⚠️ 修复前 `io/CMakeLists.txt` 写的是 `if(HAS_ROS2)` —— 那是 **config.hpp 里的 C++ 宏**，
-#      CMake 里**从来没有这个变量** → **io/ros2/ 从未被编译过**（静默失效）。
-#   现在：CMake 用 `HZMIR_WITH_ROS2`；两侧加一致性检查（见 config.hpp 的互斥段）。
-# ⭐⭐ **config.hpp 是唯一宏入口** —— 于是 CMake 不该让人手动同步，而是**直接读它的意图**。
-#   下面从 config.hpp 里抓 `#define HAS_ROS2`；抓到就自动打开本 option。
-#   （仍保留 `-DHZMIR_WITH_ROS2=ON/OFF` 手动覆盖的能力）
-file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/config.hpp" _hzm_ros2_line
-     REGEX "^[ \t]*#[ \t]*define[ \t]+HAS_ROS2")
-if(_hzm_ros2_line)
-  set(_hzm_cfg_wants_ros2 ON)
-  message(STATUS "  config.hpp: HAS_ROS2 已定义 → 自动启用 ROS2 构建")
+# ⭐⭐ ROS2 导航桥（可选）—— ⭐⭐ W96：**CMake 自动检测，不需要 config.hpp**
+#
+#   改前的两层麻烦：
+#     ① `config.hpp` 里 `#define HAS_ROS2` 是人手开关
+#     ② CMake 用 `file(STRINGS)` 反向读那个 C++ 宏，再拿它当 CMake 变量的默认值
+#     ③ 两侧还要一致性 `#error` 检查
+#   ⚠️ 后果：**只要有人打开 config.hpp 的 HAS_ROS2，而机器上没有 `sp_msgs`，
+#       cmake 就【直接失败】**（`find_package(sp_msgs REQUIRED)`）——
+#       一个"编译期配置"却让"配置阶段"崩掉。
+#
+#   现在：**先静默探测 `sp_msgs`，装了才默认开**。
+#     · 装了 sp_msgs（同济工作空间）→ 自动 ON，无需任何手动步骤
+#     · 没装                        → 自动 OFF，构建照常
+#     · 想强制：`-DHZMIR_WITH_ROS2=ON/OFF`
+find_package(sp_msgs QUIET)
+if(sp_msgs_FOUND)
+  set(_hzm_ros2_default ON)
+  message(STATUS "  检测到 sp_msgs → 默认启用 ROS2 导航桥")
 else()
-  set(_hzm_cfg_wants_ros2 OFF)
+  set(_hzm_ros2_default OFF)
 endif()
-option(HZMIR_WITH_ROS2 "启用 ROS2 导航桥（需要 ament/rclcpp/std_msgs/sp_msgs）" ${_hzm_cfg_wants_ros2})
+option(HZMIR_WITH_ROS2 "启用 ROS2 导航桥（需要 ament/rclcpp/std_msgs/sp_msgs）" ${_hzm_ros2_default})
 if(HZMIR_WITH_ROS2)
   find_package(ament_cmake REQUIRED)
   find_package(rclcpp REQUIRED)
   find_package(std_msgs REQUIRED)
   find_package(sp_msgs REQUIRED)
-  add_compile_definitions(HZMIR_CMAKE_HAS_ROS2)   # → config.hpp 的一致性检查会用到
+  add_compile_definitions(HZMIR_WITH_ROS2)   # ⭐ W96：代码里 #if defined(HZMIR_WITH_ROS2)
 
   # ⭐ W39：把「ament 前缀」和「ROS2 库路径」传给测试环境，
   #   让 `ctest` **不依赖外部 source** 也能跑 ROS2 测试
@@ -73,14 +79,12 @@ find_package(spdlog REQUIRED)
 find_package(fmt REQUIRED)
 find_package(nlohmann_json REQUIRED)
 
-# ⭐ include root = 项目根 → 让 #include "core/types.hpp" / "config.hpp" 可用
+# ⭐ include root = 项目根 → 让 #include "core/types.hpp" 可用
 include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${EIGEN3_INCLUDE_DIR} ${OpenCV_INCLUDE_DIRS})
 
 enable_testing()   # ⭐ 让 ctest 能发现 test/ 下的用例
 
-# ⭐⭐ W19：**强制包含 `config.hpp`** —— 宏规范①「唯一宏入口」的编译期保证。
-#    修复前：`config.hpp` 谁都没 include → 那些互斥 `#error` 检查从未参与编译。
-add_compile_options(-include ${CMAKE_CURRENT_SOURCE_DIR}/config.hpp)
+# ⭐ W96：`config.hpp` 已删除 —— 不再需要"强制包含宏入口"那套机制
 
 add_subdirectory(third_party)
 add_subdirectory(core)

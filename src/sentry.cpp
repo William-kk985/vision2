@@ -27,7 +27,6 @@
  * ./src/sentry --video=demo.avi --force-mode=1 params/robots/sentry.yaml
  * ```
  */
-#include "config.hpp"   // ⭐ 唯一宏入口（宏规范 ①）
 
 #include <chrono>
 #include <memory>
@@ -62,15 +61,12 @@
 #include "utils/ov/device.hpp"
 #include "core/auto_aim/tracker/nav_bridge.hpp"   // ⭐ W35：上行目标信息
 
-// ⭐⭐ W35：ROS2 导航桥（宏规范：`#ifdef` 只允许出现在 config.hpp / **装配函数** / CMakeLists / 测试入口
-//    —— 本文件就是**装配点**，所以这里是合规位置）
-#if defined(HAS_ROS2)
+//   ⭐ W96：`config.hpp` 已删 —— 现在**只看 CMake 的 `-DHZMIR_WITH_ROS2=ON`**；
+//   ⚠️ `#if` 只出现在【装配点】（本文件）—— 符合「宏只决定编不编」的纪律。
+#if defined(HZMIR_WITH_ROS2)
 #  include "io/ros2/ros2.hpp"
 #endif
 
-#ifndef HZMIR_CONFIG_HPP
-#  error "src/sentry.cpp 必须先 #include \"config.hpp\"（宏规范 ①：唯一宏入口）"
-#endif
 
 const std::string keys =
   "{help h usage ? | | 输出命令行参数说明}"
@@ -145,7 +141,7 @@ int run_sentry(
 
   // ⭐⭐ W35：ROS2 导航桥（同济 `sentry.cpp` 的 `io::ROS2 ros2;`）
   //   构造函数里 `rclcpp::init` + 两个 spin 线程（发布/订阅各一）
-#if defined(HAS_ROS2)
+#if defined(HZMIR_WITH_ROS2)
   auto ros2 = std::make_unique<io::ROS2>();
   tools::logger()->info("[sentry] ROS2 导航桥已启动（上行 auto_aim_target_pos / 下行 enemy_status+autoaim_target）");
 #endif
@@ -212,7 +208,7 @@ int run_sentry(
       //     get_invincible_armor → armor_filter → [get_auto_aim_target] → set_priority
       //   本项目把它们**内聚进 Tracker**：`set_invincible` / `set_auto_aim_targets` + yaml
       //   ⭐ W35：数据源（ROS2）现已接通
-#if defined(HAS_ROS2)
+#if defined(HZMIR_WITH_ROS2)
       // ① 无敌状态（下行）—— 同济 `decider.get_invincible_armor(ros2.subscribe_enemy_status())`
       {
         const auto invincible_ids = ros2->subscribe_enemy_status();
@@ -253,7 +249,7 @@ int run_sentry(
 
       // ⭐ 上行给导航（同济 `ros2.publish(decider.get_target_info(armors, targets))`）
       //   payload = {x, y, 1, ArmorName+1}，⚠️ 第 4 位从 **1** 开始
-#if defined(HAS_ROS2)
+#if defined(HZMIR_WITH_ROS2)
       ros2->publish(auto_aim::target_info_for_nav(armors, targets));
 #endif
 
@@ -313,6 +309,12 @@ int main(int argc, char * argv[])
     const auto log_only = cli.get<std::string>("log-only");
     if (!log_off.empty())  tools::set_log_modules_off(tools::parse_module_list(log_off));
     if (!log_only.empty()) tools::set_log_modules_only(tools::parse_module_list(log_only));
+
+    // ⭐ 打一条状态（用 logger，能同时验证过滤已生效）
+
+    if (!log_off.empty() || !log_only.empty())
+
+      tools::logger()->info("[log] {}", tools::log_filter_status());
   }
   const auto video_path = cli.get<std::string>("video");
   const auto csv_prefix = cli.get<std::string>("csv");

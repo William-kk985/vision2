@@ -89,21 +89,29 @@ cp -r udp-server ~/.local/share/PlotJuggler/PlotJuggler4/extensions/
 ```
 </details>
 
-##### ③ 在 PlotJuggler 里配置（⭐ 这一步最容易漏，实测走通）
+##### ③ 在 PlotJuggler 里配置并【启动】（⭐ 两步都容易漏，实测走通）
 
 ```
 ① Sources 面板左上三个图标选【📡 流式】（📄=文件 ☁=云）
 ② 下拉框选 "UDP Server"
 ③ ⭐ 点下拉框右边的【+】→ 弹出 "UDP Server" 配置对话框
-      Transport   udp://
-      Address     0.0.0.0
-      Port        9870
-      Message Serialization  json
-      ☑ Use embedded timestamp field      ← ⭐ 勾上（时间戳字段名默认就是 timestamp）
+      Transport   udp://          Address  0.0.0.0
+      Port        9870            Message Serialization  json
+      ☑ Use embedded timestamp field      （字段名默认就是 timestamp，与程序一致）
       Maximum size of arrays: 500   (•)clamp  ( )discard
-④ ⭐⭐ 点对话框右下角的【OK】—— **漏了这步，程序发的包会被直接丢弃**
-      （判断是否生效：`ss -lunp | grep 9870`，**有输出才是真的在监听**）
-⑤ 点【▶/⏸】开始流式；再点源名展开，就能看到字段
+④ ⭐⭐ 点对话框右下角的【OK】—— **漏了这步，配置不生效，包被直接丢弃**
+⑤ ⭐⭐ 点【⏸/▶】把流**启动** —— 图标含义是「点了会做什么」：
+        ▶（灰色）= 当前暂停，点它 → 开始
+        ⏸（蓝色高亮）= 当前正在播放
+⑥ 点数据源名逐层展开（[stream] UDP Server → udp/data）即可看到字段，
+   把字段拖到右侧图表区即可画曲线
+```
+
+**自检（强烈建议）**：
+```bash
+ss -lunp | grep 9870        # ⭐ 有输出 = PlotJuggler 真的在监听
+# 若已启动但 Value 列全是 '-'，看 socket 队列有没有堆积：
+grep -i 268E /proc/net/udp  # 9870=0x268E；⭐ rx_queue 持续非 0 = 收到了但没消费（流没启动）
 ```
 
 ##### ④ 跑起来

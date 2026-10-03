@@ -63,6 +63,7 @@ const std::string keys =
   "{force-mode     | 1 | ⭐ 录像模式档位：0=idle 1=auto_aim 2=small_buff 3=big_buff 4=outpost}"
   "{bullet-speed   | 22.0 | 录像模式下的弹速}"
   "{dump-camera-params | false | ⭐ 只打印相机常用参数的当前值（用于把 MVS 里的好值抄进 yaml 的 camera_params）}"
+  "{camera-config  | params/camera.yaml | ⭐⭐ 相机专配 yaml（4 兵种共用；兵种 yaml 的相机段可覆盖；传空=不用）}"
   "{csv            | | ⭐ Debug CSV 输出前缀}"
   "{pj             | false | ⭐ 是否发 PlotJuggler UDP（跨机器请看 --pj-host）}"
   "{pj-host        | 127.0.0.1 | ⭐ PlotJuggler 目标 IP（跨机器时填对方 IP）}"
@@ -281,7 +282,7 @@ int main(int argc, char * argv[])
 
   if (video_path.empty()) {
     // ── 真实硬件：io::CBoard（CAN）+ io::Camera ──
-    io::Camera camera(config_path, cli.get<bool>("dump-camera-params"));
+    io::Camera camera(config_path, cli.get<bool>("dump-camera-params"), cli.get<std::string>("camera-config"));
     io::CBoard cboard(config_path);
     tools::logger()->info("[uav] 真实硬件模式（CBoard/CAN）");
     return run_uav(camera, cboard, config_path, csv_prefix, cli.get<bool>("record"),

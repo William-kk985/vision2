@@ -1,0 +1,35 @@
+# ⭐⭐⭐ 相机专配 —— **4 个兵种共用这一份**
+#
+# 优先级：**兵种 yaml 的相机段 > 本文件 > 内置默认**
+#   ⇒ 常用参数只改这里；某个兵种要特殊值（如 sentry 曝光 0.8ms / uav 用 mindvision），
+#     就在 `params/<兵种>.yaml` 里写同名键覆盖。
+#
+# ⭐ 怎么知道该填多少：
+#   ① 先在 **MVS**（海康客户端）里把画面调好
+#   ② 跑 `tools/scripts/run.sh infantry --dump-camera-params`
+#      —— 它打印的是【相机上电后的当前值】= MVS 里那套（在我们的覆盖之前）
+#   ③ 把值抄到这里，以后就不用开 MVS 了
+#
+# ⚠️ 我们的程序会**强制覆盖**曝光/增益/触发模式等（见 hikrobot.cpp），
+#   所以 MVS 里调的值**不会自动继承** —— 必须抄过来。
+
+# ── 相机类型 ──
+camera_name: "hikrobot"        # hikrobot / mindvision / video
+vid_pid: "2bdf:0001"           # 设备 VID:PID（udevadm info -a -n /dev/videoX 可取）
+
+# ── ⭐ 核心三项（最常调）──
+exposure_ms: 2                 # 曝光（ms）。⚠️ 画面暗就先加这个：2 → 6 → 10
+gain: 16                       # 增益（dB）。辅助手段，⚠️ 大了噪声明显
+fps: 30                        # 帧率。150fps@1440x1080≈233MB/s 接近 USB3 上限，报
+                               # 0x80000007（无数据）就先降到 30
+
+# ── 通用参数：任意海康参数（名字与 MVS 里显示的一致）──
+# camera_params:
+#   float:                     # MV_CC_SetFloatValue
+#     Gamma: 1.0
+#     Sharpness: 50
+#     # ExposureTime: 6000     # 单位 µs（注意与 exposure_ms 不同）
+#   enum:                      # MV_CC_SetEnumValue
+#     BalanceWhiteAuto: 0      # ⭐ 0=Off 1=Once 2=Continuous（默认 2，色温变化会漂）
+#   int:                       # MV_CC_SetIntValue
+#     # Width: 1280

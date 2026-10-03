@@ -79,6 +79,7 @@ const std::string keys =
   "{force-mode     | 1 | ⭐ 录像模式档位：0=idle 1=auto_aim 2=small_buff 3=big_buff 4=outpost}"
   "{bullet-speed   | 22.0 | 录像模式下的弹速（下位机不可用时）}"
   "{dump-camera-params | false | ⭐ 只打印相机常用参数的当前值（用于把 MVS 里的好值抄进 yaml 的 camera_params）}"
+  "{camera-config  | params/camera.yaml | ⭐⭐ 相机专配 yaml（4 兵种共用；兵种 yaml 的相机段可覆盖；传空=不用）}"
   "{shoot-mode     | 2 | ⭐ 哨兵枪口：0=left 1=right 2=both}"
   "{csv            | | ⭐ Debug CSV 输出前缀}"
   "{record         | false | ⭐⭐ 录像到 output/video/（默认**不录**；录会占一个核做 MJPG 编码）}"
@@ -319,7 +320,7 @@ int main(int argc, char * argv[])
 
   if (video_path.empty()) {
     // ── 真实硬件：io::CBoard（CAN）+ io::Camera —— 与同济哨兵一致 ──
-    io::Camera camera(config_path, cli.get<bool>("dump-camera-params"));
+    io::Camera camera(config_path, cli.get<bool>("dump-camera-params"), cli.get<std::string>("camera-config"));
     io::CBoard cboard(config_path);
     tools::logger()->info("[sentry] 真实硬件模式（CBoard/CAN）");
     return run_sentry(camera, cboard, enemy_color, config_path, csv_prefix, true, cli.get<bool>("record"),

@@ -62,6 +62,8 @@ usb_gamma: 160
 usb_gain: 10 #0-96
 
 #####-----工业相机参数-----#####
+# ⭐⭐ 相机配置以 `params/camera.yaml`（4 兵种共用）为默认，这里的同名项【覆盖】它。
+#   ⭐ 本兵种特殊：曝光 0.8ms（比 camera.yaml 的短）
 camera_name: "hikrobot"
 exposure_ms: 0.8
 gain: 16.9

@@ -50,6 +50,8 @@ roi:
 use_roi: false
 
 #####-----工业相机参数-----#####
+# ⭐⭐ 相机配置以 `params/camera.yaml`（4 兵种共用）为默认，这里的同名项【覆盖】它。
+#   ⭐ 本兵种特殊：用 mindvision（camera.yaml 是 hikrobot）
 camera_name: "mindvision"
 exposure_ms: 8
 gamma: 0.6

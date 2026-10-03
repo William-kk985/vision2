@@ -234,13 +234,29 @@ tools/scripts/run.sh infantry --strict-board                    # 没下位机�
 
 #### ⭐⭐ 调相机参数（不用每次开 MVS）
 
-相机参数都从 `params/<兵种>.yaml` 读，**改完直接跑，不用开 MVS**：
+相机参数放在 **`params/camera.yaml`（4 兵种共用一份）**，改完直接跑：
+
+```
+params/
+├── ⭐ camera.yaml      相机专配 —— 只改这里，4 兵种都生效
+├── infantry.yaml      兵种配置（相机段可选，用于【覆盖】camera.yaml）
+├── hero.yaml
+├── sentry.yaml        ⭐ 覆盖：曝光 0.8ms（比共用值短）
+└── uav.yaml           ⭐ 覆盖：用 mindvision（camera.yaml 是 hikrobot）
+```
+
+**优先级**：⭐ **兵种 yaml 的相机段 > `params/camera.yaml` > 内置默认**
+⇒ 常用参数只改 `camera.yaml`；某兵种要特殊值，就在自己的 yaml 里写同名键。
 
 ```yaml
+# params/camera.yaml
 camera_name: "hikrobot"
 exposure_ms: 2          # 曝光（ms）—— ⭐ 变亮先调这个
 gain: 16                # 增益（dB）—— 辅助，噪声会变大
 fps: 30                 # 帧率
+```
+
+⭐ **换路径 / 禁用**：`--camera-config=<path>`；传**空** `--camera-config=` 就只用兵种 yaml（兼容原行为）。
 
 # ⭐⭐ W90：通用通道 —— 任意海康参数都能设（名字与 MVS 里显示的一致）
 camera_params:

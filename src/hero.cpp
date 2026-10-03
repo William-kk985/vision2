@@ -131,6 +131,7 @@ const std::string keys =
   "{video-speed    | 1.0 | ⭐ 录像播放速率（1.0=实时；调大=快放；⭐ 0=不节流全速跑批）}"
   "{bullet-speed   | 22.0 | 录像模式下的弹速（下位机不可用时）}"
   "{dump-camera-params | false | ⭐ 只打印相机常用参数的当前值（用于把 MVS 里的好值抄进 yaml 的 camera_params）}"
+  "{camera-config  | params/camera.yaml | ⭐⭐ 相机专配 yaml（4 兵种共用；兵种 yaml 的相机段可覆盖；传空=不用）}"
   "{pcores         | true | ⭐ 绑定到高性能核}"
   "{rtprio         | true | ⭐ 提高调度优先级到 -20}"
   "{csv            |      | ⭐ Debug CSV 输出前缀（给路径才落 CSV）}"
@@ -208,7 +209,7 @@ int main(int argc, char * argv[])
       pose_path, io::GimbalMode::AUTO_AIM, static_cast<float>(cli.get<double>("bullet-speed")));
     tools::logger()->info("[hero] 录像回放模式: {}", video_path);
   } else {
-    camera = std::make_unique<io::Camera>(config_path, cli.get<bool>("dump-camera-params"));
+    camera = std::make_unique<io::Camera>(config_path, cli.get<bool>("dump-camera-params"), cli.get<std::string>("camera-config"));
     // ⭐⭐ W54：**下位机自动感应** —— 串口存在用真板子；
     //   不存在就**降级虚拟板**（只有摄像头时也能跑），而不是 exit(1)。
     //   要恢复同济的"没下位机就失败" → `--strict-board`

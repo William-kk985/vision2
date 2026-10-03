@@ -91,6 +91,12 @@ cp -r udp-server ~/.local/share/PlotJuggler/PlotJuggler4/extensions/
 
 ##### ③ 在 PlotJuggler 里配置
 
+⚠️⚠️ **选完数据源还不够，必须【启动流】！** PlotJuggler 主界面有 `Data Streamers`
+（流式数据源）控件组：下拉框 `comboStreaming` 选源、**`buttonStreamingPause` 是开始/暂停**、
+`buttonStreamingOptions`（⚙）是配置。**不按开始，9870 就不会被监听** ——
+而 UDP 是无连接的，包丢了**不报错**，看起来就像"没数据"。
+自检：`ss -lunp | grep 9870`（有输出才是真的在等数据）。
+
 ⭐ **在 PlotJuggler 里选数据源 `UDP Server`**，它的设置对话框是**一个表单**，
    上半是数据源、**下半就是 JSON 解析选项**（⚠️ 4.x **没有**独立的 "JSON Parser" 可选项，
    解析器是自动路由的，选项直接嵌在这个表单里）：

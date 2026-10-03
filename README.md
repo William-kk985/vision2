@@ -91,17 +91,27 @@ cp -r udp-server ~/.local/share/PlotJuggler/PlotJuggler4/extensions/
 
 ##### ③ 在 PlotJuggler 里配置
 
+⭐ **在 PlotJuggler 里选数据源 `UDP Server`**，它的设置对话框是**一个表单**，
+   上半是数据源、**下半就是 JSON 解析选项**（⚠️ 4.x **没有**独立的 "JSON Parser" 可选项，
+   解析器是自动路由的，选项直接嵌在这个表单里）：
+
 ```
-数据源选 "UDP Server"：
-    · Address    udp://0.0.0.0      （或 udp://127.0.0.1）
-    · Port       9870               ← ⭐ 必须与程序一致
-    · Protocol   json
-再给这个流选解析器 "JSON Parser"，在它的选项里：
-    · ✅ 勾选 "Use embedded timestamp field"
-      （⚠️ 4.x 是这个名字；网上 3.x 教程写的 "use timestamp if available" 已过时）
-    · 时间戳字段名填 timestamp       ← ⭐ 本项目发的就是 `timestamp`
-      （网上教程例子用 `ts`，别照抄）
+┌─ UDP Server ─────────────────────────────────┐
+│  Address    udp://0.0.0.0   （或 udp://127.0.0.1）│
+│  Port       9870            ← ⭐ 与程序一致      │
+│  Protocol   json                              │
+│  ───────────  ↓ 往下滚 ↓  ───────────          │
+│  ☑ Use embedded timestamp field   ← ⭐ 必须勾！  │
+│  ☐ Key arrays of labeled objects by label     │
+│  Maximum size of arrays: [500] (•)clamp ( )discard │
+└───────────────────────────────────────────────┘
 ```
+
+⭐ **勾上后**，时间戳字段名默认就是 `timestamp`（**与本项目一致，不用改**）。
+   若你的字段名不同，配置键在 `~/.config/PlotJuggler/PlotJuggler4.conf` 的
+   `PluginConfig → UDP%20Server → _parser_config → timestamp_field_name`。
+
+⚠️ **改配置文件时一定要先退出 PlotJuggler**（否则它退出时会覆盖回去）。
 
 ##### ④ 跑起来
 

@@ -583,25 +583,45 @@ int main(int argc, char * argv[])
       //   ⚠️ 原来画的是 `cv::rectangle(a.box)` = 四点的**外接正矩形**
       //     ⇒ **装甲板有倾角时，正矩形比实际四边形"胖一圈"**，且完全没有标签。
       //   ⭐ `draw_points` 内部是 `cv::drawContours` ⇒ **把四点连成闭合四边形**（可斜）。
-      for (const auto & d : dbg_armors) {
-        if (d.points.size() >= 2) tools::draw_points(overlay, d.points, {0, 255, 0}, 2);
-        tools::draw_text(overlay, d.label, d.center, {0, 255, 0}, 0.6, 1);
-      }
+      // ⭐⭐⭐ W115：**三种框的配色定稿**（用户要求）
+      //   | 画什么 | 颜色 | 粗细 |
+      //   |---|---|---|
+      //   | ⭐ **检测四点**（这一帧看到了什么） | 绿 `{0,255,0}` | **粗（3）** |
+      //   | ⭐ **EKF 预测四点**（EKF 认为目标在哪） | ⭐ **淡蓝 `{255,200,0}`** | **粗（3）** |
+      //   | ⭐ **瞄准框**（弹丸飞 `t_fly` 后的位置） | 红 `{0,0,255}` | **粗（3）** |
+      //   · ⚠️ **不要十字圈**（原来的 `draw_aim_point`）—— 红框表达"瞄哪"已经够，
+      //     再加圆圈/十字会**盖住装甲板**（用户要求去掉）。
+      //   · ⭐ **瞄准点另给一个小实心圆点**（红框中心）—— 一眼看出"瞄的位置"。
+      const cv::Scalar kGreen{0, 255, 0};        // 检测
+      const cv::Scalar kLightBlue{255, 200, 0};  // ⭐ EKF 预测（BGR：蓝为主 + 一点绿 ⇒ 淡蓝）
+      const cv::Scalar kRed{0, 0, 255};          // 瞄准
 
-      // ⭐⭐⭐ W113：**EKF 预测点（绿）+ 瞄准点（红）** —— 照搬旧版赫兹
-      //   ⚠️ 与上面"检测四点"的区别：检测是【这一帧看到了什么】，
-      //     预测是【EKF 认为目标在哪】⇒ 两者不重合时说明"跟踪在补偿"。
+      for (const auto & d : dbg_armors) {
+        if (d.points.size() >= 2) tools::draw_points(overlay, d.points, kGreen, 3);
+        tools::draw_text(overlay, d.label, d.center, kGreen, 0.6, 1);
+      }
       for (const auto & pts : dbg_pred) {
-        if (pts.size() >= 2) tools::draw_points(overlay, pts, {0, 255, 0}, 1);   // ⭐ 绿：EKF 预测
+        if (pts.size() >= 2) tools::draw_points(overlay, pts, kLightBlue, 3);   // ⭐ 淡蓝 + 粗
       }
       if (dbg_aim.size() >= 2) {
-        tools::draw_points(overlay, dbg_aim, {0, 0, 255}, 3);          // ⭐ 红：瞄准点四点
-        tools::draw_aim_point(overlay, dbg_aim, {0, 0, 255}, 20, 3);   // ⭐⭐ 红圈 + 十字
+        tools::draw_points(overlay, dbg_aim, kRed, 3);                          // ⭐ 红框（不要圈/十字）
+        cv::Point2f c(0, 0);
+        for (const auto & p : dbg_aim) c += p;
+        c.x /= static_cast<float>(dbg_aim.size());
+        c.y /= static_cast<float>(dbg_aim.size());
+        cv::circle(overlay, cv::Point(static_cast<int>(c.x), static_cast<int>(c.y)), 6, kRed, -1);
+        cv::circle(overlay, cv::Point(static_cast<int>(c.x), static_cast<int>(c.y)), 10, kRed, 2);
       }
       cv::putText(
         overlay, cv::format("f%u %s", fd.frame_id, tracker.state().c_str()), {12, 40},
         cv::FONT_HERSHEY_SIMPLEX, 1.0, {0, 255, 255}, 2);
-      hub.on_image("aim", overlay, fd.t_frame_us);
+      // ⭐⭐ W115：**分辨率对齐 `detection` 窗口**（它也缩到 0.5）——
+      //   ⚠️ 原来 `aim` 是全尺寸（如 1440×1080）、`detection` 是 0.5× ⇒ **两个窗口大小不一**，
+      //     而且**全尺寸下 3px 的线显得很细**（用户反馈"detection 更清晰"）。
+      //   ⭐ 现在两者都缩 0.5 ⇒ **窗口大小一致、线相对更粗、也更省内存**。
+      cv::Mat out_img;
+      cv::resize(overlay, out_img, {}, 0.5, 0.5);
+      hub.on_image("aim", out_img, fd.t_frame_us);
     }
     hub.on_series("planner.t_fly", fd.frame_id, fd.planner.t_fly);
     hub.on_series("planner.overlap", fd.frame_id, fd.planner.overlap_ratio);

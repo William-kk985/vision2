@@ -167,7 +167,7 @@ void print_effective_config(
         const bool has = y[key] && !detail::yaml_scalar(y, key, "").empty();
         detail::print_kv(os, std::string("  → ") + nm,
                          has ? detail::yaml_scalar(y, key, "?") : "（yaml 未配路径）",
-                         has ? "✅ 可切换" : "⬜ 不可用");
+                         has ? "✅ 可切换（⚠️ 三者类别数/输入尺寸不同，语义不一样）" : "⬜ 不可用");
       }
     }
   }

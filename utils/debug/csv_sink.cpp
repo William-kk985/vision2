@@ -14,7 +14,7 @@ namespace
 const char * FRAME_HEADER =
   "frame_id,t_frame_us,t_cam_wait_us,t_perceive_us,t_decide_us,mode,game_state,"
   // detector
-  "det_armor_count,det_best_conf,det_nms,det_t_infer_us,"
+  "det_armor_count,det_best_conf,det_nms,det_t_infer_us,det_obj_peak,det_score_thr,"
   // solver
   "sol_solved,sol_reproj_err,sol_yaw_offset,sol_t_solve_us,"
   // tracker
@@ -42,6 +42,8 @@ std::string row(const auto_aim::FrameDebug & d)
     << int(d.mode) << ',' << int(d.game_state) << ','
     << d.detector.armor_count << ',' << d.detector.best_confidence << ',' << d.detector.nms_survivors
     << ',' << d.detector.t_infer_us << ','
+    // W106 objectness peak + threshold（"为什么没检测到"的直接答案）
+    << d.detector.objectness_peak << ',' << d.detector.score_threshold << ','
     << d.solver.solved << ',' << d.solver.reprojection_error << ',' << d.solver.yaw_offset << ','
     << d.solver.t_solve_us << ','
     << d.tracker.state << ',' << d.tracker.armor_count << ',' << d.tracker.priority_mode << ','

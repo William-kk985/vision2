@@ -210,27 +210,37 @@ DetectorResult YOLO11::parse(
   if (auto_aim::det_stats_enabled() && n_pass == 0) {
     static int no_cand_count = 0;
     if (++no_cand_count % 60 == 1)   // 节流：每 60 帧（约 0.6 秒）报一次
-      LOG_YOLO(
-        "[YOLO11] 本帧无候选：objectness 峰值 {:.3f} < 阈值 {:.2f}"
+      // ⭐⭐⭐ W106：**改用 `logger()->debug`（运行期可见）而不是 `LOG_YOLO`（编译期宏）**
+      //   ⚠️ W99 把它塞进宏是**做错了** —— 它每 60 帧才一条，是【概览级】不是"逐帧细节"。
+      //   ⭐ 走 logger ⇒ 不用重编（热键 `d` 调级别 / `--log-off` 静音）。
+      tools::logger()->debug(
+        "[yolo11] 本帧无候选：objectness 峰值 {:.3f} < 阈值 {:.2f}"
         "（采样 {} 个 anchor；>0.3 有 {} 个、>0.1 有 {} 个）",
         max_obj, score_threshold_, output.rows, n_over_03, n_over_01);
   }
   if (auto_aim::det_stats_enabled() && n_pass > 0) {
     static int last_n_out = -1;
-    static int same_count = 0;
+    static int since_log = 0;
     const int n_out = static_cast<int>(armors.size());
-    if (n_out == last_n_out && ++same_count % 30 != 0) {
-      // 节流：输出数没变化时每 30 帧报一次（约 0.3 秒）
+    ++since_log;
+    // ⭐⭐⭐ W106：**改成「硬性限频」** —— 原来只在"输出数没变"时节流，
+    //   ⚠️ 而输出数**一抖动**（0→1→0→1）就**每帧都打**（实测 687 帧打了 144 条）。
+    //   ⭐ 现在：**至少隔 30 帧才打一条**；但如果输出数**变了**，可以提前打
+    //     （最多提前到 10 帧 —— 变化要让人看见，但不能变成刷屏）。
+    const bool changed = (n_out != last_n_out);
+    if (since_log < (changed ? 10 : 30)) {
+      // 限频中，跳过
     } else {
-      same_count = 0;
+      since_log = 0;
       last_n_out = n_out;
       if (n_out == 0)
-        LOG_YOLO(   // ⭐ W99：逐帧细节 → 编译期开关
+        // ⭐ W106：同上 —— 这条**每 30 帧才一条**（上面节流），概览级 ⇒ 用 logger
+        tools::logger()->debug(
           "[{}] objectness 通过 {} 个候选 → 全被滤掉：not_armor {} / 置信度 {} / "
           "类型不符 {} 最终 0 个装甲板",
           "yolo11", n_pass, n_name, n_conf, n_type);
       else
-        LOG_YOLO(
+        tools::logger()->debug(
           "[{}] objectness 通过 {} → 输出 {}（滤掉 not_armor {} / conf {} / type {}）", "yolo11",
           n_pass, n_out, n_name, n_conf, n_type);
     }
@@ -242,6 +252,10 @@ DetectorResult YOLO11::parse(
   //   长期为 0 的原因，W64 才补上。现在结构上不可能忘。）
   DetectorResult r;
   r.dbg.n_pass = n_pass;
+  // ⭐ W106：**objectness 峰值 + 门槛进 `FrameDebug`** ⇒ CSV / PlotJuggler / 窗口
+  //   都能看（**不用重编**）—— 这是"概览"的另一条路（比日志更适合看趋势）。
+  r.dbg.objectness_peak = max_obj;
+  r.dbg.score_threshold = score_threshold_;
   r.dbg.nms_survivors = nms_survivors;
   r.dbg.armor_count = static_cast<int>(armors.size());
   for (const auto & a : armors)

@@ -32,7 +32,8 @@ int main()
   {
     auto v = parse_module_list("yolov5,VirtualBoard,Tracker");
     CHECK(v.size() == 3, "逗号分隔 → 3 项");
-    CHECK(v[0] == "yolov5" && v[2] == "Tracker", "顺序与内容正确");
+    // ⭐ W106：现在**一律 normalize 成小写**（原来大小写敏感，与匹配侧会不一致）
+    CHECK(v[0] == "yolov5" && v[2] == "tracker", "顺序正确 + ⭐ 统一转小写");
 
     auto v2 = parse_module_list("a, b ;c\t d");
     CHECK(v2.size() == 4, "逗号/分号/空格/制表符都算分隔");
@@ -59,15 +60,38 @@ int main()
   CHECK(pass("[Gimbal] warn"), "其它模块照常 2");
   CHECK(pass("Switch to AUTO_AIM"), "⚠️ 无标签消息【仍放行】（设计如此）");
 
-  // ── ④ 大小写敏感（与源码标签一致）──
-  std::printf("\n  ── 大小写 ──\n");
-  CHECK(pass("[YOLOV5] 大写"), "⭐ 大小写敏感：YOLOV5 不被 yolov5 规则命中");
+  // ── ④ ⭐ W106：大小写【不敏感】+ 前缀匹配 ──
+  //   ⚠️ 原来这里是"大小写敏感"的断言（`YOLOV5` 不被 `yolov5` 命中）——
+  //     W106 改成了**不敏感**（因为人打 `yolo`/`YOLO` 都不该失败）。
+  std::printf("\n  ── 大小写不敏感 + 前缀匹配（W106）──\n");
+  set_log_modules_off({"yolov5"});
+  CHECK(!pass("[YOLOV5] 大写"), "⭐ 大小写不敏感：YOLOV5 被 yolov5 规则命中");
+  CHECK(!pass("[YoloV5] 混合"), "⭐ 混合大小写也命中");
+  CHECK(!pass("[yolov5] 小写"), "小写也命中");
+  CHECK(pass("[yolov8] 其它"), "⭐ 前缀不匹配时照常放行（yolov8 ≠ yolov5）");
+
+  // ⭐ 前缀匹配：`yolo` 应命中 yolov5 / yolov8 / yolo11
+  set_log_modules_off({"yolo"});
+  CHECK(!pass("[yolov5] x"), "⭐ 前缀匹配：yolo → yolov5");
+  CHECK(!pass("[yolov8] x"), "⭐ 前缀匹配：yolo → yolov8");
+  CHECK(!pass("[yolo11] x"), "⭐ 前缀匹配：yolo → yolo11");
+  // ⚠️ 我自己第一版把这条写反了（注释说"也命中"却用了 pass）—— 测试帮我抓出来了
+  CHECK(!pass("[YoloSomething] x"), "⚠️ 大小写不敏感的前缀 ⇒ YoloSomething 也命中（设计如此）");
+  CHECK(pass("[Gimbal] x"), "前缀不相关的照常放行");
+
+  // ⚠️ 是【前缀】不是【子串】—— 别误伤
+  set_log_modules_off({"target"});
+  CHECK(!pass("[target] x"), "前缀：target → target");
+  CHECK(pass("[not_target] x"), "⚠️ 不是子串匹配 ⇒ not_target 不受影响");
 
   // ── ⑤ 白名单 ──
   std::printf("\n  ── 白名单（--log-only）──\n");
   set_log_modules_only({"Tracker", "Planner"});
   CHECK(pass("[Tracker] 新建目标"), "⭐ 白名单内的放行");
   CHECK(pass("[Planner] 热重载"), "⭐ 白名单内的放行 2");
+  // ⭐ W106：setter 传的是 `{"Tracker","Planner"}`（**混合大小写**）⇒
+  //   必须跟 payload 侧一样 normalize，否则匹配不上（**这个 bug 实测挂过测试**）
+  CHECK(pass("[TRACKER] 全大写"), "⭐ setter 也 normalize（TRACKER 命中 Tracker 规则）");
   CHECK(!pass("[yolov5] 刷屏"), "⭐ 白名单外的【全部丢弃】");
   CHECK(!pass("[Gimbal] warn"), "⭐ 白名单外的【全部丢弃】2");
   CHECK(!pass("[HikRobot] 曝光"), "⭐ 白名单外的【全部丢弃】3");

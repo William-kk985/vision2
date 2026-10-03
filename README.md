@@ -298,6 +298,60 @@ tools/scripts/tune.sh compare base tuned
 
 ---
 
+#### ⭐⭐ YOLO 能看哪些关键信息（**两层：概览 vs 细节**）
+
+⭐ **分层原则**（W106 定）：
+```
+概览（大概情况） → 运行期可看：logger 级别（热键 d）/ --log-only / CSV / PlotJuggler
+细节（内部量）   → 编译期宏：core/debug.hpp §一 的 HZMIR_LOG_YOLO
+```
+
+**① 概览 —— 不用重编就能看**
+
+```bash
+# 只看 yolo 相关（⭐ 大小写不敏感 + 前缀匹配 ⇒ yolo/YOLO/yolov5 都行）
+tools/scripts/run.sh infantry --log-only=yolo
+# 静音它
+tools/scripts/run.sh infantry --log-off=yolo
+```
+
+⭐ **日志**（**已节流**：无候选每 60 帧一条、输出统计每 30 帧一条 ⇒ 不会刷屏）：
+```
+[YOLOV5] 本帧无候选：objectness 峰值 0.002 < 阈值 0.70
+         （采样 25200 个 anchor；>0.3 有 0 个、>0.1 有 0 个）      ← ⭐ "有没有戏"一眼看出
+[yolov5] objectness 通过 6 → 输出 1（滤掉 not_armor 0 / conf 0 / type 0）
+[yolov5] objectness 通过 2 个候选 → 全被滤掉：not_armor 0 / 置信度 1 / 类型不符 0
+         ↑ ⭐ "卡在哪一步"（每 30 帧一条）
+```
+
+⭐ **数值（`FrameDebug` → CSV / PlotJuggler，**不用重编、能看趋势**）：
+
+| CSV 列 | 含义 | 怎么看 |
+|---|---|---|
+| ⭐ **`det_obj_peak`** | **objectness 峰值** | ⭐ **"为什么没检测到"的直接答案**：跟 `det_score_thr` 并排比 |
+| **`det_score_thr`** | 当时的 objectness 门槛 | 差多少一眼看出 |
+| `det_nms` | NMS 后存活数 | 候选多不多 |
+| `det_armor_count` | 输出装甲板数 | 最终结果 |
+| `det_best_conf` | 最高置信度 | 过了 objectness 之后的质量 |
+| `det_t_infer_us` | 推理耗时 | 帧预算 |
+
+⭐ **实测对照**（本项目踩过的真事）：
+```
+assets/demo 能识别的帧 :  det_obj_peak  ≈ 0.1 ~ 0.27（最高 0.99）
+真机暗帧（识别不出）    :  det_obj_peak  ≈ 0.002        ← ⚠️ 差 50 倍
+```
+⇒ ⭐ **一看 `det_obj_peak` 就知道是"模型觉得不像装甲板"（光照/模糊）还是"后面过滤掉了"。**
+
+**② 细节 —— 编译期宏（要重编）**
+
+```cpp
+// core/debug.hpp §一
+#define HZMIR_LOG_YOLO     // ⭐ 逐帧的 anchor 分布 / 各阶段丢弃明细
+```
+⚠️ 开了**每帧都打**，只适合"盯着某一帧看"。
+
+---
+
 #### ⭐⭐⭐ 日志太吵？—— **编译期开关**（推荐）
 
 ⭐ **所有细节日志的开关都在一个文件**：**`core/debug.hpp`**（开关与实验总控，§一）

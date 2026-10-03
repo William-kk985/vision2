@@ -37,8 +37,22 @@ struct DetectorDebug
   int armor_count = 0;
   double best_confidence = 0;
   int nms_survivors = 0;
-    int n_pass = 0;            ///< 过 objectness 门槛的候选数（YOLO 系填）
+  int n_pass = 0;            ///< 过 objectness 门槛的候选数（YOLO 系填）
   int64_t t_infer_us = 0;   // ⭐ L0 本段耗时（学哈工程 DebugExpense）
+
+  // ⭐⭐⭐ W106：**objectness 峰值** —— 「为什么没检测到」的**直接答案**。
+  //
+  // ⚠️ 原来它**只在日志里**（`LOG_YOLO("[YOLOV5] 本帧无候选：objectness 峰值 …")`），
+  //   而那条日志是**编译期开关**控制的 ⇒ 关掉后**运行期完全看不到**。
+  // ⭐ 但这不是"细节" —— 它是**概览级**信息（"有没有戏"一眼就看出来），
+  //   应该跟其它字段一样进 `FrameDebug` ⇒ **CSV / PlotJuggler / 窗口都能看，不用重编**。
+  //
+  // 实测含义（`assets/demo` 能识别的帧 vs 真机暗帧）：
+  //   · 能识别：**0.1 ~ 0.27**（有的说法是 >0.70，取决于配置）
+  //   · 识别不出：**0.002**（差 50 倍以上）⇒ 一看就知道"模型认为完全不像装甲板"
+  double objectness_peak = 0;
+  /// ⭐ 当时的 objectness 门槛（跟 `objectness_peak` 并排看 ⇒ 一眼知"差多少"）
+  double score_threshold = 0;
 };
 
 }  // namespace auto_aim

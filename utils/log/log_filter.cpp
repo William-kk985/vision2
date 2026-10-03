@@ -66,18 +66,32 @@ std::string extract_module(const char * p, size_t len)
 }
 }  // namespace
 
+
+/// @brief ⭐ W106：**规范化一个模块名**（转小写）—— 所有入口都用它，保证与匹配侧一致
+///   ⚠️ 之前的 bug：`parse_module_list` 转了小写，但 `set_log_modules_off(vector)`
+///     这个重载**没转** ⇒ `{"Tracker"}` 存的是 `Tracker`，而 payload 侧抠出来是
+///     `tracker`（已转小写）⇒ **匹配不上**（实测测试挂在这）。
+///   ⭐ 教训：**规范化只做一半 = 比不做更糟**（一半大小写敏感、一半不敏感）。
+std::string normalize_module(const std::string & m)
+{
+  std::string out;
+  out.reserve(m.size());
+  for (char c : m) out += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  return out;
+}
+
 std::vector<std::string> parse_module_list(const std::string & s)
 {
   std::vector<std::string> out;
   std::string cur;
   for (char c : s) {
     if (c == ',' || c == ';' || c == ' ' || c == '\t') {
-      if (!cur.empty()) { out.push_back(cur); cur.clear(); }
+      if (!cur.empty()) { out.push_back(normalize_module(cur)); cur.clear(); }
     } else {
-      cur += c;
+      cur += c;   // ⭐ 统一在返回前 normalize（见下）
     }
   }
-  if (!cur.empty()) out.push_back(cur);
+  if (!cur.empty()) out.push_back(normalize_module(cur));
   return out;
 }
 
@@ -86,7 +100,9 @@ void set_log_modules_off(const std::vector<std::string> & mods)
   std::lock_guard<std::mutex> lk(mtx_);
   mods_.clear();
   only_mode_ = false;
-  for (const auto & m : mods) if (!m.empty()) mods_.insert(m);   // ⭐ 大小写敏感（与源码标签一致）
+  // ⭐ W106：**必须 normalize**（原来注释写着"大小写敏感"，但匹配侧已改成不敏感 ⇒
+  //   只做一半会导致 `{"Tracker"}` 匹配不到 payload 的 `tracker`）
+  for (const auto & m : mods) if (!m.empty()) mods_.insert(normalize_module(m));
   preset_idx_ = 0;
 }
 
@@ -95,7 +111,7 @@ void set_log_modules_only(const std::vector<std::string> & mods)
   std::lock_guard<std::mutex> lk(mtx_);
   mods_.clear();
   only_mode_ = true;
-  for (const auto & m : mods) if (!m.empty()) mods_.insert(m);
+  for (const auto & m : mods) if (!m.empty()) mods_.insert(normalize_module(m));   // ⭐ W106 同上
   preset_idx_ = 0;
 }
 
@@ -131,12 +147,36 @@ bool log_module_should_pass(const char * payload, size_t len)
     std::lock_guard<std::mutex> lk(mtx_);
     if (mods_.empty()) return true;
   }
-  const std::string mod = extract_module(payload, len);
+  std::string mod = extract_module(payload, len);
   if (mod.empty()) return true;   // ⚠️ 无模块标签 → 一律放行（如启动横幅）
+
+  // ⭐⭐⭐ W106：**匹配改成大小写不敏感**
+  //   ⚠️ 原来 `mods_.count(mod)` 是【精确匹配】⇒ `--log-only=yolo` **匹配不到 `[YOLOV5]`**
+  //     （实测：`--log-only=YOLOV5` 有效、`=yolo` 得到 0 条）。
+  //   ⭐ 模块名大小写本来就不该成为"记不记得住"的负担 —— 跟开关一样，**别让人猜**。
+  std::transform(mod.begin(), mod.end(), mod.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
   std::lock_guard<std::mutex> lk(mtx_);
   if (mods_.empty()) return true;
-  const bool in = mods_.count(mod) > 0;
+
+  // ⭐⭐⭐ W106：**精确匹配 + 前缀匹配**
+  //   ⚠️ 原来只有精确匹配 ⇒ `--log-only=yolo` 匹配不到 `yolov5`/`yolov8`/`yolo11`
+  //     （实测 0 条，而 `=yolov5` 有 144 条）—— ⚠️ **但"yolo"才是人自然会打的**。
+  //   ⭐ 现在 `mod` **以** 任一 pattern **开头** 也算命中：
+  //        `--log-only=yolo`  ⇒ 命中 yolov5 / yolov8 / yolo11  ✅
+  //        `--log-only=track` ⇒ 命中 tracker                        ✅
+  //   ⚠️ 仍是**前缀**（不是子串）—— `--log-off=target` 不会误伤 `not_target`。
+  bool in = mods_.count(mod) > 0;
+  if (!in) {
+    for (const auto & pat : mods_) {
+      if (!pat.empty() && mod.size() >= pat.size() &&
+          mod.compare(0, pat.size(), pat) == 0) {
+        in = true;
+        break;
+      }
+    }
+  }
   return only_mode_ ? in : !in;   // ⭐ 白名单：在里面才打；黑名单：在里面不打
 }
 

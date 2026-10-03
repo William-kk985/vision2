@@ -1,0 +1,33 @@
+# ⭐⭐⭐ 海康（HikRobot）品牌专配 —— **换另一个海康相机时只改这里**
+#
+# 优先级（低 → 高）：本文件 < `params/camera.yaml` < `params/<兵种>.yaml` 的相机段
+#   ⇒ 这里放「海康这个品牌特有的东西」（像素格式、白平衡、触发…），
+#     具体曝光/增益等放在 `params/camera.yaml`。
+
+camera_name: "hikrobot"
+
+# ⭐ 设备 VID:PID —— 现在**真的会用来选相机了**（W93 修复）。
+#   ⚠️ 插了多个海康时会按这个匹配；只有一个时也会打印选中的是哪台。
+#   查看方式：`lsusb` 或 `udevadm info -a -n /dev/video0`，
+#   或跑 `--dump-camera-params` 看日志里「选中设备 #1/2：xxxx:xxxx 型号 … 序列号 …」
+vid_pid: "2bdf:0001"
+
+fps: 30                    # 海康通用；150fps@1440x1080≈233MB/s 接近 USB3 上限
+
+# ⭐⭐ 海康通用参数（`camera_params` 通用通道）
+camera_params:
+  enum:
+    # ⭐ 像素格式：**换海康相机时最可能要改的就是这里**
+    #   ⚠️ 只支持 4 种 8 位 Bayer；若相机默认输出 10/12 位或 Mono/RGB/YUV，
+    #     不指定会让程序报「不支持的像素格式」并跳过所有帧（W93 起不崩了）。
+    #   常见值（与 MVS 里显示一致）：
+    #     BayerRG8 = 0x01080008 (17301512)   BayerGR8 = 0x01080009
+    #     BayerGB8 = 0x0108000A              BayerBG8 = 0x0108000B
+    # 按你的相机实际 Bayer 排列选一个（不对则红蓝/绿位置会错）：
+    # PixelFormat: 17301512
+    #
+    # ⭐ 白平衡：默认是 2(Continuous)，色温变化会漂 → 建议关掉
+    BalanceWhiteAuto: 0      # 0=Off 1=Once 2=Continuous
+  float:
+    # Gamma: 1.0
+    # Sharpness: 50

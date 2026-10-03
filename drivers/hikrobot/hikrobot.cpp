@@ -137,7 +137,45 @@ void HikRobot::capture_start()
     return;
   }
 
-  ret = MV_CC_CreateHandle(&handle_, device_list.pDeviceInfo[0]);
+  // ⭐⭐⭐ W93：**按 yaml 的 `vid_pid` 选相机** —— 原来永远取 `pDeviceInfo[0]`，
+  //   ⚠️ 插了两个海康时**随机选一个**（取决于枚举顺序，不可控）。
+  //   ⇒ 现在：遍历所有设备，匹配 VID:PID；没配或匹配不上则退回第一个（并明确告警）。
+  int chosen = 0;
+  bool matched = false;
+  if (vid_ >= 0 && pid_ >= 0 && device_list.nDeviceNum > 1) {
+    for (unsigned int i = 0; i < device_list.nDeviceNum; ++i) {
+      const auto * info = device_list.pDeviceInfo[i];
+      if (!info || info->nTLayerType != MV_USB_DEVICE) continue;
+      const auto & usb = info->SpecialInfo.stUsb3VInfo;
+      if (usb.idVendor == static_cast<unsigned int>(vid_) &&
+          usb.idProduct == static_cast<unsigned int>(pid_)) {
+        chosen = static_cast<int>(i);
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) {
+      tools::logger()->warn(
+        "[HikRobot] ⚠️ 没有设备的 VID:PID 匹配 yaml 的 {:04x}:{:04x} → 退回第一个\n"
+        "    （共枚举到 {} 个设备；用 `--dump-camera-params` 或 MVS 确认 VID:PID）",
+        vid_, pid_, device_list.nDeviceNum);
+    }
+  }
+
+  // ⭐ 打印选中的设备（换相机时能立刻看出选没选对）
+  {
+    const auto * info = device_list.pDeviceInfo[chosen];
+    if (info && info->nTLayerType == MV_USB_DEVICE) {
+      const auto & usb = info->SpecialInfo.stUsb3VInfo;
+      tools::logger()->info(
+        "[HikRobot] 选中设备 #{}/{}：{:04x}:{:04x}  型号 {}  序列号 {}", chosen + 1,
+        device_list.nDeviceNum, usb.idVendor, usb.idProduct,
+        reinterpret_cast<const char *>(usb.chModelName),
+        reinterpret_cast<const char *>(usb.chSerialNumber));
+    }
+  }
+
+  ret = MV_CC_CreateHandle(&handle_, device_list.pDeviceInfo[chosen]);
   if (ret != MV_OK) {
     tools::logger()->warn("MV_CC_CreateHandle failed: {:#x}", ret);
     return;
@@ -284,12 +322,38 @@ void HikRobot::capture_start()
       const auto & frame_info = raw.stFrameInfo;
       auto pixel_type = frame_info.enPixelType;
       cv::Mat dst_image;
+      // ⭐⭐⭐ W93：**不再用 `.at()`** —— 原来像素格式不在表里就抛 `std::out_of_range`，
+      //   ⚠️ **直接崩**。换一个输出 `BayerRG10` / `Mono8` / `RGB8_Packed` 的海康相机
+      //   就会触发（用户问"换另一个海康会不会出问题"，这是真隐患）。
+      //   ⇒ 现在：查表 → 找不到就【明确报错 + 给出解法】，并**跳过该帧**（不崩）。
+      //
+      //   ⚠️ 注意 OpenCV 的命名：`COLOR_BayerXX2RGB` 的 `XX` 指的是**输入 Bayer 图案**，
+      //      输出的字节序仍是 **BGR**（与我们其他地方一致）—— 实测验证过，别改成 2BGR。
       const static std::unordered_map<MvGvspPixelType, cv::ColorConversionCodes> type_map = {
         {PixelType_Gvsp_BayerGR8, cv::COLOR_BayerGR2RGB},
         {PixelType_Gvsp_BayerRG8, cv::COLOR_BayerRG2RGB},
         {PixelType_Gvsp_BayerGB8, cv::COLOR_BayerGB2RGB},
         {PixelType_Gvsp_BayerBG8, cv::COLOR_BayerBG2RGB}};
-      cv::cvtColor(img, dst_image, type_map.at(pixel_type));
+
+      auto it = type_map.find(pixel_type);
+      if (it == type_map.end()) {
+        static bool warned = false;
+        if (!warned) {   // ⭐ 只报一次，不刷屏
+          warned = true;
+          tools::logger()->error(
+            "[HikRobot] ⚠️⚠️ 不支持的像素格式 {:#x} → **跳过该帧**（不崩）。\n"
+            "   解法（任选其一）：\n"
+            "     ① 在 `params/camera.yaml` 的 `camera_params.enum` 里指定 8 位 Bayer：\n"
+            "          PixelFormat: {}   # BayerRG8，按你的相机实际排列改\n"
+            "     ② 或在 MVS 里把 PixelFormat 改成 BayerRG8/GR8/GB8/BG8 之一\n"
+            "   （目前只支持这 4 种 8 位 Bayer；10/12 位或 Mono/RGB/YUV 需扩展本表）",
+            static_cast<unsigned int>(pixel_type),
+            static_cast<unsigned int>(PixelType_Gvsp_BayerRG8));
+        }
+        MV_CC_FreeImageBuffer(handle_, &raw);
+        continue;
+      }
+      cv::cvtColor(img, dst_image, it->second);
       img = dst_image;
 
       queue_.push({img, timestamp});

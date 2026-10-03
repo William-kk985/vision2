@@ -238,15 +238,29 @@ tools/scripts/run.sh infantry --strict-board                    # 没下位机�
 
 ```
 params/
-├── ⭐ camera.yaml      相机专配 —— 只改这里，4 兵种都生效
-├── infantry.yaml      兵种配置（相机段可选，用于【覆盖】camera.yaml）
+├── ⭐ camera.yaml              相机专配（4 兵种共用）—— 曝光/增益/选哪款
+├── ⭐ cameras/                  ⭐ 按【品牌】分文件 —— 换相机品牌不用动上面的
+│   ├── hikrobot.yaml           海康：VID:PID、PixelFormat、白平衡…
+│   ├── mindvision.yaml         迈德威视：vid_pid、gamma
+│   └── usbcamera.yaml
+├── infantry.yaml               兵种配置
 ├── hero.yaml
-├── sentry.yaml        ⭐ 覆盖：曝光 0.8ms（比共用值短）
-└── uav.yaml           ⭐ 覆盖：用 mindvision（camera.yaml 是 hikrobot）
+├── sentry.yaml                 ⭐ 覆盖：曝光 0.8ms
+└── uav.yaml                    ⭐ 覆盖：用 mindvision
 ```
 
-**优先级**：⭐ **兵种 yaml 的相机段 > `params/camera.yaml` > 内置默认**
-⇒ 常用参数只改 `camera.yaml`；某兵种要特殊值，就在自己的 yaml 里写同名键。
+⭐ **优先级（低 → 高）**：
+```
+params/cameras/<品牌>.yaml   <   params/camera.yaml   <   params/<兵种>.yaml 的相机段
+     （品牌默认）                    （本机常用值）              （单兵种特殊值）
+```
+⇒ **改曝光只动 `camera.yaml`**；**换相机品牌只动 `cameras/<品牌>.yaml`**；单兵种特殊才动兵种 yaml。
+
+**换另一个海康相机也不会崩**（W93 修的两处）：
+| 原来 | 现在 |
+|---|---|
+| ⚠️ **永远取 `pDeviceInfo[0]`** → 插两个时随机选 | ⭐ **按 `vid_pid` 匹配**，并打印「选中设备 #1/2：`xxxx:xxxx` 型号… 序列号…」 |
+| ⚠️ **`type_map.at()`** → 像素格式不是 Bayer8 就**抛异常崩** | ⭐ **`find()` + 明确报错 + 跳过该帧**（不崩），并提示怎么改 `PixelFormat` |
 
 ```yaml
 # params/camera.yaml

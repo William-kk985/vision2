@@ -22,13 +22,15 @@ namespace
 /// 就在自己的 yaml 里写同名键覆盖即可。
 struct MergedYaml
 {
-  YAML::Node robot;             ///< 兵种 yaml（`params/<兵种>.yaml`）
-  YAML::Node camera;            ///< 相机专配（`params/camera.yaml`），可能为空
+  YAML::Node robot;    ///< 兵种 yaml（`params/<兵种>.yaml`）—— 优先级最高
+  YAML::Node camera;   ///< 相机专配（`params/camera.yaml`）
+  YAML::Node vendor;   ///< ⭐ 品牌专配（`params/cameras/<品牌>.yaml`）—— 优先级最低
 
   YAML::Node get(const char * key) const
   {
-    if (robot[key]) return robot[key];              // ⭐ 兵种覆盖优先
-    if (camera && camera[key]) return camera[key];  // ⭐ 其次共用配置
+    if (robot[key]) return robot[key];               // ⭐ ① 兵种覆盖
+    if (camera && camera[key]) return camera[key];   // ⭐ ② 本机相机配置
+    if (vendor && vendor[key]) return vendor[key];   // ⭐ ③ 品牌默认
     return YAML::Node();
   }
 
@@ -48,7 +50,8 @@ struct MergedYaml
 
     for (const auto & [key, kind] : groups) {
       // ⭐ 先收 camera.yaml 的，再让兵种 yaml 覆盖同名项
-      for (const YAML::Node * src : {&camera, &robot}) {
+      // ⭐ 从低优先级到高优先级遍历 ⇒ 后面的自然覆盖前面的
+      for (const YAML::Node * src : {&vendor, &camera, &robot}) {
         if (!*src || !(*src)["camera_params"] || !(*src)["camera_params"][key]) continue;
         for (const auto & kv : (*src)["camera_params"][key]) {
           const std::string name = kv.first.as<std::string>();
@@ -84,7 +87,21 @@ Camera::Camera(
     tools::logger()->debug("[Camera] 无相机专配 {} → 只用兵种 yaml 的相机段", camera_config);
   }
 
+  // ⭐⭐ W93：**按品牌分文件** —— `params/cameras/<camera_name>.yaml`
+  //   放"这个品牌特有的东西"（如海康的 PixelFormat、迈德威视的 gamma），
+  //   ⇒ 换相机品牌时不用动 `params/camera.yaml` 和兵种 yaml。
+  //   优先级最低（可被上面两层覆盖）。
   auto camera_name = y.read<std::string>("camera_name", "hikrobot");
+  {
+    std::filesystem::path vp = std::filesystem::path(camera_config).parent_path() / "cameras";
+    vp /= (camera_name + ".yaml");
+    if (std::filesystem::exists(vp)) {
+      y.vendor = tools::load(vp.string());
+      tools::logger()->info("[Camera] 品牌专配: {}", vp.string());
+    } else {
+      tools::logger()->debug("[Camera] 无品牌专配 {}（可选）", vp.string());
+    }
+  }
 
   // ⭐ 录像回放：不需要曝光，放在前面分支
   if (camera_name == "video") {

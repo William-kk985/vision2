@@ -1,0 +1,14 @@
+# ⭐⭐⭐ 迈德威视（MindVision）品牌专配
+#
+# 优先级（低 → 高）：本文件 < `params/camera.yaml` < `params/<兵种>.yaml` 的相机段
+#
+# ⚠️ `camera_params`（float/enum/int 通用通道）**目前只对 hikrobot 生效**
+#   （走 MV_CC_SetXxxValue）。迈德威视的参数请用下面这些键，
+#   或在 `drivers/mindvision/mindvision.cpp` 里按同样思路扩展。
+
+camera_name: "mindvision"
+
+# ⭐ 设备 VID:PID（迈德威视常见值；用 `lsusb` 确认）
+vid_pid: "f622:d13a"
+
+gamma: 0.6                 # 迈德威视的 gamma（不是海康那种 Gamma 参数）

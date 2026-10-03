@@ -48,6 +48,42 @@
 | ⑤ `test/` 独立程序 | **20 个 ctest 用例** | 算法级调试 |
 | ⑥ 离线可视化 | `scripts/{analyze,plot,compare}.py` | ⭐ **对比 A-B**，零 pandas 依赖 |
 
+#### 热键 `3`（PlotJuggler）怎么用
+
+`3` 把每帧的 **20 个字段**打成 JSON，**UDP 发到 `127.0.0.1:9870`**（`--pj=true` 可启动即开）。
+
+```bash
+# ① 装 PlotJuggler（本仓库实测可用的两条）
+sudo apt install ros-humble-plotjuggler-ros    # ⭐ 推荐：本项目就是 ROS 2 Humble（apt 里有现成包）
+sudo snap install plotjuggler                  # 或者用 snap（本机 snap 可用）
+
+# ② 打开 PlotJuggler → 选数据源
+#    "UDP Server"：
+#      · IP           0.0.0.0
+#      · Port         9870          ← ⭐ 必须一致
+#      · Protocol     json
+#      · ⭐ 勾选 "use timestamp if available"，字段名填 **timestamp**
+#        （⚠️ 本项目发的字段名就是 `timestamp`；官方教程里的例子用 `ts`，别照抄）
+# ③ 跑程序，按 3（或 --pj=true）
+tools/scripts/run.sh infantry --pj=true
+```
+
+⭐ **不装 PlotJuggler 也能验证**（起个 UDP 监听看有没有包）：
+```bash
+python3 -c "
+import socket,json
+s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.bind(('127.0.0.1',9870))
+d,_=s.recvfrom(65535); o=json.loads(d); print(len(o),'字段:',sorted(o)[:6])"
+```
+
+**发的字段**（20 个）：`timestamp` `frame_id` `t_frame_us` `t_cam_wait_us` `t_perceive_us` `t_decide_us`
+`det_armor_count` `det_t_infer_us` `trk_*` `tgt_*` `pln_*` `sht_*` `ctl_*`
+（与 CSV 同源，见 [`core/debug.hpp`](core/debug.hpp)）
+
+⚠️ **队列有界**（64 条）→ 满了**丢最旧的**（实时曲线丢几帧无所谓，绝不无限增长）。
+
+---
+
 #### 各 Debug 通道的开销（实测，供按场景取舍）
 
 > ⚠️ **这些数字不再在启动时打印** —— 放在这里自己查即可。

@@ -89,35 +89,22 @@ cp -r udp-server ~/.local/share/PlotJuggler/PlotJuggler4/extensions/
 ```
 </details>
 
-##### ③ 在 PlotJuggler 里配置
-
-⚠️⚠️ **选完数据源还不够，必须【启动流】！** PlotJuggler 主界面有 `Data Streamers`
-（流式数据源）控件组：下拉框 `comboStreaming` 选源、**`buttonStreamingPause` 是开始/暂停**、
-`buttonStreamingOptions`（⚙）是配置。**不按开始，9870 就不会被监听** ——
-而 UDP 是无连接的，包丢了**不报错**，看起来就像"没数据"。
-自检：`ss -lunp | grep 9870`（有输出才是真的在等数据）。
-
-⭐ **在 PlotJuggler 里选数据源 `UDP Server`**，它的设置对话框是**一个表单**，
-   上半是数据源、**下半就是 JSON 解析选项**（⚠️ 4.x **没有**独立的 "JSON Parser" 可选项，
-   解析器是自动路由的，选项直接嵌在这个表单里）：
+##### ③ 在 PlotJuggler 里配置（⭐ 这一步最容易漏，实测走通）
 
 ```
-┌─ UDP Server ─────────────────────────────────┐
-│  Address    udp://0.0.0.0   （或 udp://127.0.0.1）│
-│  Port       9870            ← ⭐ 与程序一致      │
-│  Protocol   json                              │
-│  ───────────  ↓ 往下滚 ↓  ───────────          │
-│  ☑ Use embedded timestamp field   ← ⭐ 必须勾！  │
-│  ☐ Key arrays of labeled objects by label     │
-│  Maximum size of arrays: [500] (•)clamp ( )discard │
-└───────────────────────────────────────────────┘
+① Sources 面板左上三个图标选【📡 流式】（📄=文件 ☁=云）
+② 下拉框选 "UDP Server"
+③ ⭐ 点下拉框右边的【+】→ 弹出 "UDP Server" 配置对话框
+      Transport   udp://
+      Address     0.0.0.0
+      Port        9870
+      Message Serialization  json
+      ☑ Use embedded timestamp field      ← ⭐ 勾上（时间戳字段名默认就是 timestamp）
+      Maximum size of arrays: 500   (•)clamp  ( )discard
+④ ⭐⭐ 点对话框右下角的【OK】—— **漏了这步，程序发的包会被直接丢弃**
+      （判断是否生效：`ss -lunp | grep 9870`，**有输出才是真的在监听**）
+⑤ 点【▶/⏸】开始流式；再点源名展开，就能看到字段
 ```
-
-⭐ **勾上后**，时间戳字段名默认就是 `timestamp`（**与本项目一致，不用改**）。
-   若你的字段名不同，配置键在 `~/.config/PlotJuggler/PlotJuggler4.conf` 的
-   `PluginConfig → UDP%20Server → _parser_config → timestamp_field_name`。
-
-⚠️ **改配置文件时一定要先退出 PlotJuggler**（否则它退出时会覆盖回去）。
 
 ##### ④ 跑起来
 

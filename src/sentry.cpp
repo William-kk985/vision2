@@ -244,7 +244,8 @@ int run_sentry(
 #endif
 
       expense.begin("track");
-      auto targets = tracker.track(armors, t);
+      auto trk = tracker.track(armors, t);   // ⭐⭐ W98
+      auto & targets = trk.targets;
       expense.end("track");
 
       // ⚠️ 同济哨兵在此处会走 `decider.decide(...)` 做 **4 相机全向搜索**；
@@ -260,8 +261,7 @@ int run_sentry(
 
       fd.detector = det.dbg;                               // ⭐ 一行，不可能忘
       fd.detector.t_infer_us = expense.us("detect");
-      fd.tracker.armor_count = static_cast<int>(armors.size());
-      fd.tracker.priority_mode = static_cast<int>(tracker.priority_mode());
+      fd.tracker = trk.dbg;                  // ⭐ W98：一行替代手写
       fd.tracker.t_track_us = expense.us("track");
       // ⭐⭐ W71：`sol_*` 四列（原来永远是 0）
       fd.solver = tracker.solver().last_debug();

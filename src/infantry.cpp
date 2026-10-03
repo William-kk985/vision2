@@ -352,22 +352,14 @@ int main(int argc, char * argv[])
       for (const auto & a : armors) dbg_boxes.push_back(a.box);
       fd.detector.t_infer_us = expense.us("detect");
 
-      const int n_before = static_cast<int>(armors.size());
       expense.begin("track");
-      auto targets = tracker.track(armors, t);
+      auto trk = tracker.track(armors, t);   // ⭐⭐ W98：目标 + 调试快照一起返回
+      auto & targets = trk.targets;
       expense.end("track");
+      fd.tracker = trk.dbg;                  // ⭐ 一行替代原来的 6 处手写
       fd.tracker.t_track_us = expense.us("track");
       // ⭐⭐ W71：`sol_*` 四列（原来永远是 0）—— Solver 在 Tracker 内部被调用
       fd.solver = tracker.solver().last_debug();
-      fd.tracker.priority_mode = static_cast<int>(tracker.priority_mode());
-      fd.tracker.filtered_out = n_before - static_cast<int>(armors.size());
-      fd.tracker.armor_count = static_cast<int>(armors.size());
-      {  // tracker 状态字符串 -> 枚举
-        const auto st = tracker.state();
-        fd.tracker.state = (st == "tracking") ? 2 : (st == "temp_lost") ? 3
-                          : (st == "detecting")            ? 1
-                                                           : 0;
-      }
       // ⭐⭐ W70：填 `tgt_*`（原来 `fd.target.*` **从没被赋值** → CSV 里 13 列永远 0）
       //   EKF 状态布局（见 target.cpp）：x vx y vy z vz a w r l h
       if (!targets.empty()) {

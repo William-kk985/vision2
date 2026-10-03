@@ -8,6 +8,7 @@
 
 #include "core/types.hpp"
 #include "core/auto_aim/solver/solver.hpp"
+#include "core/auto_aim/tracker/tracker_debug.hpp"   // ⭐ W98
 #include "core/auto_aim/target/target.hpp"
 #include "core/auto_aim/tracker/filter.hpp"
 #include "core/auto_aim/tracker/priority.hpp"
@@ -15,6 +16,17 @@
 
 namespace auto_aim
 {
+
+/// ⭐⭐ W98：`track()` 的返回值 —— **目标 + 调试快照一起返回**
+///
+/// 放在这里而不是 `tracker_debug.hpp`：那个头是**零依赖 POD**（硬纪律），
+/// 而本结构含业务类型 `Target`。
+struct TrackerResult
+{
+  std::list<Target> targets;
+  TrackerDebug dbg;
+};
+
 class Tracker
 {
 public:
@@ -27,7 +39,19 @@ public:
 
   std::string state() const;
 
-  std::list<Target> track(
+  /// ⭐⭐ W98：返回 `TrackerResult`（目标 + 调试快照）
+  ///
+  /// ⚠️ `TrackerResult` 定义在**本文件**（而非 `tracker_debug.hpp`）——
+  ///   因为 `tracker_debug.hpp` 是**零依赖 POD**（只 include `<cstdint>`），
+  ///   而 `TrackerResult` 含 `std::list<Target>`（业务类型）。
+  ///   这条纪律见 `detector_debug.hpp` 的长注释：**POD 与"带业务类型的 Result"分开**。
+  ///
+  /// ## 为什么（同 Detector，见 `detector.hpp` 的长注释）
+  /// 原来主循环要**手写 6 行**从 tracker 各处取值填 `fd.tracker`，还容易漏。
+  /// 现在 tracker **在自己的统一出口填好**，主循环只要 `fd.tracker = r.dbg;`。
+  /// ⚠️ 例外：`invincible_count` / `focus_target_count` 来自 ROS2 下行数据，
+  ///   主循环知道得更准（它持有原始 id 列表）→ 由主循环在那之后再覆盖。
+  TrackerResult track(
     std::list<Armor> & armors, std::chrono::steady_clock::time_point t,
     bool use_enemy_color = true);
 

@@ -55,11 +55,30 @@ void Tracker::reload(const YAML::Node & yaml)
     "[Tracker] 热重载: priority_mode = {}", to_string(priority_mode_));
 }
 
-std::list<Target> Tracker::track(
+TrackerResult Tracker::track(
   std::list<Armor> & armors, std::chrono::steady_clock::time_point t, bool use_enemy_color)
 {
   auto dt = tools::delta_time(t, last_timestamp_);
   last_timestamp_ = t;
+
+  // ⭐⭐ W98：本帧进入时的装甲板数（用于算 `filtered_out`）
+  const int n_armors_before = static_cast<int>(armors.size());
+
+  // ⭐⭐ W98：**统一出口** —— `track()` 有 4 处早返回（发散/不收敛/丢失/正常），
+  //   原来都是裸 `return {};` / `return targets;`。若逐处手写填 dbg，**必然漏**。
+  //   ⇒ 收成一个 lambda：所有出口都经它，**结构上不可能忘填**。
+  auto finish = [&](std::list<Target> targets) -> TrackerResult {
+    TrackerResult r;
+    r.targets = std::move(targets);
+    r.dbg.state = (state_ == "tracking") ? 2 : (state_ == "temp_lost") ? 3
+                  : (state_ == "detecting")            ? 1
+                                                       : 0;
+    r.dbg.armor_count = static_cast<int>(armors.size());
+    r.dbg.priority_mode = static_cast<int>(priority_mode_);
+    r.dbg.filtered_out = n_armors_before - static_cast<int>(armors.size());
+    // ⚠️ `invincible_count` / `focus_target_count` 由主循环填（它持有 ROS2 原始 id 列表）
+    return r;
+  };
 
   // 时间间隔过长，说明可能发生了相机离线
   if (state_ != "lost" && dt > 0.1) {
@@ -121,7 +140,7 @@ std::list<Target> Tracker::track(
   if (state_ != "lost" && target_.diverged()) {
     tools::logger()->debug("[Tracker] Target diverged!");
     state_ = "lost";
-    return {};
+    return finish({});
   }
 
   // 收敛效果检测：
@@ -131,13 +150,12 @@ std::list<Target> Tracker::track(
     (0.4 * target_.ekf().window_size)) {
     tools::logger()->debug("[Target] Bad Converge Found!");
     state_ = "lost";
-    return {};
+    return finish({});
   }
 
-  if (state_ == "lost") return {};
+  if (state_ == "lost") return finish({});
 
-  std::list<Target> targets = {target_};
-  return targets;
+  return finish({target_});
 }
 
 std::tuple<omniperception::DetectionResult, std::list<Target>> Tracker::track(

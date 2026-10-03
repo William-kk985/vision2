@@ -184,13 +184,15 @@ int run_uav(io::CameraBase & camera, Board & cboard, const std::string & config_
       auto & armors = det.armors;
       expense.end("detect");
       expense.begin("track");
-      auto targets = tracker.track(armors, t);
+      auto trk = tracker.track(armors, t);   // ⭐⭐ W98
+      auto & targets = trk.targets;
       expense.end("track");
 
       command = aimer.aim(targets, t, cboard.bullet_speed);
       command.shoot = shooter.shoot(command, aimer, targets, ypr);
       fd.detector = det.dbg;                               // ⭐ W98：一行，不可能忘
       fd.detector.t_infer_us = expense.us("detect");
+      fd.tracker = trk.dbg;                  // ⭐ W98：一行替代手写
       fd.tracker.t_track_us = expense.us("track");
       // ⭐⭐ W71：`sol_*` 四列（原来永远是 0）
       fd.solver = tracker.solver().last_debug();

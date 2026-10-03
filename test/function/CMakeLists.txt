@@ -103,3 +103,8 @@ add_test(NAME test_csv_schema COMMAND test_csv_schema)
 add_executable(test_log_filter test_log_filter.cpp)
 target_link_libraries(test_log_filter hzmir_utils)
 add_test(NAME test_log_filter COMMAND test_log_filter)
+
+# ⭐ W107：检测过滤链的「计数不变量」（防止加计数器时改掉过滤行为）
+add_executable(test_detect_filter test_detect_filter.cpp)
+target_link_libraries(test_detect_filter hzmir_core hzmir_utils)
+add_test(NAME test_detect_filter COMMAND test_detect_filter)

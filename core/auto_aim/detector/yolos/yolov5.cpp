@@ -125,6 +125,12 @@ DetectorResult YOLOV5::parse(
   //   原来 objectness/not_armor/置信度/类型 四种失败【都没有日志】、
   //   `armor_count` 又是过滤后的 → 终端和 CSV 都分不出卡在哪一步。
   int n_pass = 0, n_name = 0, n_conf = 0, n_type = 0;   // ⭐ 只统计 objectness 通过后的候选
+  // ⭐⭐ W107：被 `check_type` 丢掉的**按名字**计数（下标 = `ArmorName`）
+  //   ⚠️ 为什么要它：v5 的 `type` 规则（`num_id==1 ? big : small`）与 `armor_properties`
+  //     的 big 集合**不一致** ⇒ `base`/`three`/`four`/`five` 的 big 版会被判错丢掉，
+  //     而**旧日志只报总数（type N）**，看不出"丢的是谁" ⚠️ 属于"静默丢目标"。
+  //   ⭐ 现在日志里直接打出名字 ⇒ 一眼看见 `base` 被丢。
+  int dropped_by_type[9] = {0};
   // ⭐⭐ W68：记录本帧 objectness **分布** —— 只看"最高多少"信息量太少，
   //   看"有多少 anchor 接近阈值"才知道离能用还有多远。
   //   ⚠️ 不再记录"最像的 anchor 的类别/颜色"：那两路输出**只有在 objectness 高时才有意义**，
@@ -201,14 +207,28 @@ DetectorResult YOLOV5::parse(
 
   tmp_img_ = bgr_img;
   for (auto it = armors.begin(); it != armors.end();) {
-    if (it->name == ArmorName::not_armor) { ++n_name; it = armors.erase(it); continue; }
-    if (it->confidence <= min_confidence_) { ++n_conf; it = armors.erase(it); continue; }
-    if (!check_name(*it)) {
-      ++n_conf;
+    // ⭐⭐⭐ W107 **修 bug**：`check_name` 失败时必须 `erase + continue`。
+    //   ⚠️ 我在 W62/W68 加计数器时把它改成了「只 `++n_conf`，不 erase」——
+    //     **那是错的**：同济原版是 `if (!check_name(*it)) { it = armors.erase(it); continue; }`，
+    //     我这么写等于**把该丢的装甲板留下来**（过滤行为被计数器改掉了）。
+    //   ⭐ 现在拆成"先计数、再显式 erase"两步 —— **计数不影响控制流**。
+    if (it->name == ArmorName::not_armor) {
+      ++n_name;
+      it = armors.erase(it);
+      continue;
     }
-
+    if (!check_name(*it)) {   // = (name != not_armor) && (confidence > min_confidence_)
+      ++n_conf;
+      it = armors.erase(it);
+      continue;
+    }
     if (!check_type(*it)) {
       ++n_type;
+      // ⭐ W107：**按名字统计被 check_type 丢掉的** ——
+      //   ⚠️ 因为 v5 的 `type` 规则（`num_id==1 ? big : small`）与 `armor_properties`
+      //     的 big 集合**不一致** ⇒ `base`/`three`/`four`/`five` 的 big 版会被判错而丢掉。
+      //   ⭐ 只报名字（不报颜色）—— 名字就是"丢的是谁"，够定位。
+      if (auto_aim::det_stats_enabled()) dropped_by_type[static_cast<int>(it->name)]++;
       it = armors.erase(it);
       continue;
     }
@@ -252,16 +272,29 @@ DetectorResult YOLOV5::parse(
     } else {
       since_log = 0;
       last_n_out = n_out;
+      // ⭐⭐ W107：**把 `check_type` 丢掉的按名字列出来** ——
+      //   ⚠️ 旧日志只有 `type N`（数字），看不出"丢的是谁" ⇒ **静默丢目标**。
+      //   ⭐ 现在拼成 `base×3 three×1` 这种形式；没丢就是空串（不占地方）。
+      std::string type_drop;
+      for (int i = 0; i < 9; ++i) {
+        if (dropped_by_type[i] == 0) continue;
+        if (!type_drop.empty()) type_drop += ' ';
+        type_drop += ARMOR_NAMES[i];
+        type_drop += "×" + std::to_string(dropped_by_type[i]);
+      }
+      const char * type_drop_s = type_drop.empty() ? "—" : type_drop.c_str();
+
       if (n_out == 0)
         // ⭐ W106：同上 —— 这条**每 30 帧才一条**（上面节流），概览级 ⇒ 用 logger
         tools::logger()->debug(
-          "[{}] objectness 通过 {} 个候选 → 全被滤掉：not_armor {} / 置信度 {} / "
-          "类型不符 {} 最终 0 个装甲板",
-          "yolov5", n_pass, n_name, n_conf, n_type);
+          "[yolov5] objectness 通过 {} 个候选 → 全被滤掉：not_armor {} / 置信度 {} / "
+          "类型不符 {}（{}）最终 0 个装甲板",
+          n_pass, n_name, n_conf, n_type, type_drop_s);
       else
         tools::logger()->debug(
-          "[{}] objectness 通过 {} → 输出 {}（滤掉 not_armor {} / conf {} / type {}）", "yolov5",
-          n_pass, n_out, n_name, n_conf, n_type);
+          "[yolov5] objectness 通过 {} → 输出 {}（滤掉 not_armor {} / conf {} / type {}）{}",
+          n_pass, n_out, n_name, n_conf, n_type,
+          type_drop.empty() ? "" : ("　⚠️ type 丢的是：" + type_drop).c_str());
     }
   }
   if (debug_) draw_detections(bgr_img, armors, frame_count);

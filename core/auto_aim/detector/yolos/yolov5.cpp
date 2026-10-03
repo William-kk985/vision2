@@ -324,11 +324,23 @@ DetectorResult YOLOV5::parse(
           "[yolov5] objectness 通过 {} 个候选 → 全被滤掉：not_armor {} / 置信度 {} / "
           "类型不符 {}（{}）最终 0 个装甲板",
           n_pass, n_name, n_conf, n_type, type_drop_s);
-      else
+      else {
+        // ⭐⭐⭐ W110：**报出"识别到了啥"**（用户要求）——
+        //   ⭐ 格式：有数字的用数字、没数字用英文 ⇒ `3-blue` / `sentry-red`
+        //     · `one`~`five` → `1`~`5`；`sentry`/`outpost`/`base` → 英文
+        //     · 颜色英文；big 装甲多带一个 `-big`
+        //   ⚠️ 只在**该打日志的这一帧**才拼串（上面已限频到 10~30 帧一次）⇒ 开销可忽略。
+        std::string what;
+        for (const auto & a : armors) {
+          if (!what.empty()) what += ' ';
+          what += armor_tag(a);
+        }
         tools::logger()->debug(
-          "[yolov5] objectness 通过 {} → 输出 {}（滤掉 not_armor {} / conf {} / type {}）{}",
-          n_pass, n_out, n_name, n_conf, n_type,
-          type_drop.empty() ? "" : ("　⚠️ type 丢的是：" + type_drop).c_str());
+          "[yolov5] objectness 通过 {} → 输出 {}：{}{}（滤掉 not_armor {} / conf {} / type {}）",
+          n_pass, n_out, what.empty() ? "?" : what,
+          type_drop.empty() ? "" : ("　⚠️ type 丢的是：" + type_drop),
+          n_name, n_conf, n_type);
+      }
     }
   }
   if (debug_) draw_detections(bgr_img, armors, frame_count);

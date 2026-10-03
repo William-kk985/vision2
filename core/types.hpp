@@ -18,11 +18,11 @@
 #include <Eigen/Dense>
 #include <opencv2/opencv.hpp>
 #include <array>
+#include <string>
 #include <chrono>
 #include <cstdint>
 #include <cmath>
 #include <list>
-#include <string>
 #include <tuple>
 #include <vector>
 
@@ -61,6 +61,7 @@ enum ArmorName
 };
 const std::vector<std::string> ARMOR_NAMES = {"one",    "two",     "three", "four",     "five",
                                               "sentry", "outpost", "base",  "not_armor"};
+
 
 enum ArmorPriority
 {
@@ -157,6 +158,34 @@ struct Armor
     int color_id, int num_id, float confidence, const cv::Rect & box,
     std::vector<cv::Point2f> armor_keypoints, cv::Point2f offset);
 };
+
+/// @brief ⭐⭐ W110：把装甲板压成一个**短标签**（给运行期概览日志用）
+///
+/// ⭐ **格式规则（用户定的）：有数字的用数字，没数字用英文**
+///   · `one`~`five`            → `1`~`5`        （⭐ 有数字 ⇒ 用数字）
+///   · `sentry`/`outpost`/`base`/`not_armor` → 英文原样（⚠️ 没数字，别硬编）
+///   · 颜色 → 英文原样（`blue`/`red`/`extinguish`/`purple`）
+///
+/// ⭐ 例：`3-blue`、`sentry-red`、`1-purple`
+/// ⚠️ 为什么不用单个字母（如 `B`/`R`）—— ⚠️ **会记不住、也会看错**；
+///   全英文虽然长一点，但**一眼就懂**（跟"模块名别让人猜"一个道理）。
+/// ⭐ `not_armor` 一般到不了这里（前面已被 `check_name` 滤掉），但保留兜底。
+inline std::string armor_tag(const Armor & a)
+{
+  std::string n;
+  const int idx = static_cast<int>(a.name);
+  if (idx >= 0 && idx < static_cast<int>(ARMOR_NAMES.size()) && a.name != ArmorName::not_armor) {
+    // ⭐ 有数字的用数字：one..five 是枚举 0..4 ⇒ 显示成 1..5
+    n = (idx <= static_cast<int>(ArmorName::five)) ? std::to_string(idx + 1) : ARMOR_NAMES[idx];
+  } else {
+    n = "not_armor";
+  }
+  const int c = static_cast<int>(a.color);
+  const std::string col =
+    (c >= 0 && c < static_cast<int>(COLORS.size())) ? COLORS[c] : std::string("?");
+  // ⭐ big 装甲额外标一个 `-big`（⚠️ 免得把"3 号"和"3 号平衡"看成一回事）
+  return n + "-" + col + (a.type == ArmorType::big ? "-big" : "");
+}
 
 }  // namespace auto_aim
 

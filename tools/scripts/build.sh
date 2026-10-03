@@ -125,6 +125,58 @@ fi
 printf '%s' "$NEW_HASH" > "$CFG_HASH_FILE"
 
 # ── ③ 构建 ──
+# ⭐⭐ W110：**带进度条的编译** —— `make` 本来就输出 `[ NN%]`，
+#   ⚠️ 原来 `> "$log" 2>&1` 把它**整个吞掉**了 ⇒ 长时间编译时终端一片空白，
+#     根本不知道是在编译、还是卡住了。
+#   ⭐ 现在：`tee` 保完整日志 + 实时把 `[ NN%]` 画成进度条。
+#
+#   ⚠️ 四个坑（都处理了）：
+#     1. **管道会吃掉退出码** ⇒ `PIPESTATUS[0]` 拿 `cmake --build` 的真实返回值；
+#     2. **`grep` 默认块缓冲** ⇒ `--line-buffered`，否则进度条只在结束时喷一次；
+#     3. ⭐ **非终端（管道/重定向/CI）不画 `\r` 进度条** —— 否则所有帧会**堆成一行**
+#        （`\r` 只在终端里才有"覆盖"语义）；⚠️ 这时改为**安静等待**（日志照常落盘）；
+#     4. ⭐ **只在百分比【变化】时重画** + **收尾只打一次 100%**。
+build_with_progress() {
+  local dir="$1" log="$2" jobs="$3"
+  local W=28 pct=0 last=-1 fill i bar rc
+
+  # ⭐ 进度条只在【真终端】画（重定向时安静，避免堆成一行）
+  if [ ! -t 1 ]; then
+    cmake --build "$dir" -j"$jobs" > "$log" 2>&1
+    return $?
+  fi
+
+  cmake --build "$dir" -j"$jobs" 2>&1 | tee "$log" | \
+    grep --line-buffered -oE '^\[ *[0-9]+%\]' | \
+    while IFS= read -r tag; do
+      pct="${tag//[^0-9]/}"
+      [ -z "$pct" ] && continue
+      [ "$pct" = "$last" ] && continue        # ⭐ 同一百分比不重画
+      last="$pct"
+      fill=$(( pct * W / 100 ))
+      bar=""
+      i=0
+      while [ "$i" -lt "$W" ]; do
+        if [ "$i" -lt "$fill" ]; then bar="${bar}█"; else bar="${bar}░"; fi
+        i=$(( i + 1 ))
+      done
+      printf "\r  %3d%% %s" "$pct" "$bar"
+    done
+  rc="${PIPESTATUS[0]}"
+
+  # ⭐ 收尾：只在【没到过 100%】时补一条（避免打两次）
+  #   ⚠️ 不能用变量 `last` —— 它在 `while` 的**子 shell** 里改，父 shell 看不到（实测踩到）。
+  #   ⭐ 改成查日志：make 到过 100% 就一定有一行 `[100%]`。
+  if ! grep -q '^\[ *100%\]' "$log" 2>/dev/null; then
+    bar=""
+    i=0
+    while [ "$i" -lt "$W" ]; do bar="${bar}█"; i=$(( i + 1 )); done
+    printf "\r  %3d%% %s" 100 "$bar"
+  fi
+  printf "\n"
+  return "$rc"
+}
+
 build_one() {
   local kind="$1"                    # release | debug
   local dir="$WORKSPACE/exp/hzmir_build"
@@ -154,7 +206,8 @@ build_one() {
     ok "已有 CMakeCache → 跳过 configure（改 core/debug.hpp 会自动触发）"
   fi
 
-  if ! cmake --build "$dir" -j"$JOBS" > "$dir.build.log" 2>&1; then
+  # ⭐⭐ W110：改用带进度条的版本（见上面的 build_with_progress）
+  if ! build_with_progress "$dir" "$dir.build.log" "$JOBS"; then
     echo; grep -E "error:" "$dir.build.log" | head -20 >&2
     die "编译失败（完整日志: $dir.build.log）"
   fi

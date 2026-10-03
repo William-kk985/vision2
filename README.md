@@ -319,10 +319,25 @@ tools/scripts/run.sh infantry --log-off=yolo
 ```
 [yolov5] 本帧无候选：objectness 峰值 0.002 < 阈值 0.70
          （采样 25200 个 anchor；>0.3 有 0 个、>0.1 有 0 个）      ← ⭐ "有没有戏"一眼看出
-[yolov5] objectness 通过 6 → 输出 1（滤掉 not_armor 0 / conf 0 / type 0）
+[yolov5] objectness 通过 6 → 输出 1：4-blue（滤掉 not_armor 0 / conf 0 / type 0）
 [yolov5] objectness 通过 2 个候选 → 全被滤掉：not_armor 0 / 置信度 1 / 类型不符 0（—）
          ↑ ⭐ "卡在哪一步"（每 30 帧一条）
 ```
+
+⭐ **W110 新增：`输出 N：` 后面直接报【识别到了啥】**（用户要求："**有数字的用数字，没数字用英文**"）：
+```
+[yolov5] objectness 通过 6 → 输出 1：4-blue          ← ⭐ 有数字 ⇒ 用数字
+[yolov5] objectness 通过 6 → 输出 1：sentry-blue     ← ⭐ 没数字 ⇒ 用英文
+[yolov5] objectness 通过 3 → 输出 2：3-red 5-blue    ← 多个用空格隔开
+```
+| 元素 | 规则 |
+|---|---|
+| **编号** | `one`~`five` → **`1`~`5`**；`sentry`/`outpost`/`base` → **英文原样** |
+| **颜色** | **英文原样**：`blue` / `red` / `extinguish` / `purple` |
+| **大小** | big 装甲多带 **`-big`**（⚠️ 免得把"3 号步兵"和"3 号平衡步兵"看成一回事）|
+
+⚠️ **不用单字母缩写**（`B`/`R`）—— **会记不住也会看错**（跟"模块名别让人猜"一个道理）。
+⭐ 实现：`core/types.hpp` 的 `armor_tag()`；⚠️ 只在**该打日志的那一帧**才拼串（已限频）。
 
 ⭐ **W107 新增：`check_type` 丢掉的会【按名字】列出来**（不再是光秃秃的数字）：
 ```

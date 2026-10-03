@@ -238,23 +238,42 @@ tools/scripts/run.sh infantry --strict-board                    # 没下位机�
 
 ```
 params/
-├── ⭐ camera.yaml              相机专配（4 兵种共用）—— 曝光/增益/选哪款
-├── ⭐ cameras/                  ⭐ 按【品牌】分文件 —— 换相机品牌不用动上面的
-│   ├── hikrobot.yaml           海康：VID:PID、PixelFormat、白平衡…
-│   ├── mindvision.yaml         迈德威视：vid_pid、gamma
-│   └── usbcamera.yaml
-├── infantry.yaml               兵种配置
+├── ⭐ cameras/                     ⭐ **相机配置全在这里** —— 兵种 yaml 不再堆相机键
+│   ├── hikrobot.yaml               海康品牌默认（VID:PID、PixelFormat、白平衡…）
+│   ├── mindvision.yaml             迈德威视品牌默认
+│   ├── usbcamera.yaml
+│   ├── infantry.yaml               ⭐ 步兵：hikrobot，曝光 10ms
+│   ├── hero.yaml                   ⭐ 英雄：hikrobot，曝光 2ms
+│   ├── sentry.yaml                 ⭐ 哨兵：hikrobot，曝光 0.8ms / 增益 16.9
+│   └── uav.yaml                    ⭐ 无人机：**mindvision**，曝光 8ms / gamma 0.6
+├── infantry.yaml                   兵种配置 —— 只有【一行】相机指向 + 标定参数
 ├── hero.yaml
-├── sentry.yaml                 ⭐ 覆盖：曝光 0.8ms
-└── uav.yaml                    ⭐ 覆盖：用 mindvision
+├── sentry.yaml
+└── uav.yaml
+```
+
+**兵种 yaml 里只剩一行**：
+```yaml
+camera_config: "params/cameras/infantry.yaml"   # ⭐ 相机参数都在这
+camera_matrix: [...]                            # ⭐ 标定参数留在这（与镜头绑定）
+distort_coeffs: [...]
 ```
 
 ⭐ **优先级（低 → 高）**：
 ```
-params/cameras/<品牌>.yaml   <   params/camera.yaml   <   params/<兵种>.yaml 的相机段
-     （品牌默认）                    （本机常用值）              （单兵种特殊值）
+cameras/<品牌>.yaml  <  cameras/<兵种>.yaml  <  兵种 yaml 里同名的相机键
+   （品牌默认）            （兵种常用值）              （临时覆盖，一般不用写）
 ```
-⇒ **改曝光只动 `camera.yaml`**；**换相机品牌只动 `cameras/<品牌>.yaml`**；单兵种特殊才动兵种 yaml。
+⭐ **加载顺序**：`camera_config` 指定的文件 → 由它的 `camera_name` 自动带出
+`cameras/<品牌>.yaml`（**uav 写 `mindvision` 就自动加载 `cameras/mindvision.yaml`**）。
+
+**换相机 / 改曝光只需动一个文件**：
+| 想改什么 | 改哪 |
+|---|---|
+| 某兵种的曝光/增益 | `params/cameras/<兵种>.yaml` |
+| 换相机品牌 | 该文件的 `camera_name`（品牌文件会自动跟着换） |
+| 海康通用参数（白平衡/像素格式） | `params/cameras/hikrobot.yaml` |
+| 临时试一组值 | CLI：`--camera-config=<path>` |
 
 **换另一个海康相机也不会崩**（W93 修的两处）：
 | 原来 | 现在 |

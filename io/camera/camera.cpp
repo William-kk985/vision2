@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <stdexcept>
+#include <vector>
 
 #include "drivers/hikrobot/hikrobot.hpp"
 #include "drivers/mindvision/mindvision.hpp"
@@ -79,12 +80,22 @@ Camera::Camera(
   MergedYaml y;
   y.robot = tools::load(config_path);
 
+  // ⭐⭐ W94：**兵种 yaml 可以用一行 `camera_config:` 指向自己的相机配置**，
+  //   这样兵种 yaml 里不再堆相机参数（曝光/增益/vid_pid/品牌…）。
+  //   优先级：`--camera-config` CLI  >  兵种 yaml 的 `camera_config`  >  默认 `params/camera.yaml`
+  std::string cam_path = camera_config;
+  if (y.robot["camera_config"]) {
+    const auto from_yaml = y.robot["camera_config"].as<std::string>();
+    // ⚠️ CLI 显式给了（且与默认不同）就以 CLI 为准；否则用兵种 yaml 指定的
+    if (camera_config == "params/camera.yaml") cam_path = from_yaml;
+  }
+
   // ⭐⭐ W92：相机专配（默认 `params/camera.yaml`）—— 4 兵种共用，不用每份都改
-  if (!camera_config.empty() && std::filesystem::exists(camera_config)) {
-    y.camera = tools::load(camera_config);
-    tools::logger()->info("[Camera] 相机专配: {}（兵种 yaml 可覆盖同名项）", camera_config);
-  } else if (!camera_config.empty()) {
-    tools::logger()->debug("[Camera] 无相机专配 {} → 只用兵种 yaml 的相机段", camera_config);
+  if (!cam_path.empty() && std::filesystem::exists(cam_path)) {
+    y.camera = tools::load(cam_path);
+    tools::logger()->info("[Camera] 相机专配: {}", cam_path);
+  } else if (!cam_path.empty()) {
+    tools::logger()->debug("[Camera] 无相机专配 {} → 只用兵种 yaml 的相机段", cam_path);
   }
 
   // ⭐⭐ W93：**按品牌分文件** —— `params/cameras/<camera_name>.yaml`
@@ -93,13 +104,27 @@ Camera::Camera(
   //   优先级最低（可被上面两层覆盖）。
   auto camera_name = y.read<std::string>("camera_name", "hikrobot");
   {
-    std::filesystem::path vp = std::filesystem::path(camera_config).parent_path() / "cameras";
-    vp /= (camera_name + ".yaml");
-    if (std::filesystem::exists(vp)) {
-      y.vendor = tools::load(vp.string());
-      tools::logger()->info("[Camera] 品牌专配: {}", vp.string());
+    // ⭐ 品牌文件查找顺序（先近后远）：
+    //   ① 与 cam_path **同目录**的 `<品牌>.yaml`
+    //      （如 `params/cameras/infantry.yaml` → `params/cameras/hikrobot.yaml`）
+    //   ② `<cam_path.parent>/cameras/<品牌>.yaml`
+    //      （如 `params/camera.yaml` → `params/cameras/hikrobot.yaml`）
+    //   ⚠️ 修复：原来只试 ②，当 cam_path 已在 `cameras/` 下时会变成
+    //      `params/cameras/cameras/hikrobot.yaml`（多一层，永远找不到）。
+    const auto parent = std::filesystem::path(cam_path).parent_path();
+    std::vector<std::filesystem::path> cands = {
+      parent / (camera_name + ".yaml"),
+      parent / "cameras" / (camera_name + ".yaml"),
+    };
+    std::filesystem::path found;
+    for (const auto & c : cands) {
+      if (std::filesystem::exists(c)) { found = c; break; }
+    }
+    if (!found.empty()) {
+      y.vendor = tools::load(found.string());
+      tools::logger()->info("[Camera] 品牌专配: {}", found.string());
     } else {
-      tools::logger()->debug("[Camera] 无品牌专配 {}（可选）", vp.string());
+      tools::logger()->debug("[Camera] 无品牌专配（找过 {}）", cands[0].string());
     }
   }
 

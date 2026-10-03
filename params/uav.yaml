@@ -50,14 +50,7 @@ roi:
 use_roi: false
 
 #####-----工业相机参数-----#####
-# ⭐⭐ 相机配置以 `params/camera.yaml`（4 兵种共用）为默认，这里的同名项【覆盖】它。
-#   ⭐ 本兵种特殊：用 mindvision（camera.yaml 是 hikrobot）
-camera_name: "mindvision"
-exposure_ms: 8
-gamma: 0.6
-vid_pid: "f622:d13a"
 
-# ⚠️ W90：`camera_params` 通用通道目前**只对 `hikrobot` 生效**（走 MV_CC_SetXxxValue）。
 #   uav 用的是 `mindvision`，参数请改 `gamma` / `exposure_ms`，
 #   或参考 drivers/mindvision/mindvision.cpp 里的 set_* 调用自行扩展。
 
@@ -72,8 +65,6 @@ new_fov_h: 67
 new_fov_v: 40.9
 usb_frame_rate: 100
 usb_exposure: 315 #1-80000______250
-usb_gamma: 160
-usb_gain: 10 #0-96
 
 
 #####-----传统方法参数-----#####
@@ -121,7 +112,9 @@ auto_fire: true # 是否由自瞄控制射击
 #####-----工业相机标定参数-----#####
 R_gimbal2imubody: [1, 0, 0, 0, 1, 0, 0, 0, 1]
 
+camera_config: "params/cameras/uav.yaml"   # ⭐ 相机参数都在这（兵种 yaml 不再堆相机键）
 # 重投影误差: 0.1032px
+
 camera_matrix: [2924.6190997571712, 0, 647.0245571651617, 0, 2927.4258594148396, 388.18625585771758, 0, 0, 1]
 distort_coeffs: [-0.58886594170687334, 0.32512251112647716, 0.012447953238733123, -0.0032411418907421475, 0]
 # 相机同理想情况的偏角: yaw0.02 pitch1.94 roll1.40 degree

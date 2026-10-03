@@ -58,22 +58,13 @@ new_fov_h: 27 #67
 new_fov_v: 40.9
 usb_frame_rate: 120
 usb_exposure: 500 #1-80000______250
-usb_gamma: 160
-usb_gain: 10 #0-96
 
 #####-----工业相机参数-----#####
-# ⭐⭐ 相机配置以 `params/camera.yaml`（4 兵种共用）为默认，这里的同名项【覆盖】它。
-#   ⭐ 本兵种特殊：曝光 0.8ms（比 camera.yaml 的短）
-camera_name: "hikrobot"
-exposure_ms: 0.8
-gain: 16.9
-vid_pid: "2bdf:0001"
 
 # ⭐⭐ W90：**相机参数（不用开 MVS 每次调）** —— 通用通道，任意海康参数都能设。
 #   名字必须与 **MVS 客户端里显示的一致**。先用 `--dump-camera-params` 打印当前值，
 #   在 MVS 里调好之后，把好用的值抄进来即可。
 #
-#   camera_params:
 #     float:                      # MV_CC_SetFloatValue
 #       Gamma: 1.0
 #       Sharpness: 50
@@ -130,7 +121,9 @@ mode: 1
 #####-----工业相机标定参数-----#####
 R_gimbal2imubody: [1, 0, 0, 0, 1, 0, 0, 0, 1]
 
+camera_config: "params/cameras/sentry.yaml"   # ⭐ 相机参数都在这（兵种 yaml 不再堆相机键）
 # 重投影误差: 0.1833px
+
 camera_matrix: [2414.9359264386621, 0, 717.26243105567414, 0, 2418.0489262208148, 582.68540529942845, 0, 0, 1]
 distort_coeffs: [-0.0209453389287673, 0.15028138841073832, -0.0006517722113234505, -0.0016861906197686788, 0]
 

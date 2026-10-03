@@ -80,20 +80,13 @@ second_tolerance: 2 # 远距离射击容差，degree
 judge_distance: 2 #距离判断阈值
 auto_fire: true # 是否由自瞄控制射击
 
-# ⭐⭐ 相机配置以 `params/camera.yaml`（4 兵种共用）为默认，这里的同名项【覆盖】它。
-camera_name: "hikrobot"
-exposure_ms: 2
-gain: 16
-vid_pid: "2bdf:0001"
 # ⭐⭐ W58：目标帧率。150 fps @1440x1080 Bayer8 ≈ 233 MB/s（接近 USB3 上限）
 #   若报 0x80000007（无数据）→ 先降到 30 试（≈47 MB/s，肯定够）
-fps: 30
 
 # ⭐⭐ W90：**相机参数（不用开 MVS 每次调）** —— 通用通道，任意海康参数都能设。
 #   名字必须与 **MVS 客户端里显示的一致**。先用 `--dump-camera-params` 打印当前值，
 #   在 MVS 里调好之后，把好用的值抄进来即可。
 #
-#   camera_params:
 #     float:                      # MV_CC_SetFloatValue
 #       Gamma: 1.0
 #       Sharpness: 50
@@ -113,7 +106,9 @@ fps: 30
 
 R_gimbal2imubody: [1, 0, 0, 0, 1, 0, 0, 0, 1]
 
+camera_config: "params/cameras/hero.yaml"   # ⭐ 相机参数都在这（兵种 yaml 不再堆相机键）
 # 重投影误差: 0.3145px
+
 camera_matrix: [1851.7070167840545, 0, 721.12585328714192, 0, 1851.8175594364079, 571.69879709276688, 0, 0, 1]
 distort_coeffs: [-0.093662536083526302, 0.18945726820633155, -0.00040424349861928674, -0.0040568403852123142, 0]
 

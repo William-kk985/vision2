@@ -192,6 +192,21 @@ d,_=s.recvfrom(65535); o=json.loads(d); print(len(o),'字段:',sorted(o)[:6])"
 |---|---:|---:|---|
 | **窗口**（按键 `1`） | **ms 级 + 阻塞** | — | ⚠️ **唯一会阻塞自瞄线程的**（`cv::imshow`/`waitKey`） |
 
+#### ⚠️⚠️ 看不到预测点/红圈？先查【敌我颜色】
+
+⭐ **`demo.avi` 是【蓝】装甲板，而四个兵种 yaml 默认 `enemy_color: "red"`**
+⇒ ⭐ **tracker 会把所有检测滤掉** ⇒ **`trk_state` 全程 `lost`** ⇒ **预测点/红圈都没得画**
+
+```
+enemy_color=red（默认）  trk_state={'0': 687}                         trk_armor_count   0/687  ⚠️
+enemy_color=blue         trk_state={'0':75,'1':85,'2':338,'3':189}    trk_armor_count 494/687  ⭐
+```
+
+⭐ **一条命令搞定**（**不改原 yaml**，生成临时副本）：
+```bash
+tools/scripts/run.sh infantry --enemy-color=blue --video=assets/demo/demo.avi --force-mode=1
+```
+
 #### ⭐⭐ 按 `1` 会开出【两个窗口】—— 它们是【两条不同的路】
 
 | | **`detection`** | **`aim`** |

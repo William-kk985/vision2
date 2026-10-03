@@ -15,6 +15,10 @@
 #   tools/scripts/run.sh infantry                 # 真机：步兵自瞄
 #   tools/scripts/run.sh sentry                   # 真机：哨兵（自动 source ROS2）
 #   tools/scripts/run.sh infantry --video=a.avi   # 零硬件：录像回放
+#   tools/scripts/run.sh infantry --enemy-color=blue --video=a.avi
+#                                                 # ⭐ 临时改敌我颜色（demo 是蓝装甲板，
+#                                                 #   而四个兵种 yaml 默认 enemy_color=red）
+#                                                 #   ⚠️ 不改原 yaml（生成 /tmp 临时副本）
 #   tools/scripts/run.sh infantry --csv=run --record   # 顺便采数据
 #   tools/scripts/run.sh hero --buff              # 打符
 #   tools/scripts/run.sh infantry --watchdog      # 崩了自动重启
@@ -45,12 +49,18 @@ esac
 
 # ── 其它开关（脚本自己的，不传给程序）──
 USE_WATCHDOG=0; FORCE_DEBUG=0; PARAMS_OVERRIDE=""
+ENEMY_COLOR=""
 EXTRA=()
 for a in "$@"; do
   case "$a" in
     --watchdog) USE_WATCHDOG=1 ;;
     --debug-bin) FORCE_DEBUG=1 ;;
     --params=*) PARAMS_OVERRIDE="${a#--params=}" ;;
+    # ⭐⭐ W114：**临时改敌我颜色**（调试必备）—— demo 视频是【蓝】装甲板，
+    #   ⚠️ 而四个兵种 yaml 默认 `enemy_color: "red"` ⇒ **tracker 全部滤掉**
+    #   ⇒ **EKF 预测点 / 瞄准点红圈都不会画**（实测 `trk_armor_count` 0/687）。
+    #   ⭐ 用法：`--enemy-color=blue` —— **不改原 yaml**（生成临时副本）。
+    --enemy-color=*) ENEMY_COLOR="${a#--enemy-color=}" ;;
     *) EXTRA+=("$a") ;;
   esac
 done
@@ -85,6 +95,19 @@ ok "$BIN  [$BT]"
 
 # ── ② 参数文件 ──
 PARAMS="${PARAMS_OVERRIDE:-$ROOT/params/robots/$ROBOT.yaml}"
+# ⭐⭐ W114：`--enemy-color=` ⇒ 生成一份临时 yaml（只改 enemy_color，原文件不动）
+if [ -n "$ENEMY_COLOR" ]; then
+  _tmp="${TMPDIR:-/tmp}/hzmir_${ROBOT}_${ENEMY_COLOR}.yaml"
+  # ⚠️ 只替换【非注释】的 enemy_color 行（`^[[:space:]]*enemy_color:`）
+  sed "s/^\([[:space:]]*\)enemy_color:.*/\1enemy_color: \"$ENEMY_COLOR\"/" "$PARAMS" > "$_tmp" \
+    || die "生成临时 yaml 失败"
+  if ! grep -q "^enemy_color: \"$ENEMY_COLOR\"" "$_tmp"; then
+    # 原文件没有 enemy_color 行 ⇒ 追加（放文件开头，YAML 里同键后者覆盖前者，这里没有重复键）
+    sed -i "1i enemy_color: \"$ENEMY_COLOR\"" "$_tmp"
+  fi
+  PARAMS="$_tmp"
+  info_msg="  ⭐ --enemy-color=$ENEMY_COLOR ⇒ 用临时配置 $PARAMS"
+fi
 if [ -f "$PARAMS" ]; then ok "参数: $PARAMS"
 else warn "找不到 $PARAMS（程序会用默认值）"; fi
 

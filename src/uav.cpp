@@ -31,6 +31,7 @@
 #include "core/auto_aim/solver/solver.hpp"
 #include "core/auto_aim/target/target_debug_fill.hpp"   // ⭐ W70
 #include "core/auto_aim/tracker/tracker.hpp"
+#include "core/auto_aim/detector/detector_slot.hpp"   // ⭐ W101（原 B2）
 #include "core/auto_aim/detector/yolo.hpp"
 #include "core/auto_buff/planner/buff_aimer.hpp"
 #include "core/auto_buff/detector/detector.hpp"
@@ -70,6 +71,7 @@ const std::string keys =
   "{pj-port        | 9870 | ⭐ PlotJuggler 目标端口}"
   "{record         | false | ⭐⭐ 录像到 output/video/（默认**不录**；录会占一个核做 MJPG 编码）}"
   "{stop-after     | | ⭐⭐ 算法独立测试：跑到该阶段就停（perceive/detect/track/buff-detect/buff-solve/plan；空=全跑）}"
+  "{debug-only     | | ⭐⭐ 一条命令配齐「只看这一步」= --stop-after + --log-only（perceive/detect/track/buff-detect/buff-solve/plan）}"
   "{tongji         | true | ⭐⭐ 同济兼容模式（默认 true = 完全同济行为）}"
   "{nis-thresh     | | ⭐ 单独覆盖 NIS 失败阈值：tongji(0.711) / chi2(9.4877)；空=跟随 --tongji}"
   "{yaw-rate-src   | | ⭐ 单独覆盖小陀螺判据用的 EKF 分量：x8(同济) / x7(修正)；空=跟随 --tongji}"
@@ -124,7 +126,7 @@ int run_uav(io::CameraBase & camera, Board & cboard, const std::string & config_
   // ⭐⭐ W48：录像**默认关**（录会占一个核做 MJPG 编码；要录传 --record）
   tools::Recorder recorder(30, record);
 
-  auto_aim::Detector detector(config_path);   // ⭐ uav 用**传统检测器**（同济如此）
+  auto_aim::DetectorSlot detector(config_path);   // ⭐ W101（原 B2）：统一槽位
   auto_aim::Solver solver(config_path);
   auto_aim::Tracker tracker(config_path, solver);
   auto_aim::Aimer aimer(config_path);
@@ -288,7 +290,15 @@ int main(int argc, char * argv[])
 
   //   ⭐ 用途：单独验证某一环（如"纯检测率"不受跟踪过滤影响）
 
-  const auto stop_after = tools::parse_stop_after(cli.get<std::string>("stop-after"));
+  // ⭐⭐ W101（原 A3）：`--debug-only=<阶段>` = `--stop-after` + `--log-only` 一次配齐
+  //   ⚠️ 优先级：**显式参数优先**（`--debug-only` 只在对应参数没给时才填）
+  const auto debug_only = tools::parse_debug_only(cli.get<std::string>("debug-only"));
+  const auto stop_after = debug_only.active && cli.get<std::string>("stop-after").empty()
+                            ? debug_only.stop
+                            : tools::parse_stop_after(cli.get<std::string>("stop-after"));
+  if (debug_only.active)
+    tools::logger()->info("[{}] --debug-only ⇒ 截断到 {} + 只看相关模块", "uav",
+                          tools::stage_name(stop_after));
 
   if (tools::stage_truncated(stop_after))
 
@@ -303,7 +313,18 @@ int main(int argc, char * argv[])
   //   会在过滤生效前就打出来（实测踩过）。
   {
     const auto log_off = cli.get<std::string>("log-off");
-    const auto log_only = cli.get<std::string>("log-only");
+
+    // ⭐ W101（原 A3）：`--debug-only` 时若没显式给 `--log-only`，用它填
+
+    const std::string log_only_raw = cli.get<std::string>("log-only").empty()
+
+                                         && debug_only.active
+
+                                       ? debug_only.log_only
+
+                                       : cli.get<std::string>("log-only");
+
+    const auto log_only = log_only_raw;
     if (!log_off.empty())  tools::set_log_modules_off(tools::parse_module_list(log_off));
     if (!log_only.empty()) tools::set_log_modules_only(tools::parse_module_list(log_only));
 

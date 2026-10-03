@@ -96,6 +96,61 @@ inline const char * stage_name(Stage s)
 /// @brief 是否被截断了（用于决定要不要 warn / 在 CSV 里标记）
 inline bool stage_truncated(Stage s) { return s != Stage::Plan; }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// ⭐⭐⭐ W101（原 A3）：`--debug-only=<阶段>` —— **一条命令把"只看这一步"配齐**
+//
+// ## 为什么需要（既然 `--stop-after` 和 `--log-only` 都有了）
+// 单独验证某一环时，其实要**同时**做两件事：
+//   ① `--stop-after=<阶段>`  —— 截断后面的链路（不跑 = 不干扰）
+//   ② `--log-only=<相关模块>` —— 只让这一环的日志出来（其余静音）
+// ⚠️ 两个参数**名字不像一对**，容易只写一个 ⇒ 看到一堆无关日志而困惑。
+//
+// ## 语义：`--debug-only=tracker` 等价于
+// ```
+//   --stop-after=track  --log-only=tracker,target,ekf,solver,planner
+// ```
+// ⭐ 之所以**顺带放开后面几个模块**：跟踪阶段内部会调 Solver（解算装甲板姿态），
+//   只放开 `tracker` 会看不到 `sol_*` 为什么是 0 —— **那正是最容易困惑的地方**。
+// ⚠️ 与显式的 `--stop-after` / `--log-only` 的优先级：**显式参数优先**
+//   （`--debug-only` 只在对应参数**没给**时才填）。
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// @brief `--debug-only` 的一个档位：阶段截断 + 该放开的日志模块
+struct DebugOnly
+{
+  Stage stop = Stage::Plan;
+  std::string log_only;      ///< 逗号分隔（喂给 `--log-only`）；空 = 不设
+  bool active = false;       ///< 用户是否真的给了 `--debug-only`
+};
+
+/// @brief 解析 `--debug-only=<阶段>`（空 = 不生效）
+///   可选：perceive / detect / track / buff-detect / buff-solve / plan / plan-only
+inline DebugOnly parse_debug_only(const std::string & s)
+{
+  DebugOnly d;
+  if (s.empty()) return d;
+  std::string t;
+  for (char c : s) t += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  d.active = true;
+  d.stop = parse_stop_after(t);
+
+  if (t == "perceive" || t == "cam") {
+    d.log_only = "camera,HikRobot,Video,IMU,HikRobot";
+  } else if (t == "detect") {
+    d.log_only = "yolo,detector,ArmorFilter,Device,Classifier";
+  } else if (t == "track" || t == "tracker") {
+    // ⭐ 顺带放开 Solver/EKF/Target —— 跟踪阶段内部就在用它们
+    d.log_only = "tracker,target,ekf,solver,TI";
+  } else if (t == "buff-detect" || t == "buff_detect") {
+    d.log_only = "buff,Buff_Detector,Detector";
+  } else if (t == "buff-solve" || t == "buff_solve") {
+    d.log_only = "buff,Buff_Solver,Buff_Target,ekf";
+  } else {  // plan / all
+    d.log_only = "planner,aimer,shooter,mpc,tinympc,Trajectory";
+  }
+  return d;
+}
+
 }  // namespace tools
 
 #endif  // HZMIR_UTILS_CONFIG_STAGE_GATE_HPP

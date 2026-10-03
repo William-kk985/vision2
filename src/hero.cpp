@@ -32,6 +32,7 @@
 #include "drivers/dm_imu/dm_imu.hpp"
 // ⭐ 显式补上：同济 standard_mpc.cpp **没有** include yolo.hpp，
 //    auto_aim::YOLO 是靠 mt_detector.hpp **传递**拿到的（隐性依赖，同 C23 一类）
+#include "core/auto_aim/detector/detector_slot.hpp"   // ⭐ W101（原 B2）
 #include "core/auto_aim/detector/yolo.hpp"
 #include "core/auto_aim/solver/solver.hpp"
 #include "core/auto_aim/planner/legacy.hpp"   // ⭐ W25：Aimer（含同济兼容开关）
@@ -141,6 +142,7 @@ const std::string keys =
   "{pj-port        | 9870 | ⭐ PlotJuggler 目标端口}"
   "{debug-img      | false | ⭐ L3：启动就开存图（每 30 张 1 张，上限 500）}"
   "{stop-after     | | ⭐⭐ 算法独立测试：跑到该阶段就停（perceive/detect/track/buff-detect/buff-solve/plan；空=全跑）}"
+  "{debug-only     | | ⭐⭐ 一条命令配齐「只看这一步」= --stop-after + --log-only（perceive/detect/track/buff-detect/buff-solve/plan）}"
   "{debug-window   | false | ⭐ L3：启动就开可视化窗口（需 DISPLAY）}"
   "{tongji         | true | ⭐⭐ 同济兼容模式：true(默认)=完全同济行为；false=启用本项目优化}"
   "{nis-thresh     | | ⭐ 单独覆盖 NIS 失败阈值：tongji(0.711) / chi2(9.4877)；空=跟随 --tongji}"
@@ -172,7 +174,15 @@ int main(int argc, char * argv[])
 
   //   ⭐ 用途：单独验证某一环（如"纯检测率"不受跟踪过滤影响）
 
-  const auto stop_after = tools::parse_stop_after(cli.get<std::string>("stop-after"));
+  // ⭐⭐ W101（原 A3）：`--debug-only=<阶段>` = `--stop-after` + `--log-only` 一次配齐
+  //   ⚠️ 优先级：**显式参数优先**（`--debug-only` 只在对应参数没给时才填）
+  const auto debug_only = tools::parse_debug_only(cli.get<std::string>("debug-only"));
+  const auto stop_after = debug_only.active && cli.get<std::string>("stop-after").empty()
+                            ? debug_only.stop
+                            : tools::parse_stop_after(cli.get<std::string>("stop-after"));
+  if (debug_only.active)
+    tools::logger()->info("[{}] --debug-only ⇒ 截断到 {} + 只看相关模块", "hero",
+                          tools::stage_name(stop_after));
 
   if (tools::stage_truncated(stop_after))
 
@@ -187,7 +197,18 @@ int main(int argc, char * argv[])
   //   会在过滤生效前就打出来（实测踩过）。
   {
     const auto log_off = cli.get<std::string>("log-off");
-    const auto log_only = cli.get<std::string>("log-only");
+
+    // ⭐ W101（原 A3）：`--debug-only` 时若没显式给 `--log-only`，用它填
+
+    const std::string log_only_raw = cli.get<std::string>("log-only").empty()
+
+                                         && debug_only.active
+
+                                       ? debug_only.log_only
+
+                                       : cli.get<std::string>("log-only");
+
+    const auto log_only = log_only_raw;
     if (!log_off.empty())  tools::set_log_modules_off(tools::parse_module_list(log_off));
     if (!log_only.empty()) tools::set_log_modules_only(tools::parse_module_list(log_only));
 
@@ -257,7 +278,7 @@ int main(int argc, char * argv[])
       cli.get<double>("bullet-speed"), -1, "hero");
   }
 
-  auto_aim::YOLO yolo(config_path, true);
+  auto_aim::DetectorSlot yolo(config_path, true);   // ⭐ W101（原 B2）：统一槽位
   auto_aim::Solver solver(config_path);
   auto_aim::Tracker tracker(config_path, solver);
   // ⭐ W21：注册热重载组件（Tracker 属主线程）
@@ -433,7 +454,17 @@ int main(int argc, char * argv[])
     fd.t_cam_wait_us = expense.us("cam_wait");   // W86: blocking wait, not CPU
     fd.t_perceive_us = expense.us("perceive");
     fd.mode = static_cast<uint8_t>(mode.load());
-    fd.game_state = 0;                       // TODO: 接比赛状态（无敌/血量）后填
+    // ⭐⭐⭐ W101（原 G1）：**这个字段【暂时无法填】，原因具体如下**（不是"忘了"）：
+    //   · `game_state` 语义 = 比赛阶段 / 血量 / 无敌 等**裁判系统**信息；
+    //   · 本项目的两个数据源都**不提供**：
+    //       - 下位机（`io/board/`）：只有 `bullet_speed` / `bullet_count` / `mode`
+    //       - ROS2 桥（`io/ros2/`）：只有 `publish(target_pos)` /
+    //         `subscribe_enemy_status()`（无敌 id）/ `subscribe_autoaim_target()`（集火 id）
+    //   · ⭐ **部分替代已经有了**：sentry 的 `fd.tracker.invincible_count` 是**真实值**
+    //     （来自 `subscribe_enemy_status()`）—— 只放开那个，不编这个。
+    // ⇒ **要填它必须先有裁判系统接入**（ROS2 自定义 msg 或串口协议）。在那之前：
+    //   ⚠️ **保持 0 并如实说明**，比填一个"看起来有值"的东西（会被当真的用）安全。
+    fd.game_state = 0;
     fd.detector.armor_count = 0;
     fd.tracker.state = 0;
 

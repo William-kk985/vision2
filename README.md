@@ -530,6 +530,8 @@ cd build && ctest          # 20 个用例，约 8 s
 | 优化 | 同济默认 | 本项目建议 | 如何开启 |
 |---|---|---|---|
 | 弹道实现 | `ideal`（无阻力斜抛） | `table`（离线 RK4 建表，**0.04 µs 查表**） | yaml 里 `trajectory_impl: table` |
+| 检测器 | `yolo`（YOLOv5，**同济**） | `traditional`（传统灯条配对） | yaml 里 `detector_impl: traditional` |
+| 弹道（更多档） | `ideal` | `rk4` / `rk4_drag` / `rk4_42` / `table_42` / `tongji_linear` | 同上，`trajectory_impl:` 换名 |
 | 射击过滤 | 仅颜色 | + 编号 / 无敌 / 集火（5 条规则） | yaml 里 `armor_filter:` |
 | 目标优先级 | 不设 | 4 张表（3/4 号优先等） | yaml 里 `priority_mode: 3` |
 | EKF 一致性阈值 | `0.711` | χ²(4) 的 95% 分位 `9.4877` | `--tongji=false` |

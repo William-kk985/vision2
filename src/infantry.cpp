@@ -545,6 +545,7 @@ int main(int argc, char * argv[])
             p.debug_xyza.head(3).norm() > 1e-6) {
           dbg_aim = solver.reproject_armor(
             p.debug_xyza.head(3), p.debug_xyza[3], dbg_tgt_type, dbg_tgt_name);
+
         }
         fd.planner.t_plan_us = psnap.us;
         fd.controller.t_ctrl_us = psnap.ctl_us;   // ⭐ W73：board->send() 真实耗时
@@ -603,7 +604,23 @@ int main(int argc, char * argv[])
       for (const auto & pts : dbg_pred) {
         if (pts.size() >= 2) tools::draw_points(overlay, pts, kLightBlue, 3);   // ⭐ 淡蓝 + 粗
       }
-      if (dbg_aim.size() >= 2) {
+      // ⭐⭐⭐ W117：**瞄准框的"离屏保护"**
+      //   ⚠️ 为什么需要：`Plan::debug_xyza` 是【世界坐标】的**未来**瞄准点，
+      //     而 `reproject_armor()` 用的是【当前云台姿态】。
+      //     ⭐ **录像回放时云台是"死的"**（`ReplayBoard` 只回放录制的四元数），
+      //     瞄准方向与当前姿态能差 **30~60°** ⇒ **投影飞到画面外**
+      //     （实测见过 `center=(-3285462, -338294)`；画面内只占 **16~54%**）。
+      //   ⭐ **真机上云台跟着目标转，角度差很小，投影正常** ⇒ 这不是算法问题。
+      //   ⭐ 所以：**投影结果荒谬时就不画**（宁可不显示，也不显示一个飞到天边的框）。
+      bool aim_sane = (dbg_aim.size() >= 2);
+      if (aim_sane) {
+        for (const auto & p : dbg_aim)
+          if (std::abs(p.x) > 3.f * img.cols || std::abs(p.y) > 3.f * img.rows) {
+            aim_sane = false;
+            break;
+          }
+      }
+      if (aim_sane) {
         tools::draw_points(overlay, dbg_aim, kRed, 3);                          // ⭐ 红框（不要圈/十字）
         cv::Point2f c(0, 0);
         for (const auto & p : dbg_aim) c += p;

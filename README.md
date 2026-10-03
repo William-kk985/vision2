@@ -41,12 +41,40 @@
 
 | 层 | 机制 | 特点 |
 |---|---|---|
-| ① L0/L1 常驻 | `core/debug.hpp` 的 `FrameDebug` | 零宏、近零开销 |
+| ① L0/L1 常驻 | **`core/debug_node.hpp`** 的 `FrameDebug` | 零宏、近零开销 |
 | ② 运行期 sink 热插拔 | `SinkHub` + pub/sub | **生产者不知道消费者** |
-| ③ 运行期 logger 级别 | 热键 `d` | 不用重编 |
-| ④ 编译期宏 | ⚠️ **已删除**（`config.hpp` 是空壳，W96 删掉） | 现在只有 CMake 的 `-DHZMIR_WITH_ROS2` |
-| ⑤ `test/` 独立程序 | **20 个 ctest 用例** | 算法级调试 |
+| ③ 运行期 logger 级别 | 热键 `d` + `--log-off` | 不用重编 |
+| ④ ⭐ 编译期开关 | **`core/debug.hpp`**（开关与实验总控） | ⭐ **关掉 = 连参数一起消失**（零成本） |
+| ⑤ `test/` 独立程序 | **27 个 ctest 用例**（开 ROS2）/ 25（关） | 算法级调试 |
 | ⑥ 离线可视化 | `scripts/{analyze,plot,compare}.py` | ⭐ **对比 A-B**，零 pandas 依赖 |
+
+### ⭐⭐⭐ 三层「测试/调试」策略
+
+```
+┌─ 正式代码（core/…/<角色>/）──────────── 长期维护，**以同济为准**
+│
+├─ ⭐⭐ core/debug.hpp（宏 + 重新编译）──── **中间层**：算法的【临时添加 / 替换】
+│     · 实现放 `test/function/exp_*.{hpp,cpp}`
+│     · 在这儿加一行 `#define HZMIR_EXP_xxx`  ← ⭐ **总控就这一个文件**
+│     · 在**相应文件**加装配入口（`#ifdef` 只在装配点）
+│     · ⚠️ **CMake 自动解析**（定义宏 + 挂源码）—— 不用手改 CMakeLists
+│     · ⚠️ **验证完必须【转正或删除】**（不许长期挂着）
+│
+└─ test/function/ ─────────────────────── 单一测试 / 较大的改动测试
+```
+
+⭐ **为什么需要中间层**：直接在正式代码里手改做实验**很容易忘记改回来**。
+放中间层 ⇒ **一行开关，可发现、可一键还原**。
+
+⚠️ **算法只用【编译期宏】，不做运行期热插拔** —— 因为**最终只留一套算法**，
+而热插拔会让"当前跑的是哪套"变得不确定，算法对比最怕这个。
+（⭐ **但兼容性保留**：实验开关**默认全关** = 完全同济行为。）
+
+⭐ **关掉时是【真·零残留】**（实测用二进制符号验证）：
+```
+实验 ON  → nm 在 libhzmir_core.a 里【找到】实验符号   ✅
+实验 OFF → nm 【找不到】（exp_*.cpp 根本没参与编译） ⬜
+```
 
 #### 热键 `3`（PlotJuggler）怎么用
 
@@ -272,10 +300,10 @@ tools/scripts/tune.sh compare base tuned
 
 #### ⭐⭐⭐ 日志太吵？—— **编译期开关**（推荐）
 
-⭐ **所有细节日志的开关都在一个文件**：`utils/log/debug_config.hpp`
+⭐ **所有细节日志的开关都在一个文件**：**`core/debug.hpp`**（开关与实验总控，§一）
 
 ```cpp
-// utils/log/debug_config.hpp —— 一行一个模块，`#define` = 开 / 注释 = 关
+// core/debug.hpp —— 一行一个模块，`#define` = 开 / 注释 = 关
 // #define HZMIR_LOG_YOLO       // YOLO 逐帧候选/过滤统计（⚠️ 每帧 1~2 条，最吵）
 // #define HZMIR_LOG_EKF        // EKF 新息（NIS）/ 收敛 / 发散
 // #define HZMIR_LOG_TRACKER    // 跟踪状态机切换
@@ -312,7 +340,7 @@ LOG_EKF("[Target] r={:.3f}, l={:.3f}", ekf_x[8], ekf_x[9]);
 
 ### ⭐ 怎么加一个新模块
 
-1. `debug_config.hpp` 的「开关」段加一行 `#define HZMIR_LOG_你的模块`
+1. **`core/debug.hpp`** 的 §一 加一行 `#define HZMIR_LOG_你的模块`
 2. 加一对宏：
    ```cpp
    #ifdef HZMIR_LOG_你的模块
@@ -327,46 +355,48 @@ LOG_EKF("[Target] r={:.3f}, l={:.3f}", ekf_x[8], ekf_x[9]);
 
 #### ⭐⭐ 调相机参数（不用每次开 MVS）
 
-相机参数放在 **`params/camera.yaml`（4 兵种共用一份）**，改完直接跑：
+⭐⭐ **两层，按【谁的东西】分**（W102 重划 —— 原来把兵种参数塞进 `cameras/` 是**分层放错了**）：
 
 ```
 params/
-├── ⭐ cameras/                     ⭐ **相机配置全在这里** —— 兵种 yaml 不再堆相机键
-│   ├── hikrobot.yaml               海康品牌默认（VID:PID、PixelFormat、白平衡…）
-│   ├── mindvision.yaml             迈德威视品牌默认
-│   ├── usbcamera.yaml
-│   ├── infantry.yaml               ⭐ 步兵：hikrobot，曝光 10ms
-│   ├── hero.yaml                   ⭐ 英雄：hikrobot，曝光 2ms
-│   ├── sentry.yaml                 ⭐ 哨兵：hikrobot，曝光 0.8ms / 增益 16.9
-│   └── uav.yaml                    ⭐ 无人机：**mindvision**，曝光 8ms / gamma 0.6
-├── infantry.yaml                   兵种配置 —— 只有【一行】相机指向 + 标定参数
-├── hero.yaml
-├── sentry.yaml
-└── uav.yaml
+├── ⭐ cameras/          ← **只放【品牌 / 设备】级配置**（换相机才动）
+│   ├── hikrobot.yaml     海康：VID:PID、PixelFormat、白平衡、通用 camera_params
+│   ├── mindvision.yaml   迈德威视：gamma
+│   └── usbcamera.yaml
+│
+└── ⭐ robots/           ← **兵种的【全部】配置**（含它的相机参数）
+    ├── infantry.yaml     camera_name=hikrobot / 曝光 10ms / gain 16 / 标定 / 算法参数
+    ├── hero.yaml         camera_name=hikrobot / 曝光 2ms
+    ├── sentry.yaml       camera_name=hikrobot / 曝光 0.8ms / gain 16.9
+    └── uav.yaml          ⭐ camera_name=**mindvision** / 曝光 8ms / gamma 0.6
 ```
 
-**兵种 yaml 里只剩一行**：
+**兵种 yaml 里的相机段**（就这几行，一眼能改）：
 ```yaml
-camera_config: "params/cameras/infantry.yaml"   # ⭐ 相机参数都在这
-camera_matrix: [...]                            # ⭐ 标定参数留在这（与镜头绑定）
-distort_coeffs: [...]
+#####----- ⭐⭐⭐ 相机（本兵种特有）-----#####
+camera_name: "hikrobot"      # ⭐ 品牌 → 自动带出 params/cameras/hikrobot.yaml
+vid_pid: "2bdf:0001"         # ⭐ 插了多台时按它选
+exposure_ms: 10              # 曝光（ms）—— ⚠️ 画面暗先加这个
+gain: 16                     # 增益（dB）
+fps: 30
 ```
 
-⭐ **优先级（低 → 高）**：
+⭐ **优先级（低 → 高）—— 只有两层**：
 ```
-cameras/<品牌>.yaml  <  cameras/<兵种>.yaml  <  兵种 yaml 里同名的相机键
-   （品牌默认）            （兵种常用值）              （临时覆盖，一般不用写）
+params/cameras/<品牌>.yaml   <   params/robots/<兵种>.yaml
+      （品牌默认）                  （兵种覆盖，也是唯一要改的地方）
 ```
-⭐ **加载顺序**：`camera_config` 指定的文件 → 由它的 `camera_name` 自动带出
-`cameras/<品牌>.yaml`（**uav 写 `mindvision` 就自动加载 `cameras/mindvision.yaml`**）。
+⭐ **品牌文件怎么找到的**：由`camera_name` 推出 `params/cameras/<品牌>.yaml`
+（**uav 写 `mindvision` 就自动加载 `cameras/mindvision.yaml`**）。
+⚠️ 不依赖当前工作目录 —— 是**跟着兵种 yaml 的位置**找（`params/robots/x.yaml → params/cameras/<品牌>.yaml`）。
 
-**换相机 / 改曝光只需动一个文件**：
+**想改什么 → 改哪**：
 | 想改什么 | 改哪 |
 |---|---|
-| 某兵种的曝光/增益 | `params/cameras/<兵种>.yaml` |
-| 换相机品牌 | 该文件的 `camera_name`（品牌文件会自动跟着换） |
-| 海康通用参数（白平衡/像素格式） | `params/cameras/hikrobot.yaml` |
-| 临时试一组值 | CLI：`--camera-config=<path>` |
+| ⭐ **某兵种的曝光 / 增益 / 帧率** | **`params/robots/<兵种>.yaml`** |
+| ⭐ **换相机品牌** | 同上，改 `camera_name`（品牌文件自动跟着换） |
+| **海康通用参数**（白平衡 / 像素格式 / Gamma） | `params/cameras/hikrobot.yaml` |
+| **临时试一组值**（不改文件） | CLI：`--print-config` 看当前；`--camera-config=<path>` 覆盖品牌文件 |
 
 **换另一个海康相机也不会崩**（W93 修的两处）：
 | 原来 | 现在 |
@@ -374,31 +404,22 @@ cameras/<品牌>.yaml  <  cameras/<兵种>.yaml  <  兵种 yaml 里同名的相�
 | ⚠️ **永远取 `pDeviceInfo[0]`** → 插两个时随机选 | ⭐ **按 `vid_pid` 匹配**，并打印「选中设备 #1/2：`xxxx:xxxx` 型号… 序列号…」 |
 | ⚠️ **`type_map.at()`** → 像素格式不是 Bayer8 就**抛异常崩** | ⭐ **`find()` + 明确报错 + 跳过该帧**（不崩），并提示怎么改 `PixelFormat` |
 
+⭐ **通用通道（任意海康参数）** —— 放**品牌文件**（那是"这个品牌特有的"）：
 ```yaml
-# params/camera.yaml
-camera_name: "hikrobot"
-exposure_ms: 2          # 曝光（ms）—— ⭐ 变亮先调这个
-gain: 16                # 增益（dB）—— 辅助，噪声会变大
-fps: 30                 # 帧率
-```
-
-⭐ **换路径 / 禁用**：`--camera-config=<path>`；传**空** `--camera-config=` 就只用兵种 yaml（兼容原行为）。
-
-⭐ **通用通道（任意海康参数）**：
-```yaml
-# params/cameras/<兵种>.yaml 或 params/cameras/hikrobot.yaml
+# params/cameras/hikrobot.yaml
 camera_params:
   float:                      # MV_CC_SetFloatValue
     Gamma: 1.0
     Sharpness: 50
-    ExposureTime: 6000        # µs（单位与 exposure_ms 不同，注意）
+    ExposureTime: 6000        # µs（⚠️ 单位与 exposure_ms 不同）
   enum:                       # MV_CC_SetEnumValue
     BalanceWhiteAuto: 0       # ⭐ 0=Off / 1=Once / 2=Continuous（默认 2，会漂）
   int:                        # MV_CC_SetIntValue
     Width: 1280
 ```
+⚠️ 某个兵种要**单独**改某一项 ⇒ 写进**它自己的 yaml**（同一个 `camera_params` 结构，兵种级覆盖品牌级）。
 
-⭐ **不知道参数名/该填多少？先 dump 当前值**：
+⭐ **不知道参数名 / 该填多少？先 dump 当前值**：
 
 ```bash
 tools/scripts/run.sh infantry --dump-camera-params
@@ -410,8 +431,14 @@ tools/scripts/run.sh infantry --dump-camera-params
 ```
 ① 在 MVS 里把画面调好（曝光/增益/白平衡/Gamma…）
 ② 跑 `--dump-camera-params` 把那些值打出来
-③ 抄进 params/<兵种>.yaml 的 camera_params
+③ ⭐ 抄进 params/robots/<兵种>.yaml（兵种自己的）或 params/cameras/<品牌>.yaml（品牌通用的）
 ④ 以后直接跑我们的程序，不用再开 MVS
+```
+
+⭐ **想确认"到底生效的是哪个值"**：
+```bash
+tools/scripts/run.sh infantry --print-config params/robots/infantry.yaml
+# → ③ 相机会打出【两层合并后】的 camera_name / vid_pid / exposure_ms / gain / fps
 ```
 
 ⚠️ **注意**：
@@ -437,10 +464,29 @@ sudo usermod -a -G dialout $USER      # 加组后需重新登录
 udevadm info -a -n /dev/ttyACM0 | grep -E '({serial}|{idVendor}|{idProduct})'   # 拿 ID 写 udev 规则
 ```
 
-### ⭐ 可插拔的算法槽位
+### ⭐ 可插拔的算法槽位（**运行期**选，不用重编）
 
-`core/auto_aim/target/` 有 **3 个策略槽位**（角速度估计 / 过程噪声 / 观测滤波），
-共 **7 个实现**；弹道有 **5 个实现**；`utils/wheels/` 收纳 **10 类零业务依赖的轮子**。
+| 槽位 | yaml 键 | 可选值 |
+|---|---|---|
+| **弹道** | `trajectory_impl` | `ideal`（同济默认）/ `rk4` / `rk4_drag` / `rk4_42` / `table` / `table_42` / `tongji_linear(_log)` |
+| ⭐ **检测器** | `detector_impl` | `yolo`（默认）/ `traditional`（传统灯条配对） |
+| **YOLO 版本** | `yolo_name` | `yolov5`（默认）/ `yolov8` / `yolo11` |
+| **目标优先级** | `priority_mode` | 4 张表 |
+| **射击过滤** | `armor_filter` | 跳过名单 / 无敌 / 集火 |
+
+⭐ **`--tongji`（默认 `true`）**集中控制**源码里硬编码**的偏差；`--tongji=false` 启用本项目优化：
+```bash
+--tongji=false                    # 两项都切到"修正"值
+--nis-thresh=chi2                 # ⭐ 只改 EKF 一致性阈值（9.4877），判据保持同济
+--yaw-rate-src=x7                 # ⭐ 只改小陀螺判据（用 x[7]=w），阈值保持同济
+```
+⭐ **单项覆盖 > 总开关 > 内置默认（同济）** ⇒ **能单独归因**了。
+
+⚠️ **和 §④ 编译期开关的分工**：这里是「**配置**」（长期、可运行期切）；
+`core/debug.hpp` 的 `HZMIR_EXP_*` 是「**实验**」（临时、验证完就删）。
+
+`core/auto_aim/target/` 另有 **3 个策略槽位**（角速度估计 / 过程噪声 / 观测滤波）共 **7 个实现**；
+`utils/wheels/` 收纳 **10 类零业务依赖的轮子**。
 
 ---
 
@@ -465,11 +511,12 @@ udevadm info -a -n /dev/ttyACM0 | grep -E '({serial}|{idVendor}|{idProduct})'   
 ├── io/                   通信（camera / board / can / ros2）
 ├── drivers/              厂商 SDK（hikrobot / mindvision / usbcamera / dm_imu）
 ├── src/                  ⭐ 各兵种独立完整程序（不抽通用 runner）
-├── params/               yaml 配置（+ 预生成弹道表）
+├── params/               ⭐ yaml 配置：`cameras/`(品牌) + `robots/`(兵种) —— 见 params/README.md
 ├── test/                 function / virtual / debug / ros2
 ├── scripts/              ⭐ 业务 Python（只放 .py）：CSV 分析 / A-B 对比 / 画图
 ├── tools/                ⭐ 调试工具（不限语言）：csv_viewer.html / diagnose_frame.py / split_video.py
 │   └── scripts/          ⭐ 只放 sh：build / run / tune / watchdog / camera-reset / check-hw
+├── docs/                 ⭐ 审计与设计文档（索引见 docs/README.md）
 └── archive/              冻结的模块（含 FROZEN.md 说明为何冻结）
 ```
 
@@ -495,7 +542,7 @@ udevadm info -a -n /dev/ttyACM0 | grep -E '({serial}|{idVendor}|{idProduct})'   
 | OpenCV | ≥4.5 | ✅ |
 | Eigen3 · yaml-cpp · spdlog · fmt · nlohmann-json | 任意较新 | ✅ |
 | OpenVINO | 2024.6 | ✅（YOLO 推理） |
-| ROS 2 Humble | — | 🔶 可选（哨兵导航桥） |
+| ROS 2 Humble | — | 🔶 可选（**哨兵导航桥**）<br>⭐ 本机 `ros2_ws/install/sp_msgs` **已在** ⇒ 自动启用 |
 
 ```bash
 sudo apt install libopencv-dev libeigen3-dev libyaml-cpp-dev libspdlog-dev libfmt-dev nlohmann-json3-dev
@@ -519,12 +566,26 @@ ln -s /tmp/sp/assets assets
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc)
-cd build && ctest          # 20 个用例，约 8 s
+cd build && ctest          # ⭐ 27 个用例（开 ROS2）/ 25 个（关），约 10 s
 ```
 
 > ⚠️ **Debug 树请务必带 `-DCMAKE_BUILD_TYPE=Debug`** ——
 > CMake 会**按目录名硬校验**（名字含 `dbg` 就必须是 Debug），
 > 因为 `assert` 在 Release 是空操作，**ctest 结果会失真**。
+
+⭐ **ROS2 与测试数**：`CMakeLists.txt` 会**自动探测** `sp_msgs`，
+探测到就默认开 `HZMIR_WITH_ROS2`（测试数 **25 → 27**，多 2 个 ROS2 往返用例）。
+```bash
+# 强制开关
+cmake -S . -B build -DHZMIR_WITH_ROS2=ON      # 或 OFF
+```
+⚠️ **`tools/scripts/build.sh` 会替你 source** `/opt/ros/humble` + `ros2_ws/install`（W105 修复：
+原来读的是**已删除的** `config.hpp` ⇒ **永远不 source**，哨兵会踩
+`Type support not from this implementation`）。
+
+⭐ **开关改了要重跑 cmake**（`core/debug.hpp` 的实验开关、`CMakeLists.txt` 的
+`HZMIR_WITH_ROS2`、`drivers/CMakeLists.txt` 的 `HZMIR_HAS_*` —— 都只在 **configure 阶段**被读）。
+`build.sh` 会**自动检测并重跑**；手动 `cmake --build` 不会。
 > 另有 `test_assert_live` 在运行期再次核对。
 
 ### 跑起来（零硬件）
@@ -589,7 +650,7 @@ cd build && ctest          # 20 个用例，约 8 s
 
 ## 文档
 
-`docs/` 下有 4 份分析与审计文档（约 900 行）：
+`docs/` 下有 **5 份**分析与设计文档（约 1200 行），索引见 [`docs/README.md`](docs/README.md)：
 
 | 文档 | 内容 |
 |---|---|
@@ -597,8 +658,19 @@ cd build && ctest          # 20 个用例，约 8 s
 | [`13-同济功能盘点与覆盖情况.md`](docs/13-同济功能盘点与覆盖情况.md) | 13 个分支**全部评估**，含 `poly` 的真相与 `auto_outpost` 的发现 |
 | [`14-同济哨兵与本项目单相机哨兵对比.md`](docs/14-同济哨兵与本项目单相机哨兵对比.md) | `Decider` 10 个方法按「与相机数的关系」分类 |
 | [`15-同济转换完整性报告.md`](docs/15-同济转换完整性报告.md) | ⭐ **135/135 源文件核对** · yaml 字段 53/59/63 全一致 · 13→4 主程序 |
+| [`16-调试体系设计与可融入项.md`](docs/16-调试体系设计与可融入项.md) | ⭐ **双轨制原则** · 10 项必须保留的资产 · 可融入候选 · 全部待做清单 |
 
 ⭐ **每一处改动都能枚举、能关闭** —— 这是本项目对上有的最高承诺。
+
+⭐ **每个目录都有自己的 `README.md` 写明定位**（加文件前先看一眼）：
+
+| 目录 | README | 内容 |
+|---|---|---|
+| `params/` | [`params/README.md`](params/README.md) | ⭐ **配置两层**：`cameras/`(品牌) vs `robots/`(兵种) |
+| `tools/` | [`tools/README.md`](tools/README.md) | 调试工具（`csv_viewer.html` / `diagnose_frame.py` / `split_video.py`） |
+| `tools/scripts/` | [`tools/scripts/README.md`](tools/scripts/README.md) | 构建 / 运行 / 硬件脚本 |
+| `scripts/` | [`scripts/README.md`](scripts/README.md) | 业务 Python（CSV 分析 / A-B 对比 / 画图） |
+| `test/function/` | [`test/function/README_EXP.md`](test/function/README_EXP.md) | ⭐ **实验层规则**（三层测试策略） |
 
 ---
 

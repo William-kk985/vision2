@@ -33,9 +33,11 @@ tools/scripts/build.sh [--release|--debug|--both] [--clean] [--test] [-j N]
 | `--test` | 编完跑 ctest |
 
 **它自动做的事**：
-1. ⭐ **`config.hpp` 变更检测** —— 改了自动重跑 `cmake`（否则 `HAS_ROS2` 等宏**静默不生效**）
+1. ⭐ **开关变更检测** —— 改 `core/debug.hpp`（实验开关）/ `CMakeLists.txt` / `drivers/CMakeLists.txt`
+   会自动重跑 `cmake`（⚠️ 否则宏**静默不生效**）。⚠️ **W105 修**：原来检测的是**已删除的** `config.hpp` ⇒ 形同虚设
 2. ⭐ **构建类型纪律** —— 目录名含 `dbg` 就**必须**是 Debug（`assert` 在 Release 是空操作，本项目**栽过 3 次**）
-3. **ROS2 自动 source** —— `config.hpp` 开了 `HAS_ROS2` 就 source `/opt/ros/humble` + `ros2_ws/install`
+3. ⭐ **ROS2 自动 source** —— 判据是 **CMake 的 `HZMIR_WITH_ROS2`**（环境变量 > CMakeCache > 自动探测），
+   命中就 source `/opt/ros/humble` + `ros2_ws/install`。⚠️ **W105 修**：原来读**已删除的** `config.hpp` ⇒ **永远不 source**
 4. **失败给日志路径**，不吞错误
 
 构建目录在**仓库外**：`<workspace>/exp/hzmir_build`（Release）/ `exp/hzmir_dbg`（Debug）。

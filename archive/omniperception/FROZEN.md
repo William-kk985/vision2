@@ -24,5 +24,6 @@
  1. 把 `perceptron.cpp` / `decider.cpp` 搬到 `core/omniperception/{detector,pipeline}/`
  2. `decider` 的横切能力改为复用 `core/` 里已抽出的实现（不要重复）
  3. 在 `config.hpp` 打开 `ENABLE_OMNIPERCEPTION`（它需要 `HAS_USBCAMERA`，互斥检查会验证）
+  ⚠️ **W96 起 `config.hpp` 已删除** —— 若要恢复本模块，开关应加到 **`core/debug.hpp`**（开关与实验总控）
 
 **验证记录**：未验证（不参与构建）

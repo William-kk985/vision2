@@ -108,3 +108,8 @@ add_test(NAME test_log_filter COMMAND test_log_filter)
 add_executable(test_detect_filter test_detect_filter.cpp)
 target_link_libraries(test_detect_filter hzmir_core hzmir_utils)
 add_test(NAME test_detect_filter COMMAND test_detect_filter)
+
+# ⭐ W109：SocketCAN 失败日志的降噪判据（真机没接 CAN 时会每 100ms 刷屏）
+add_executable(test_can_throttle test_can_throttle.cpp)
+target_link_libraries(test_can_throttle hzmir_utils)
+add_test(NAME test_can_throttle COMMAND test_can_throttle)

@@ -116,7 +116,12 @@ if [[ ! " ${EXTRA[*]-} " =~ " --video" ]]; then
   if [ -e "$COM_PORT" ]; then
     ok "串口 $COM_PORT 存在"
   else
-    warn "找不到串口 $COM_PORT → 自动降级为虚拟下位机（无 IMU，EKF/命中不可信）"
+    # ⚠️⚠️ W109：**原来这里写的是「自动降级为虚拟下位机」—— 那是假的**：
+    #   脚本**没有传任何参数**，程序照旧构造 `io::CBoard` ⇒ SocketCAN 每 100ms 重试。
+    #   ⭐ 现在说实话（不误导）：
+    warn "找不到 $COM_PORT → 下位机走【真实 CAN】：会【持续重试】（每 100ms 一次）"
+    warn "                      ⚠️ IMU / EKF / 命中 数据不可信（⭐ 识别本身不受影响）"
+    warn "                      ⭐ 想彻底避开 CAN ⇒ 加 --video=<录像>（走 ReplayCBoard）"
   fi
 fi
 

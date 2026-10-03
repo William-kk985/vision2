@@ -92,7 +92,10 @@ void guard_on_startup(int log_days, const std::string & records_dir)
 {
   // ── ① 清理旧日志（启动时一次；见文件头注释的"清理频率"分析）──
   cleanup_older_than(paths::logs(), log_days, {".log"});
-  cleanup_older_than("MvSdkLog", log_days, {".log"});   // 海康 SDK 自己写的路径
+  // ⭐ W102：SDK 日志现在被 `MV_CC_SetSDKLogPath()` 重定向到 `output/mvs_log/`
+  cleanup_older_than(tools::paths::mvs_log(), log_days, {".log"});
+  // ⚠️ 兜底：旧版 SDK 可能忽略上面那个调用，仍写顶层 CWD 的 `MvSdkLog/`
+  cleanup_older_than("MvSdkLog", log_days, {".log"});
 
   // ── ② 报告 output/ 各子目录现状（**只报告，不清理**录像/存图）──
   struct Row { const char * name; std::string dir; bool clean; };

@@ -1,7 +1,0 @@
-# ⭐ 哨兵相机配置
-camera_name: "hikrobot"
-vid_pid: "2bdf:0001"
-
-exposure_ms: 0.8               # ⭐ 哨兵特殊：曝光很短（防抖/防拖影）
-gain: 16.9                     # ⭐ 也特殊
-fps: 30

@@ -1,3 +1,4 @@
+#include "utils/system/paths.hpp"   // ⭐ W102：SDK 日志重定向
 #include "hikrobot.hpp"
 
 #include <libusb-1.0/libusb.h>
@@ -126,6 +127,23 @@ void HikRobot::capture_start()
   unsigned int ret;
 
   MV_CC_DEVICE_INFO_LIST device_list;
+  // ⭐⭐⭐ W102：**把 SDK 日志重定向到 `output/mvs_log/`**
+  //
+  // ⚠️ 位置很关键 —— 实测两轮才找对：
+  //   第一版放在 `MV_CC_CreateHandle` 前面 ⇒ **无效**（顶层 MvSdkLog 照样出现）。
+  //   ⭐ 原因：**SDK 在 `MV_CC_EnumDevices()` 时就已经建了日志文件**，
+  //     而 EnumDevices 在 CreateHandle **之前** ⇒ 我的调用来得太晚。
+  //   ⇒ 现在放在 **`MV_CC_EnumDevices` 正前方**（本文件里 SDK 的第一次调用）。
+  // ⚠️ 传**绝对**路径：SDK 把相对路径解释成"CWD 相对"。
+  {
+    const std::string mvs_dir = tools::paths::mvs_log();
+    tools::paths::ensure_dir(mvs_dir);
+    int lret = MV_CC_SetSDKLogPath(mvs_dir.c_str());
+    if (lret != MV_OK)
+      tools::logger()->debug(
+        "MV_CC_SetSDKLogPath 失败: {:#x}（旧版 SDK 没有该 API？日志仍写 ./MvSdkLog）", lret);
+  }
+
   ret = MV_CC_EnumDevices(MV_USB_DEVICE, &device_list);
   if (ret != MV_OK) {
     tools::logger()->warn("MV_CC_EnumDevices failed: {:#x}", ret);

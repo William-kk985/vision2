@@ -1,7 +1,0 @@
-# ⭐ 英雄相机配置
-camera_name: "hikrobot"
-vid_pid: "2bdf:0001"
-
-exposure_ms: 2                 # ⚠️ 和步兵不同（步兵 10）
-gain: 16
-fps: 30

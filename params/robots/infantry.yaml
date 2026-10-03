@@ -106,8 +106,21 @@ auto_fire: true # 是否由自瞄控制射击
 
 R_gimbal2imubody: [1, 0, 0, 0, 1, 0, 0, 0, 1]
 
-camera_config: "params/cameras/infantry.yaml"   # ⭐ 相机参数都在这（兵种 yaml 不再堆相机键）
 # 重投影误差: 0.3145px
+
+#####----- ⭐⭐⭐ 相机（本兵种特有；W102 从 params/cameras/infantry.yaml 并回来）-----#####
+#   ⭐ 分层（低 → 高）：params/cameras/<品牌>.yaml  <  本文件
+#   ⇒ `params/cameras/` **只放品牌/设备级配置**（海康的像素格式、白平衡…）；
+#     **兵种自己的相机参数（曝光/增益/帧率/选哪台）写在【本文件】**。
+#   ⚠️ 之前把这一段拆到 params/cameras/<兵种>.yaml 是**分层放错了**——
+#     那个目录按定义只该有【品牌】文件。
+camera_name: "hikrobot"          # ⭐ 品牌 → 自动加载 params/cameras/hikrobot.yaml（品牌专配）
+vid_pid: "2bdf:0001"            # ⭐ 设备匹配（插了多台海康时按它选）
+
+exposure_ms: 10                 # 曝光（ms）—— ⚠️ 画面暗就先加这个
+gain: 16                        # 增益（dB）
+fps: 30                         # 帧率
+# ⭐ 通用海康参数（camera_params 通道）在 params/cameras/hikrobot.yaml 里（品牌级）
 
 camera_matrix: [1851.7070167840545, 0, 721.12585328714192, 0, 1851.8175594364079, 571.69879709276688, 0, 0, 1]
 distort_coeffs: [-0.093662536083526302, 0.18945726820633155, -0.00040424349861928674, -0.0040568403852123142, 0]

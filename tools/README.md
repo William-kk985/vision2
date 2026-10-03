@@ -11,11 +11,11 @@
 | ⭐ **`tools/`**（本目录） | **调试工具** | **不限**（py / html / …） | 我为了**看/查/诊断**而跑的 |
 | **`tools/scripts/`** | **构建 / 运行 / 硬件脚本** | ⭐ **只放 sh** | 我需要**执行一组命令**时用的 |
 | **`scripts/`** | ⭐ **跟项目业务强相关的 py** | ⭐ **只放 py** | 它处理**项目的数据/算法/指标** |
-| **`imgs/`** | 文档配图 | png/svg | 被 `.md` 引用的图 |
+
 
 ⚠️ **曾经的错位（已修，W101）**：
 - `tools/scripts/diagnose_frame.py` —— ⚠️ **Python 跑在 sh 目录里** ⇒ 移到 `tools/`
-- `scripts/example_perf.png` —— ⚠️ **图片跑在 py 目录里** ⇒ 移到 `imgs/`
+- `scripts/example_perf.png` —— ⚠️ **图片跑在 py 目录里** ⇒ 移到 `docs/`
 - `scripts/__pycache__` —— ⚠️ 编译产物（`.gitignore` 已规则，只是磁盘残留）⇒ 清掉
 
 ---
@@ -64,4 +64,4 @@ python3 tools/split_video.py records/full.avi -s 100 -e 300 -o records/clip
 |---|---|---|
 | `build.sh` / `run.sh` 这类 | `tools/scripts/` | 它是 **sh 脚本** |
 | 业务算法验证 / 指标分析 | `scripts/` | 它处理**项目的数据/算法** |
-| 图片 | `imgs/` | 被文档引用 |
+| 图片 | `docs/` | 被文档引用（⭐ 不另建图片目录：`output/` 是 gitignore 的，图放进去会丢） |

@@ -1,6 +1,0 @@
-# ⭐ 无人机相机配置 —— ⚠️ **另一个品牌**（迈德威视）
-camera_name: "mindvision"      # → 自动加载 cameras/mindvision.yaml
-vid_pid: "f622:d13a"
-
-exposure_ms: 8
-gamma: 0.6                     # 迈德威视的 gamma（不是海康那种）

@@ -470,7 +470,6 @@ udevadm info -a -n /dev/ttyACM0 | grep -E '({serial}|{idVendor}|{idProduct})'   
 ├── scripts/              ⭐ 业务 Python（只放 .py）：CSV 分析 / A-B 对比 / 画图
 ├── tools/                ⭐ 调试工具（不限语言）：csv_viewer.html / diagnose_frame.py / split_video.py
 │   └── scripts/          ⭐ 只放 sh：build / run / tune / watchdog / camera-reset / check-hw
-├── imgs/                 文档配图
 └── archive/              冻结的模块（含 FROZEN.md 说明为何冻结）
 ```
 
@@ -481,7 +480,6 @@ udevadm info -a -n /dev/ttyACM0 | grep -E '({serial}|{idVendor}|{idProduct})'   
 | ⭐ **`tools/`** | **调试工具** | **不限**（py / html） | 我为了**看 / 查 / 诊断**而跑的 |
 | **`tools/scripts/`** | 构建 / 运行 / 硬件脚本 | ⭐ **只 sh** | 执行一组命令用的 |
 | **`scripts/`** | **跟项目业务强相关的 py** | ⭐ **只 py** | 它处理**项目的数据 / 算法 / 指标** |
-| **`imgs/`** | 文档配图 | png / svg | 被 `.md` 引用的图 |
 
 ⭐ **各目录有自己的 `README.md` 写明定位** —— 加文件前先看一眼。
 

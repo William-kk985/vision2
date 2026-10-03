@@ -50,6 +50,14 @@ std::string images();
 /// CSV 目录（`output/csv`）
 std::string csv();
 
+/// ⭐⭐⭐ W102：**海康 SDK 的日志目录**（`output/mvs_log`）
+///
+/// ⚠️ 原来 SDK 按 **CWD** 写 `./MvSdkLog/` ⇒ 顶层多一个目录，还不在 `output/` 里。
+/// 现在由 `hkrobot.cpp` 在 `MV_CC_CreateHandle` **之前**调用 SDK 的
+/// `MV_CC_SetSDKLogPath()` 重定向到这里（⭐ 头文件里确实有这个 API）。
+/// ⚠️ 若 SDK 忽略该调用（旧版本），`disk_guard` 仍会兜底清理顶层的 `MvSdkLog/`。
+std::string mvs_log();
+
 /// ⭐ 解析 CSV 前缀：若已含 `/` 就**原样使用**（尊重显式路径），否则放到 `csv()` 下
 /// @param prefix 用户给的 `--csv=` 值（如 `run1` 或 `/tmp/x/run1`）
 std::string csv_prefix(const std::string & prefix);

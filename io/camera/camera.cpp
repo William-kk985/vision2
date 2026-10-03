@@ -122,27 +122,45 @@ Camera::Camera(
   //   优先级最低（可被上面两层覆盖）。
   auto camera_name = y.read<std::string>("camera_name", "hikrobot");
   {
-    // ⭐ 品牌文件查找顺序（先近后远）：
-    //   ① 与 cam_path **同目录**的 `<品牌>.yaml`
-    //      （如 `params/cameras/infantry.yaml` → `params/cameras/hikrobot.yaml`）
-    //   ② `<cam_path.parent>/cameras/<品牌>.yaml`
-    //      （如 `params/cameras/infantry.yaml` → `params/cameras/hikrobot.yaml`）
-    //   ⚠️ 修复：原来只试 ②，当 cam_path 已在 `cameras/` 下时会变成
-    //      `params/cameras/cameras/hikrobot.yaml`（多一层，永远找不到）。
-    const auto parent = std::filesystem::path(cam_path).parent_path();
-    std::vector<std::filesystem::path> cands = {
-      parent / (camera_name + ".yaml"),
-      parent / "cameras" / (camera_name + ".yaml"),
-    };
+    // ⭐⭐⭐ W102：**品牌文件的定位链**（重写过 —— 原来只按 `cam_path` 的父目录找）
+    //
+    // ⚠️ 原来的 bug：`cands` 只有两条，**都基于 `cam_path` 的父目录**。
+    //   而 W102 把"兵种相机配置"并回兵种 yaml 后，`cam_path` **是空的** ⇒
+    //   父目录为空 ⇒ 去处变成 CWD 下的 `hikrobot.yaml` / `cameras/hikrobot.yaml`
+    //   ⇒ **品牌专配永远加载不到**（静默降级成内置默认）。
+    //
+    // ⭐ 现在的顺序（从"最贴近配置"到"最宽泛"）：
+    //   ① 与 `--camera-config` 同目录 / 其下 cameras/   （显式指定时用）
+    //   ② ⭐ **兵种 yaml 的兄弟目录 `cameras/`**
+    //      如 `params/robots/infantry.yaml` → `params/cameras/hikrobot.yaml`
+    //      ⇒ **不依赖 CWD**（这才是主线路径）
+    //   ③ CWD 下的 `params/cameras/` / `cameras/`（兜底）
+    std::vector<std::filesystem::path> cands;
+    if (!cam_path.empty()) {
+      const auto cp = std::filesystem::path(cam_path).parent_path();
+      cands.push_back(cp / (camera_name + ".yaml"));
+      cands.push_back(cp / "cameras" / (camera_name + ".yaml"));
+    }
+    if (!config_path.empty()) {                       // ⭐ ② 主线：跟着兵种 yaml 走
+      const auto rp = std::filesystem::path(config_path).parent_path();
+      cands.push_back(rp / "cameras" / (camera_name + ".yaml"));
+      cands.push_back(rp / ".." / "cameras" / (camera_name + ".yaml"));
+    }
+    cands.push_back(std::filesystem::path("params") / "cameras" / (camera_name + ".yaml"));
+    cands.push_back(std::filesystem::path("cameras") / (camera_name + ".yaml"));
     std::filesystem::path found;
     for (const auto & c : cands) {
       if (std::filesystem::exists(c)) { found = c; break; }
     }
     if (!found.empty()) {
       y.vendor = tools::load(found.string());
-      tools::logger()->info("[Camera] 品牌专配: {}", found.string());
+      // ⭐ W102：规范化后打印（否则 `params/robots/../cameras/x.yaml` 这种不好读）
+      tools::logger()->info("[Camera] 品牌专配: {}", found.lexically_normal().string());
     } else {
-      tools::logger()->debug("[Camera] 无品牌专配（找过 {}）", cands[0].string());
+      std::string tried;
+      for (const auto & c : cands) tried += "\n      " + c.lexically_normal().string();
+      // ⭐ W102：原来只打 `cands[0]` —— 候选变多后那样不够排查
+      tools::logger()->debug("[Camera] 无品牌专配（找过这些路径）：{}", tried);
     }
   }
 

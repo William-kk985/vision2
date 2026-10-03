@@ -52,7 +52,10 @@ private:
   bool check_type(const Armor & armor) const;
 
   cv::Point2f get_center_norm(const cv::Mat & bgr_img, const cv::Point2f & center) const;
-  DetectorResult parse(double scale, cv::Mat & output, const cv::Mat & bgr_img, int frame_count);   // ⭐ W98
+  // ⭐ W108：`infer_us` 有默认值 ⇒ `postprocess()` 那条旧调用点不用改
+  DetectorResult parse(
+    double scale, cv::Mat & output, const cv::Mat & bgr_img, int frame_count,
+    int64_t infer_us = 0);   // ⭐ W98/W108
 
   void save(const Armor & armor) const;
   void draw_detections(const cv::Mat & img, const std::list<Armor> & armors, int frame_count) const;

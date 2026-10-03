@@ -7,6 +7,7 @@
 #include <yaml-cpp/yaml.h>
 
 #include <cmath>
+#include <chrono>
 #include <filesystem>
 
 #include "utils/ov/device.hpp"   // ⭐ W28：device 回退
@@ -103,18 +104,48 @@ DetectorResult YOLOV5::detect(const cv::Mat & raw_img, int frame_count)
   // infer
   auto infer_request = compiled_model_.create_infer_request();
   infer_request.set_input_tensor(input_tensor);
+  // ⭐⭐ W108：**纯推理耗时**（只包住 `infer()` 这一行）
+  //   ⚠️ 跟 CSV 的 `det_t_infer_us` **不是一回事** —— 那个是主循环用 `Expense` 测的
+  //     **整段 detect**（含预处理 + 后处理），这里只测**模型前向**。
+  //   ⭐ 成本：两次 `steady_clock` + 一次减法 ≈ 几十 ns/帧 ⇒ **即使宏关掉也可忽略**。
+  const auto t_infer_begin = std::chrono::steady_clock::now();
   infer_request.infer();
+  const int64_t infer_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                             std::chrono::steady_clock::now() - t_infer_begin)
+                             .count();
 
   // postprocess
   auto output_tensor = infer_request.get_output_tensor();
   auto output_shape = output_tensor.get_shape();
   cv::Mat output(output_shape[1], output_shape[2], CV_32F, output_tensor.data());
 
-    return parse(scale, output, raw_img, frame_count);   // ⭐ W98：parse 直接带出 dbg
+    return parse(scale, output, raw_img, frame_count, infer_us);   // ⭐ W98/W108
 }
 
+namespace
+{
+/// @brief ⭐ W108：算"峰值那个 anchor"在【原图归一化坐标】下的中心
+///   ⚠️ 只在 `HZMIR_LOG_YOLO` 的宏参数里被调用 ⇒ **宏关掉时这个函数根本不被调用**（零成本）。
+///   ⭐ 为什么值得报：能区分「模型在看画面中心（⇒ 图像质量问题）」
+///     和「峰值在画面边缘（⇒ 可能是背景误检）」。
+cv::Point2f peak_center_norm(const cv::Mat & output, int max_r, double scale, const cv::Mat & img)
+{
+  if (max_r < 0 || max_r >= output.rows) return {-1.f, -1.f};
+  // ⭐ 四点的取法照抄 parse 里的顺序：col(0,1) col(6,7) col(4,5) col(2,3)
+  const float x = (output.at<float>(max_r, 0) + output.at<float>(max_r, 6) +
+                   output.at<float>(max_r, 4) + output.at<float>(max_r, 2)) /
+                  4.f;
+  const float y = (output.at<float>(max_r, 1) + output.at<float>(max_r, 7) +
+                   output.at<float>(max_r, 5) + output.at<float>(max_r, 3)) /
+                  4.f;
+  const float w = static_cast<float>(img.cols > 0 ? img.cols : 1);
+  const float h = static_cast<float>(img.rows > 0 ? img.rows : 1);
+  return {x / static_cast<float>(scale) / w, y / static_cast<float>(scale) / h};
+}
+}  // namespace
+
 DetectorResult YOLOV5::parse(
-  double scale, cv::Mat & output, const cv::Mat & bgr_img, int frame_count)
+  double scale, cv::Mat & output, const cv::Mat & bgr_img, int frame_count, int64_t infer_us)
 {
   // for each row: xywh + classess
   std::vector<int> color_ids, num_ids;
@@ -136,12 +167,15 @@ DetectorResult YOLOV5::parse(
   //   ⚠️ 不再记录"最像的 anchor 的类别/颜色"：那两路输出**只有在 objectness 高时才有意义**，
   //      对 objectness≈0.25 的 anchor 打印它们纯属误导（用户实测反馈）。
   double max_obj = 0;
+  int max_r = -1;   // ⭐ W108：峰值所在 anchor（用于报位置）
   int n_over_05 = 0, n_over_03 = 0, n_over_01 = 0;
   for (int r = 0; r < output.rows; r++) {
     double score = output.at<float>(r, 8);
     score = sigmoid(score);
 
-      if (score > max_obj) max_obj = score;   // ⭐ W68：便宜（一次比较）
+      // ⭐ W108：**顺便记住峰值在哪一行** —— 用来报"模型在看画面哪里"
+      //   ⭐ 成本 = 一次 int 赋值（只在刷新峰值时发生）⇒ 可忽略
+      if (score > max_obj) { max_obj = score; max_r = r; }   // ⭐ W68/W108
       if (score > 0.5) ++n_over_05;
       if (score > 0.3) ++n_over_03;
       if (score > 0.1) ++n_over_01;
@@ -313,6 +347,49 @@ DetectorResult YOLOV5::parse(
   for (const auto & a : armors)
     if (a.confidence > r.dbg.best_confidence) r.dbg.best_confidence = a.confidence;
   r.armors = std::move(armors);
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ⭐⭐⭐ W108：**逐帧细节**（编译期宏 `core/debug.hpp` 的 `HZMIR_LOG_YOLO`，**默认关**）
+  //
+  //   ⭐ **为什么放宏里**（而不是像概览那样走 `logger()->debug`）：
+  //     这两条是**每帧都打**的 ⇒ 属"逐帧细节"，开了会刷屏（`core/debug.hpp` 的定位）。
+  //     概览那两条（节流过的）走运行期，**不用重编** —— 这就是"两层"的分工。
+  //
+  //   ⭐⭐ **零成本保证**：**所有开销都在宏参数里** ——
+  //     `LOG_YOLO(...)` 展开为空时，**参数表达式【不会被求值】** ⇒
+  //     `peak_center_norm()` 不会被调用、`type_drop` 字符串不会被拼。
+  //     ⚠️ 所以这里可以放心写"贵的"东西，**不需要 `#ifdef`**（宏纪律：`#ifdef` 只允许在装配点）。
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // ── ① 推理耗时 + ② 两道门槛 + ④ 峰值位置 ──
+  {
+    const auto pc = peak_center_norm(output, max_r, scale, bgr_img);
+    LOG_YOLO("① 推理 {}us ｜ ② 门槛 obj {:.2f} → conf {:.2f}（NMS {:.2f}）"
+             " ｜ ④ 峰值 {:.3f} @归一化({:.3f},{:.3f}) anchor#{}",
+             infer_us, score_threshold_, min_confidence_, nms_threshold_, max_obj, pc.x, pc.y,
+             max_r);
+  }
+
+  // ── ③ NMS 前后完整漏斗 ──
+  {
+    const int n_out_now = static_cast<int>(r.dbg.armor_count);
+    LOG_YOLO("③ 漏斗 {} anchor → >0.5:{} >0.3:{} >0.1:{} → pass {} → NMS {} → 输出 {}"
+             "（丢 not_armor {} / conf {} / type {}{}）",
+             output.rows, n_over_05, n_over_03, n_over_01, n_pass, nms_survivors, n_out_now, n_name,
+             n_conf, n_type,
+             // ⭐ 被 `check_type` 丢掉的名字（拼串只在宏开时发生）
+             [&]() -> std::string {
+               std::string d;
+               for (int i = 0; i < 9; ++i) {
+                 if (dropped_by_type[i] == 0) continue;
+                 if (!d.empty()) d += ' ';
+                 d += ARMOR_NAMES[i];
+                 d += "×" + std::to_string(dropped_by_type[i]);
+               }
+               return d.empty() ? std::string{} : ("；type 丢的是：" + d);
+             }());
+  }
+
   return r;
 }
 

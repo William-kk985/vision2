@@ -68,7 +68,16 @@
 //       "objectness 通过 N → 输出 M（滤掉 not_armor/conf/type）"（每 30 帧一条）
 //   · `--print-config` / CSV 的 `det_obj_peak` + `det_score_thr`（⭐ 还能看趋势）
 // ⭐ 这个宏留给【真正的细节】（逐帧 anchor 分布等）—— 开了会**每帧刷屏**。
-// #define HZMIR_LOG_YOLO            // YOLO 逐帧细节（anchor 分布 / 丢弃明细）
+// #define HZMIR_LOG_YOLO            // ⭐ YOLO 逐帧细节（**每帧 2 行**）—— 开了能看到：
+//   ① 纯推理耗时（`infer()` 那一行；⚠️ 跟 CSV 的 `det_t_infer_us` 不是一回事，
+//      那个是主循环 `Expense` 测的**整段 detect**）
+//   ② **两道门槛**：`obj {score_threshold_} → conf {min_confidence_}`（+ NMS 阈值）
+//      ⚠️ 概览日志只报了第一道（0.70），**不说清第二道（0.80）会让人误判**
+//   ③ **完整漏斗**：`25200 anchor → >0.5 → >0.3 → >0.1 → pass → NMS → 输出`
+//   ④ **峰值在画面哪里**（原图归一化坐标）—— ⭐ 用来区分
+//      「峰值在中心 ⇒ 图像质量」vs「峰值在边缘 ⇒ 背景误检」
+//   ⑤ 被 `check_type` 丢掉的名字（`base×1` 这种）
+//   ⭐ **零成本**：所有开销都在宏参数里 ⇒ 关掉时参数不求值（实测二进制里搜不到格式串）
 // #define HZMIR_LOG_DETECTOR        // 传统检测器的灯条/装甲板配对细节
 
 // ── 跟踪 / 估计（⚠️ EKF 细节很能刷）──

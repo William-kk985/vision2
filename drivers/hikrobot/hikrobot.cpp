@@ -8,9 +8,11 @@ using namespace std::chrono_literals;
 
 namespace io
 {
-HikRobot::HikRobot(double exposure_ms, double gain, const std::string & vid_pid, double fps)
+HikRobot::HikRobot(
+  double exposure_ms, double gain, const std::string & vid_pid, double fps,
+  const std::vector<CameraParam> & extra, bool dump_params)
 : exposure_us_(exposure_ms * 1e3), gain_(gain), fps_(fps), queue_(1), handle_(nullptr),
-  daemon_quit_(false), vid_(-1), pid_(-1)
+  daemon_quit_(false), vid_(-1), pid_(-1), extra_(extra), dump_params_(dump_params)
 {
   set_vid_pid(vid_pid);
   if (libusb_init(NULL)) tools::logger()->warn("Unable to init libusb!");
@@ -147,11 +149,18 @@ void HikRobot::capture_start()
     return;
   }
 
+  // ⚠️ 默认开【连续自动白平衡】—— 光照/色温变化时白平衡会漂，可能影响颜色判定。
+  //   ⭐ 想关掉/锁死：在 yaml 的 `camera_params.enum` 里写 `BalanceWhiteAuto: 0`
+  //     （0=Off 1=Once 2=Continuous）—— 见 W90 的通用参数通道。
   set_enum_value("BalanceWhiteAuto", MV_BALANCEWHITE_AUTO_CONTINUOUS);
   set_enum_value("ExposureAuto", MV_EXPOSURE_AUTO_MODE_OFF);
   set_enum_value("GainAuto", MV_GAIN_MODE_OFF);
   set_float_value("ExposureTime", exposure_us_);
   set_float_value("Gain", gain_);
+
+  // ⭐⭐ W90：先 dump（如请求），再应用 yaml 的额外参数（**可覆盖上面的默认值**）
+  if (dump_params_) dump_camera_params();
+  apply_extra_params(extra_);
 
   // ⭐⭐⭐ W57：**必须显式关掉触发模式** —— 这是 `0x80000007`（取图超时）的头号嫌疑
   //
@@ -357,6 +366,67 @@ void HikRobot::set_enum_value(const std::string & name, unsigned int value)
     tools::logger()->warn("MV_CC_SetEnumValue(\"{}\", {}) failed: {:#x}", name, value, ret);
     return;
   }
+}
+
+// ⭐ W90：整型参数（如 Width / Height）
+void HikRobot::set_int_value(const std::string & name, int64_t value)
+{
+  if (!handle_) return;
+  const auto ret = MV_CC_SetIntValue(handle_, name.c_str(), value);
+  if (ret != MV_OK)
+    tools::logger()->warn("MV_CC_SetIntValue(\"{}\", {}) failed: {:#x}", name, value, ret);
+  else
+    tools::logger()->debug("[HikRobot] set int  {} = {}", name, value);
+}
+
+// ⭐⭐ W90：应用 yaml 的 `camera_params`（**在默认参数之后**，可覆盖曝光/增益等）
+void HikRobot::apply_extra_params(const std::vector<CameraParam> & extra)
+{
+  if (extra.empty()) return;
+  tools::logger()->info("[HikRobot] 应用 yaml 的 camera_params（{} 项）", extra.size());
+  for (const auto & p : extra) {
+    switch (p.kind) {
+      case CameraParam::Float: set_float_value(p.name, p.fval); break;
+      case CameraParam::Enum:  set_enum_value(p.name, static_cast<unsigned int>(p.ival)); break;
+      case CameraParam::Int:   set_int_value(p.name, p.ival); break;
+    }
+  }
+}
+
+// ⭐⭐ W90：打印常用参数的当前值 —— 先在 MVS 里调好，再把值抄进 yaml
+void HikRobot::dump_camera_params() const
+{
+  if (!handle_) {
+    tools::logger()->error("[HikRobot] --dump-camera-params 需要先打开相机（handle 为空）");
+    return;
+  }
+  tools::logger()->info("[HikRobot] ════ 相机参数当前值（抄进 yaml 的 camera_params 即可）════");
+
+  // 浮点型
+  for (const char * n : {"ExposureTime", "Gain", "Gamma", "Sharpness", "Contrast",
+                         "Saturation", "AcquisitionFrameRate", "ResultingFrameRate",
+                         "BalanceRatio", "BalanceRatioSelector"}) {
+    MVCC_FLOATVALUE fv{};
+    if (MV_CC_GetFloatValue(handle_, n, &fv) == MV_OK)
+      tools::logger()->info("  float {} = {:.3f}   (范围 {:.1f}~{:.1f})",
+                            n, static_cast<double>(fv.fCurValue),
+                            static_cast<double>(fv.fMin), static_cast<double>(fv.fMax));
+  }
+  // 枚举型
+  for (const char * n : {"PixelFormat", "TriggerMode", "ExposureAuto", "GainAuto",
+                         "BalanceWhiteAuto", "AcquisitionMode", "GammaSelector",
+                         "ExposureTimeMode", "LineSelector"}) {
+    MVCC_ENUMVALUE ev{};
+    if (MV_CC_GetEnumValue(handle_, n, &ev) == MV_OK)
+      tools::logger()->info("  enum  {} = {}   (支持 {} 种)", n, ev.nCurValue, ev.nSupportedNum);
+  }
+  // 整型
+  for (const char * n : {"Width", "Height", "OffsetX", "OffsetY", "PayloadSize"}) {
+    MVCC_INTVALUE iv{};
+    if (MV_CC_GetIntValue(handle_, n, &iv) == MV_OK)
+      tools::logger()->info("  int   {} = {}   (范围 {}~{})", n, iv.nCurValue, iv.nMin, iv.nMax);
+  }
+  tools::logger()->info("[HikRobot] ════ 结束（yaml 里按 float/enum/int 分组填写）════");
 }
 
 void HikRobot::set_vid_pid(const std::string & vid_pid)

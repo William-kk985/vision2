@@ -232,6 +232,53 @@ tools/scripts/run.sh infantry --strict-board                    # 没下位机�
 ⚠️ **虚拟下位机的限制**：IMU 姿态恒为单位四元数、弹速取 yaml 配置值
 ⇒ **EKF 的 yaw/ω 预测、弹道误差、命中判定都不可信**；但**检测/跟踪/解算/规划的内部量可以照常看**。
 
+#### ⭐⭐ 调相机参数（不用每次开 MVS）
+
+相机参数都从 `params/<兵种>.yaml` 读，**改完直接跑，不用开 MVS**：
+
+```yaml
+camera_name: "hikrobot"
+exposure_ms: 2          # 曝光（ms）—— ⭐ 变亮先调这个
+gain: 16                # 增益（dB）—— 辅助，噪声会变大
+fps: 30                 # 帧率
+
+# ⭐⭐ W90：通用通道 —— 任意海康参数都能设（名字与 MVS 里显示的一致）
+camera_params:
+  float:                      # MV_CC_SetFloatValue
+    Gamma: 1.0
+    Sharpness: 50
+    ExposureTime: 6000        # µs（单位与 exposure_ms 不同，注意）
+  enum:                       # MV_CC_SetEnumValue
+    BalanceWhiteAuto: 0       # ⭐ 0=Off / 1=Once / 2=Continuous（默认 2，会漂）
+  int:                        # MV_CC_SetIntValue
+    Width: 1280
+```
+
+⭐ **不知道参数名/该填多少？先 dump 当前值**：
+
+```bash
+tools/scripts/run.sh infantry --dump-camera-params
+# 打印 ExposureTime / Gain / Gamma / Sharpness / BalanceWhiteAuto / PixelFormat …
+# 的【当前值 + 取值范围】
+```
+
+**推荐流程**：
+```
+① 在 MVS 里把画面调好（曝光/增益/白平衡/Gamma…）
+② 跑 `--dump-camera-params` 把那些值打出来
+③ 抄进 params/<兵种>.yaml 的 camera_params
+④ 以后直接跑我们的程序，不用再开 MVS
+```
+
+⚠️ **注意**：
+| 项 | 说明 |
+|---|---|
+| `camera_params` **只对 `hikrobot` 生效** | uav 用的是 `mindvision`（参数走 `gamma`/`exposure_ms`） |
+| **应用顺序** | 默认参数 → `camera_params`（**可覆盖**上面的 `exposure_ms`/`gain`） |
+| **参数名写错** | 会打 `MV_CC_SetXxxValue(...) failed: 0x...` 的**警告**，不会崩 |
+
+---
+
 #### 关于 `/dev/video*`
 
 ⚠️ 本项目用**工业相机 SDK**（海康 `MV_CC` / 迈德威视），**不是 V4L2**。

@@ -18,7 +18,9 @@ public:
 class Camera : public CameraBase
 {
 public:
-  explicit Camera(const std::string & config_path);
+  /// @param dump_params ⭐ W90：只打印相机常用参数的当前值（用于把 MVS 里的好值
+  ///   抄进 yaml 的 `camera_params`）—— 不用每次开 MVS
+  explicit Camera(const std::string & config_path, bool dump_params = false);
   void read(cv::Mat & img, std::chrono::steady_clock::time_point & timestamp) override;
 
 private:

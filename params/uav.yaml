@@ -55,6 +55,10 @@ exposure_ms: 8
 gamma: 0.6
 vid_pid: "f622:d13a"
 
+# ⚠️ W90：`camera_params` 通用通道目前**只对 `hikrobot` 生效**（走 MV_CC_SetXxxValue）。
+#   uav 用的是 `mindvision`，参数请改 `gamma` / `exposure_ms`，
+#   或参考 drivers/mindvision/mindvision.cpp 里的 set_* 调用自行扩展。
+
 #####-----USB相机参数-----#####
 image_width: 640
 image_height: 360

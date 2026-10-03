@@ -6,6 +6,7 @@
 #include <opencv2/opencv.hpp>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "MvCameraControl.h"
 #include "io/camera/camera.hpp"
@@ -13,6 +14,27 @@
 
 namespace io
 {
+
+/// ⭐⭐ W90：**通用相机参数** —— 让用户不用开 MVS 就能调任意海康参数。
+/// yaml 里写：
+/// ```yaml
+/// camera_params:
+///   float:  { Gamma: 1.0, Sharpness: 50 }     # MV_CC_SetFloatValue
+///   enum:   { BalanceWhiteAuto: 0 }           # MV_CC_SetEnumValue
+///   int:    { Width: 1280 }                   # MV_CC_SetIntValue
+/// ```
+/// ⚠️ 参数名必须与 **MVS 客户端里显示的名字一致**（如 `ExposureTime` / `Gain` /
+///   `BalanceWhiteAuto` / `Gamma` / `Sharpness` / `AcquisitionFrameRate` …）。
+/// ⭐ 用 `--dump-camera-params` 可以把常用参数**当前值全部打印出来**，
+///   先在 MVS 里调好、再把好用的值抄进 yaml 即可。
+struct CameraParam
+{
+  enum Kind { Float, Enum, Int } kind = Float;
+  std::string name;
+  double fval = 0;    ///< kind==Float
+  int64_t ival = 0;   ///< kind==Enum / Int
+};
+
 class HikRobot : public CameraBase
 {
 public:
@@ -20,7 +42,11 @@ public:
   ///   ⚠️ 150 fps @ 1440×1080 Bayer8 ≈ **233 MB/s**，接近 USB3 实际上限；
   ///   若协商到 USB2（480 Mbps ≈ 40 MB/s）则**一帧都传不过来** → `0x80000007`。
   ///   yaml 里加 `fps: 30` 可控；缺省 30（安全值）。
-  HikRobot(double exposure_ms, double gain, const std::string & vid_pid, double fps = 30.0);
+  /// @param extra        ⭐ W90：额外参数（来自 yaml 的 `camera_params`），**最后应用**
+  /// @param dump_params  ⭐ 只打印常用参数的当前值然后退出（不要在 MVS 里瞎猜名字）
+  HikRobot(
+    double exposure_ms, double gain, const std::string & vid_pid, double fps = 30.0,
+    const std::vector<CameraParam> & extra = {}, bool dump_params = false);
   ~HikRobot() override;
   void read(cv::Mat & img, std::chrono::steady_clock::time_point & timestamp) override;
 
@@ -55,6 +81,12 @@ private:
 
   void set_float_value(const std::string & name, double value);
   void set_enum_value(const std::string & name, unsigned int value);
+  void set_int_value(const std::string & name, int64_t value);          // ⭐ W90
+  void apply_extra_params(const std::vector<CameraParam> & extra);      // ⭐ W90
+  void dump_camera_params() const;                                      // ⭐ W90
+
+  std::vector<CameraParam> extra_;   // ⭐ W90
+  bool dump_params_ = false;         // ⭐ W90
 
   void set_vid_pid(const std::string & vid_pid);
   void reset_usb() const;

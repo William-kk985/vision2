@@ -67,6 +67,21 @@ exposure_ms: 0.8
 gain: 16.9
 vid_pid: "2bdf:0001"
 
+# ⭐⭐ W90：**相机参数（不用开 MVS 每次调）** —— 通用通道，任意海康参数都能设。
+#   名字必须与 **MVS 客户端里显示的一致**。先用 `--dump-camera-params` 打印当前值，
+#   在 MVS 里调好之后，把好用的值抄进来即可。
+#
+#   camera_params:
+#     float:                      # MV_CC_SetFloatValue
+#       Gamma: 1.0
+#       Sharpness: 50
+#       # ExposureTime: 6000     # 单位 µs（也能覆盖上面的 exposure_ms）
+#     enum:                       # MV_CC_SetEnumValue
+#       BalanceWhiteAuto: 0       # ⭐ 0=Off 1=Once 2=Continuous（默认是 2，会漂）
+#     int:                        # MV_CC_SetIntValue
+#       # Width: 1280
+
+
 #####-----传统方法参数-----#####
 threshold: 150
 max_angle_error: 45 # degree

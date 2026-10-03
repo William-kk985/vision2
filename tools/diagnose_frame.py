@@ -6,7 +6,7 @@
     # ① 先抓真实相机的图（按热键 4，或跑 --debug-img=true）
     tools/scripts/run.sh infantry --debug-img=true        # 每 30 帧存 1 张
     # ② 拿存下来的图诊断
-    python3 tools/scripts/diagnose_frame.py output/images/000030_aim.png
+    python3 tools/diagnose_frame.py output/images/000030_aim.png
 
 它会打印：分辨率 / 亮度 / 对比度 / BGR 通道均值 / 与录像帧的差异，
 并按 YOLO 的**同一套预处理**（resize 到左上 + 黑边）算一遍，帮你判断是
@@ -48,12 +48,26 @@ def yolo_preprocess(img):
     return canvas, w, h
 
 def main():
-    if len(sys.argv) < 2:
+    # ⭐ W101：加 argparse —— 原来 `--help` 会被当成【文件名】去 imread，
+    #   报一句语义毫不相干的 "can't open/read file"（实测踩到）。
+    import argparse
+    ap = argparse.ArgumentParser(
+        prog='diagnose_frame.py',
+        description='单帧图像诊断：亮度/对比度/清晰度/色偏，并与 demo 帧并排对比',
+        epilog='示例: python3 tools/diagnose_frame.py output/images/000030_aim.png')
+    ap.add_argument('image', nargs='?', help='要诊断的图（png/jpg）')
+    ap.add_argument('--no-demo', action='store_true',
+                    help='不与 assets/demo/demo.avi 的帧做对比（只打本帧指标）')
+    args = ap.parse_args()
+
+    if not args.image:
         print(__doc__); return 1
-    path = sys.argv[1]
+    path = args.image
     img = cv2.imread(path)
     if img is None:
-        print(f"  ❌ 读不到 {path}"); return 1
+        print(f"  ❌ 读不到 {path}")
+        print("     提示：路径对不对？存图默认落在 output/images/（按键 4 或 --debug-img=true）")
+        return 1
     print(f"  ════ 诊断 {os.path.basename(path)} ════\n")
     s1 = stats(img, "原始帧")
 
@@ -65,7 +79,7 @@ def main():
 
     # ⭐ 与录像帧对比（如果存在）
     demo = 'assets/demo/demo.avi'
-    if os.path.exists(demo):
+    if os.path.exists(demo) and not args.no_demo:
         cap = cv2.VideoCapture(demo)
         ok, f = cap.read(); cap.release()
         if ok:

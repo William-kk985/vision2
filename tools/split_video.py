@@ -12,10 +12,10 @@ split_video.py —— ⭐ 切分录像（`.avi` + 同名 `.txt` 位姿）的帧�
 ## 用法
 ```bash
 # 取第 100..300 帧，另存为 records/clip.avi + clips/clip.txt
-python3 tools/scripts/split_video.py records/full.avi -s 100 -e 300 -o records/clip
+python3 tools/split_video.py records/full.avi -s 100 -e 300 -o records/clip
 
 # 只切位姿文本（不动视频），看时间戳
-python3 tools/scripts/split_video.py records/full.avi -s 100 -e 300 --txt-only
+python3 tools/split_video.py records/full.avi -s 100 -e 300 --txt-only
 ```
 """
 import argparse

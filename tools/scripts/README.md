@@ -168,7 +168,7 @@ tools/scripts/camera-reset.sh
 | **`check-hw.sh`** | ⭐⭐ **硬件诊断**（相机 / 串口 / usbfs / udev）—— 见下 |
 | **`camera-reset.sh`** | ⭐⭐ **相机复位**（清除海康「红灯常亮」）—— 见下 |
 | `watchdog.sh` | 进程崩溃自动重启（搬自同济，改进版：路径自适应 + 指数退避 + 原因记录） |
-| `split_video.py` | 切录像（做 A/B 实验用） |
+| ~~`split_video.py`~~ | ⭐ **已移到 `tools/`**（它是 Python，不在 sh 目录） |
 | `build.sh` / `run.sh` | ⭐ 本文件介绍的这两个 |
 
 > 配套：`scripts/*.py` 是**离线分析**（`analyze` / `plot` / `compare`），

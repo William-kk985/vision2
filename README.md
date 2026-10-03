@@ -52,6 +52,31 @@
 
 `3` 把每帧的 **20 个字段**打成 JSON，**UDP 发到 `127.0.0.1:9870`**（`--pj=true` 可启动即开）。
 
+⚠️⚠️ **PlotJuggler 4.x 默认【不带 UDP Server 插件】** —— 必须先装它，否则 `3` 收不到数据。
+4.0.0 `.deb` 自带的 `data_stream` 只有 `dummy-streamer / foxglove-bridge /
+plotjuggler-bridge / ros2-topic-subscriber / webrtc-client`，**没有 `udp-server`**。
+
+```
+① 打开 PlotJuggler → 菜单里的  Extensions Marketplace（扩展市场）
+② 找到 "UDP Server" (id `udp-server`, data_stream) → Install
+③ ⭐ 它会提示 "An extension change is staged. Restart PlotJuggler to apply it."
+   → 重启 PlotJuggler
+```
+
+⭐ 手动装也行（插件就一个 `.so` + `manifest.json`，**148 KB**）：
+```bash
+# 官方注册表（可以直接 curl 查有哪些扩展和下载地址）
+curl -sL https://raw.githubusercontent.com/PlotJuggler/pj-plugin-registry/refs/heads/development/registry.json
+# linux-x86_64 包：
+wget https://github.com/PlotJuggler/pj-official-plugins/releases/download/data_stream_udp/v0.9.1/udp-server-0.9.1-linux-x86_64.zip
+# ✅ 实测 sha256 = bcd532a1fb45fc33a9ed7a9f3610efaae1d63f947b00b9f3acb7ee2ac6a23c25（与注册表一致）
+unzip udp-server-0.9.1-linux-x86_64.zip     # → udp-server/{libudp_source_plugin.so,manifest.json}
+# 然后放进 PlotJuggler 的 extensions 目录（GUI 里装更省事，会自动放到对的位置）
+```
+⚠️ 若不想折腾插件，**用按键 `2`（CSV）或 `tools/csv_viewer.html`** 也能看同样的数据。
+
+---
+
 ⚠️ **不要装 `ros-humble-plotjuggler-ros`** —— 那是 **ROS 集成版**（rosbag/topic 插件），
 本项目**走 UDP，用不上它**，而且它会拉一堆 `-dev` 包、版本还旧（2.3.1）。
 

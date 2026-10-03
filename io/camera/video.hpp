@@ -23,7 +23,8 @@ class VideoCamera : public CameraBase
 {
 public:
   /// @param video_path 视频文件路径（.avi/.mp4/...）
-  /// @param speed      播放速度倍率（1.0 = 按视频帧率；用于加速离线跑批）
+  /// @param speed      播放速率：`1.0` = 实时（30fps 录像就 30fps）；`4.0` = 4 倍速；
+///                   ⭐ `0` = **不节流，全速跑批**（测吞吐/批量回归用）
   explicit VideoCamera(const std::string & video_path, double speed = 1.0);
 
   void read(cv::Mat & img, std::chrono::steady_clock::time_point & timestamp) override;

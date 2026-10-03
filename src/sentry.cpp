@@ -75,7 +75,7 @@ const std::string keys =
   "{help h usage ? | | 输出命令行参数说明}"
   "{@config-path   | params/sentry.yaml | yaml 配置文件路径}"
   "{video v        | | ⭐ 录像路径（给了就走录像回放，无需相机/下位机）}"
-  "{video-speed    | 1.0 | ⭐ 录像播放倍速}"
+  "{video-speed    | 1.0 | ⭐ 录像播放速率（1.0=实时；调大=快放；⭐ 0=不节流全速跑批）}"
   "{force-mode     | 1 | ⭐ 录像模式档位：0=idle 1=auto_aim 2=small_buff 3=big_buff 4=outpost}"
   "{bullet-speed   | 22.0 | 录像模式下的弹速（下位机不可用时）}"
   "{shoot-mode     | 2 | ⭐ 哨兵枪口：0=left 1=right 2=both}"

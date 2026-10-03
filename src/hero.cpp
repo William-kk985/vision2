@@ -128,7 +128,7 @@ const std::string keys =
   "{help h usage ? | | 输出命令行参数说明}"
   "{@config-path   | | yaml配置文件路径 }"
   "{video v        | | ⭐ 录像路径（.avi）；给了就走录像回放，无需相机/下位机}"
-  "{video-speed    | 1.0 | ⭐ 录像播放倍速（跑批时调大）}"
+  "{video-speed    | 1.0 | ⭐ 录像播放速率（1.0=实时；调大=快放；⭐ 0=不节流全速跑批）}"
   "{bullet-speed   | 22.0 | 录像模式下的弹速（下位机不可用时）}"
   "{pcores         | true | ⭐ 绑定到高性能核}"
   "{rtprio         | true | ⭐ 提高调度优先级到 -20}"

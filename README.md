@@ -443,9 +443,66 @@ static const QString Color_names[] = {"Blue", "Red", "Extinguish", "Purple"};   
 ⭐ **并且**：该工具的 README 明写 **「我们对 YOLOv11 所需的输入标签格式进行了适配」**
 ⇒ ⭐ **`yolo11` 才是他们在【持续训】的方向**（`assets/yolo11_buff_int8.xml` 也是它）。
 
-⚠️ **`Armor_names` 12 类 ≠ `armor_properties` 38 条**（名称体系不同：工具用 `Hero/Engineer/Balance`，
-运行期用 `one/two/three/four/five`）—— **两者的精确对应关系需要训练时的 label 定义才能确定**，
-⭐ 这里**如实标注为未确认**。
+##### ⚠️⚠️ 两张 38 类表的【同源但语义有偏差】（**已查实，如实记录**）
+
+⭐ **标注工具也有一张 38 条的 `armor_properties`**，但元素是 **`(color_id, tag_id)` 对**：
+```cpp
+// LabelRoboMaster/model.cpp:11   ← 改自 SJTU 交龙（文件头 "Created by xinyang on 2021/4/28"）
+const std::vector<std::tuple<int, int>> armor_properties = {
+  {0,0},{1,0},{2,0},              // tag 0  Sentry
+  {0,1},{1,1},{2,1},              // tag 1  Hero
+  {0,2},{1,2},{2,2},              // tag 2  Engineer
+  {0,3},{1,3},{2,3},              // tag 3  3-Infantry
+  ... {0,7},{1,7},{2,7},{3,7},    // tag 7  Base-small   （⭐ 有 color 3 = Purple）
+      {0,8},{1,8},{2,8},{3,8},    // tag 8  Base-big
+  ... {0,11},{1,11},{2,11}};      // tag 11 5-Balance
+```
+
+⭐ **两张表【条数相同(38)、分组相同(3,3,3,3,3,3,3,4,4,3,3,3)】** ⇒ 描述的是**同一个标签空间**。
+
+⚠️ **但 `tag_id` 的语义在 3 处对不上**：
+
+| tag | **标注工具**（12 名） | 工具判 big | **运行期** `ArmorName` | 运行期 type |
+|---|---|---|---|---|
+| 0 | Sentry | small | sentry | small | ✅ |
+| **1** | **Hero** | ⭐ **BIG** | **one** | **small** | ⚠️⚠️ |
+| **2** | **Engineer** | small | **two** | small | ⚠️ |
+| 3-6 | 3/4/5-Infantry, Outpost | small | three/four/five, outpost | small | ✅ |
+| **7** | **Base-small** | small | **base** | ⭐ **BIG** | ⚠️⚠️ |
+| **8** | **Base-big** | ⭐ **BIG** | **base** | **small** | ⚠️⚠️ |
+| 9-11 | 3/4/5-Balance | ⭐ BIG | three/four/five | ⭐ BIG | ✅ type 对 |
+
+⭐ **`big` 集合**：工具 `{1, 8, 9,10,11}`（`label_to_size`）vs 运行期 `{7, 9,10,11}` ⇒ **差 `tag 1 ↔ 7`**
+
+⚠️ **我【没有】判定谁对**（工具的文件头是 2021 年交龙版，两份可能来自不同赛季/不同演进分支）。
+##### ⚠️⚠️⚠️ 追到后果了：`v5` 路径下【基地装甲板会被丢掉】
+
+**① `v5` 路径判 `type`**（`core/types.cpp:182`，注释还写着 `//TODO 考虑Bb`）：
+```cpp
+type = num_id == 1 ? ArmorType::big : ArmorType::small;    // ⚠️ 只有 num_id=1（one）判 big
+```
+⚠️ **但运行期 `armor_properties` 的 `big` 是 `base` / `three` / `four` / `five`** ⇒ **对不上**
+
+**② `check_type()` 拿 `type` 做过滤**（`YOLOV5::check_type`）：
+```cpp
+name_ok = (armor.type == small)
+            ? (armor.name != one  && armor.name != base)     // ⭐ small 分支【排除 base】
+            : (armor.name != two  && armor.name != sentry && armor.name != outpost);
+```
+
+**③ 推演**：`num_id = 7` → `name = ArmorName(7) = base`，而 `type = (7==1)?big:small` → **`small`**
+⇒ 走 `small` 分支 ⇒ `name != base` **不成立** ⇒ ⚠️ **`check_type` 返回 false ⇒ 基地装甲板被丢掉**
+
+⭐ **但要谨慎下结论**：⚠️ **也可能"自瞄不打基地"是【有意的】**（基地是固定目标，另有策略）。
+⭐ **可以确定的是**：
+1. ⭐ **`v5` 的 `type` 判据与 `armor_properties` 的 `big` 集合【客观不一致】**
+2. ⭐ **源码里 `//TODO 考虑Bb` 说明同济自己也知道这块不完善**
+3. ⭐ **`yolo11` 的路径（`armor_properties[class_id]` 查表）【没有这个问题】** —— 每条都写死了 type
+
+⭐ **实操建议**：
+· ⚠️ **换 `yolo_name` 到 `v8/v11` 前，拿真机录像核对 `Base`/`Hero` 的 `type`**
+· ⭐ **想知道某个目标有没有被 `check_type` 丢掉**：看 `LOG_DETECTOR`（`HZMIR_LOG_DETECTOR`）或
+  对比 `det_nms`（NMS 后）与 `det_armor_count`（最终）的差值 —— 差的就是被 `check_*` 过滤掉的。
 
 ##### `yolo11` — **38 类 = `armor_properties` 的 38 条**（直接编码合法组合）
 

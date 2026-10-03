@@ -57,6 +57,8 @@
 #include "utils/debug/plotjuggler_sink.hpp"
 #include "utils/debug/recorder.hpp"
 #include "utils/log/log_filter.hpp"
+#include "utils/config/print_config.hpp"   // ⭐ W100
+#include "utils/config/tongji_flags.hpp"   // ⭐ W100：tongji 拆槽位
 #include "utils/log/logger.hpp"
 #include "utils/ov/device.hpp"
 #include "core/auto_aim/tracker/nav_bridge.hpp"   // ⭐ W35：上行目标信息
@@ -71,6 +73,7 @@
 const std::string keys =
   "{help h usage ? | | 输出命令行参数说明}"
   "{@config-path   | params/robots/sentry.yaml | yaml 配置文件路径}"
+  "{print-config   | false | ⭐⭐ 打印最终生效配置后退出（不启动相机/板卡）}"
   "{video v        | | ⭐ 录像路径（给了就走录像回放，无需相机/下位机）}"
   "{video-speed    | 1.0 | ⭐ 录像播放速率（1.0=实时；调大=快放；⭐ 0=不节流全速跑批）}"
   "{force-mode     | 1 | ⭐ 录像模式档位：0=idle 1=auto_aim 2=small_buff 3=big_buff 4=outpost}"
@@ -84,6 +87,8 @@ const std::string keys =
   "{pj-host        | 127.0.0.1 | ⭐ PlotJuggler 目标 IP（跨机器时填对方 IP）}"
   "{pj-port        | 9870 | ⭐ PlotJuggler 目标端口}"
   "{tongji         | true | ⭐⭐ 同济兼容模式（默认 true = 完全同济行为）}"
+  "{nis-thresh     | | ⭐ 单独覆盖 NIS 失败阈值：tongji(0.711) / chi2(9.4877)；空=跟随 --tongji}"
+  "{yaw-rate-src   | | ⭐ 单独覆盖小陀螺判据用的 EKF 分量：x8(同济) / x7(修正)；空=跟随 --tongji}"
   "{strict-device  | false | ⭐ 严格设备模式（true = 设备不可用就抛异常）}"
   "{no-board       | false | ⭐⭐ 强制虚拟下位机（不碰串口；只有摄像头时用）}"
   "{strict-board   | false | ⭐⭐ 串口不存在就失败退出（同济行为）；默认自动降级虚拟板}"
@@ -301,6 +306,12 @@ int main(int argc, char * argv[])
   }
   const auto config_path = cli.get<std::string>("@config-path");
 
+  // ⭐⭐ W100（原 D2）：`--print-config` 打完就退，**不碰相机/板卡**
+  if (cli.get<bool>("print-config")) {
+    tools::print_effective_config(std::cout, cli, config_path, "sentry");
+    return 0;
+  }
+
   // ⭐⭐⭐ W95：**按模块过滤日志必须尽早设置** —— 否则启动期日志
   //   （如 `[infantry] 同济兼容模式` / `[VideoCamera]` / `[ReplayBoard]`）
   //   会在过滤生效前就打出来（实测踩过）。
@@ -320,15 +331,16 @@ int main(int argc, char * argv[])
   const auto csv_prefix = cli.get<std::string>("csv");
 
   // ⭐ 同济兼容开关（集中控制硬编码偏差：E5 小陀螺判据 + E3b 阈值）
+    // ⭐⭐⭐ W100：`--tongji` 拆成独立槽位（原 B3/B4）——
+  //   单项显式指定 > 总开关 > 内置默认（同济行为）。见 `utils/config/tongji_flags.hpp`
   {
-    const bool tj = cli.get<bool>("tongji");
-    auto_aim::Aimer::set_tongji_compat(tj);
-    if (tj)
-      tools::ExtendedKalmanFilter::use_tongji_nis_threshold();
-    else
-      tools::ExtendedKalmanFilter::use_chi2_q95_nis_threshold();
     tools::set_strict_device(cli.get<bool>("strict-device"));
     auto_aim::set_det_stats_enabled(cli.get<bool>("det-stats"));   // ⭐ W63
+    const auto flags = tools::resolve_tongji(
+      cli.get<bool>("tongji"), cli.get<std::string>("nis-thresh"),
+      cli.get<std::string>("yaw-rate-src"));
+    flags.apply();
+    tools::logger()->info("[sentry] {}", flags.describe());
   }
 
   const auto enemy_color = auto_aim::Color::blue;   // ⭐ 同济 sentry.yaml 是 blue

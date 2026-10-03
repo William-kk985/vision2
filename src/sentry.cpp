@@ -169,10 +169,14 @@ int run_sentry(
 
   cv::Mat img;
   std::chrono::steady_clock::time_point t;
-  auto_aim::FrameDebug fd;
   uint32_t frame_id = 0;
 
   while (!exiter.exit()) {
+    auto_aim::FrameDebug fd;   // ⭐⭐ W97：**必须在循环内** —— 在外则跨帧残留
+    // ⭐⭐ W97：`frame_id` / `mode` 必须**无条件**填（原来在 `if (auto_aim)` 分支内
+    //   ⇒ ⚠️ 别的模式不递增 frame_id、mode 保留旧值 —— 与 infantry 不一致）
+    fd.frame_id = frame_id++;
+    fd.mode = static_cast<uint8_t>(cboard.mode);
     hotkeys.poll();
     if (paused) {
       std::this_thread::sleep_for(20ms);
@@ -253,8 +257,6 @@ int run_sentry(
       ros2->publish(auto_aim::target_info_for_nav(armors, targets));
 #endif
 
-      fd.frame_id = frame_id++;
-      fd.mode = 1;
       fd.detector.armor_count = static_cast<int>(armors.size());
       // ⭐⭐ W64：**填上从没被赋值过的两列**（原来 CSV 里 det_best_conf / det_nms 永远是 0）
       {

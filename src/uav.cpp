@@ -146,11 +146,13 @@ int run_uav(io::CameraBase & camera, Board & cboard, const std::string & config_
 
     cv::Mat img;
     std::chrono::steady_clock::time_point t;
-  auto_aim::FrameDebug fd;
   uint32_t frame_id = 0;
   auto last_mode = io::Mode::idle;
 
   while (!exiter.exit()) {
+    auto_aim::FrameDebug fd;   // ⭐⭐ W97：**必须在循环内** —— 在外则跨帧残留
+    fd.frame_id = frame_id++;
+    fd.mode = static_cast<uint8_t>(cboard.mode);   // ⚠️ 用 cboard.mode（本行下方才定义局部 mode）
     // W86: time the camera wait separately (blocking, not CPU work).
     expense.begin("cam_wait");
     camera.read(img, t);
@@ -168,8 +170,6 @@ int run_uav(io::CameraBase & camera, Board & cboard, const std::string & config_
       last_mode = mode;
     }
 
-    fd.frame_id = frame_id++;
-    fd.mode = static_cast<uint8_t>(mode);
     fd.t_cam_wait_us = expense.us("cam_wait");   // W86: blocking wait, not CPU
     fd.t_perceive_us = expense.us("perceive");
     io::Command command{};   // ⭐ W34：契约层已给默认值（原来是未初始化的）

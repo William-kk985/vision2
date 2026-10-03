@@ -932,6 +932,24 @@ cmake -S . -B build -DHZMIR_WITH_ROS2=ON      # 或 OFF
 
 ---
 
+## ⭐ 裁判系统数据（`fd.game_state`）
+
+⭐ **数据源已找到**（详见 [`docs/17`](docs/17-裁判系统数据源调研.md)）：
+同济的 **`sp_referee`** 带**完整裁判协议**（`protocol.h` 29 个命令 + `data.h` 30 个 struct）：
+
+| 想要 | 协议命令 | 状态 |
+|---|---|---|
+| ⭐ **血量 / 等级** | `0x0201 ROBOT_STATUS` | ✅ 有源 |
+| ⭐ **枪管热量** | `0x0202 POWER_HEAT_DATA` | ✅ 有源 |
+| ⭐ **弹速（实测）** | `0x0207 SHOOT_DATA` | ✅ 有源 ⭐ **顺带解开 B6** |
+| ⚠️ **比赛阶段** | `0x0001 GAME_STATUS` | ⚠️ **协议有，`sp_referee` 没解析** |
+| **无敌** | ⚠️ 不在裁判协议里 | ✅ **已能用**（ROS2 `subscribe_enemy_status`） |
+
+⚠️ **落地成本**：`sp_referee` 是 **ROS1** + 读 `/dev/referee` 串口
+⇒ 要么移植消息到 ROS2，要么**照 `protocol.h`/`data.h` 自写一个 serial 驱动**（协议是官方公开的）。
+
+---
+
 ## ⚠️ 已知问题
 
 | # | 问题 | 状态 |

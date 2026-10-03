@@ -17,9 +17,11 @@
  * ```
  * 本文件是**纯数据**，只依赖 `<cstdint>`，**绝不 include `core/debug.hpp`**。
  *
- * ## ⭐ 下一步可做（未做）
- * 把「填 Debug」塞进角色的**返回路径**（如 `struct XxxResult { Xxx out; XxxDebug dbg; }`）
- * → **结构上不可能忘填**。
+ * ## ⭐ 已完成（W98）
+ * 「把填 Debug 塞进角色的返回路径」**已经做了** ——
+ * 角色返回 `XxxResult { 业务结果; XxxDebug dbg; }`，
+ * 主循环一行 `fd.xxx = r.dbg;`。**不填就编译不过** ⇒ 结构上不可能漏填。
+ * 详见 `detector.hpp` 里 `DetectorResult` 的长注释。
  */
 #ifndef HZMIR_CORE_AUTO_AIM_DETECTOR_DETECTOR_DEBUG_HPP
 #define HZMIR_CORE_AUTO_AIM_DETECTOR_DETECTOR_DEBUG_HPP

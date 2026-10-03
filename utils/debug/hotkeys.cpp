@@ -185,11 +185,12 @@ void DebugKeyBindings::bind(
     hotkey_feedback("日志级别 -> %s", tools::log_level_name(tools::cycle_log_level()));
   });
 
-  // ⭐⭐ W95：n —— 按模块过滤日志（全局级别之外的细粒度控制）
-  //   循环：全部 → 静音噪音（yolov5/VirtualBoard/TGD…）→ 只看关键（Tracker/Planner/…）
-  hk.on('n', "日志模块过滤循环", [] {
-    hotkey_feedback("%s", tools::cycle_log_filter().c_str());   // ⭐ 同样绕过 logger
-  });
+  // ⭐⭐⭐ W99：**热键 `n` 已移除** —— 用户实测反馈"热插拔很难记忆"。
+  //   细节日志改为【编译期开关】：`utils/log/debug_config.hpp` 里一行一个模块，
+  //   `#define` = 开 / 注释 = 关。⭐ 实测比运行期过滤快 54×（1.65 ns vs 89 ns/次，
+  //   因为宏关掉时**参数不求值**）。
+  //   ⚠️ 运行期过滤（`--log-off` / `--log-only`）**仍保留** —— 它适合"临时试一下不想重编"，
+  //      但**不要长期依赖**（有 89 ns/次的代价）。
 
   // p —— 暂停/继续
   if (paused) {

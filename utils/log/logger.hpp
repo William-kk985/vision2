@@ -41,4 +41,9 @@ bool parse_log_level(const std::string & s, spdlog::level::level_enum & out);
 
 }  // namespace tools
 
+// ⭐⭐⭐ W99：**细节日志的集中开关** —— 在这里 include，让所有 `logger.hpp` 的使用者
+//   自动获得 `LOG_YOLO(...)` / `LOG_EKF(...)` 等宏（无需各自 include）。
+//   ⚠️ 必须在文件【末尾】—— 宏定义要等 `logger()` 声明完。
+#include "utils/log/debug_config.hpp"
+
 #endif  // HZMIR_UTILS_LOG_LOGGER_HPP

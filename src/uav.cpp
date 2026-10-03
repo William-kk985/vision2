@@ -72,8 +72,8 @@ const std::string keys =
   "{strict-board   | false | ⭐⭐ 串口不存在就失败退出（同济行为）；默认自动降级虚拟板}"
   "{det-stats      | true | ⭐ 逐帧打印检测统计（候选→各步过滤）；false 硬关}"
   "{log-keep-days  | 30 | ⭐ 日志保留天数（超期自动清理 output/logs/；0=不清理）}"
-  "{log-off        | | ⭐⭐ 按模块静音日志，逗号分隔（如 yolov5,VirtualBoard）}"
-  "{log-only       | | ⭐⭐ 只打印这些模块（如 Tracker,Planner,Shooter）}";
+  "{log-off        | | ⭐ 按模块静音日志（运行期，不重编；⚠️ 有 89ns/次代价，长期请用 utils/log/debug_config.hpp 的编译期开关）}"
+  "{log-only       | | ⭐ 只打印这些模块（运行期；同 --log-off 的说明）}";
 
 using namespace std::chrono_literals;
 

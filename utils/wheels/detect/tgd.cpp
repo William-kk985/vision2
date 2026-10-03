@@ -77,7 +77,7 @@ cv::Mat TGDDetector::adaptiveThreshold(const cv::Mat& diff_img)
     double threshold = mean_val[0] + config_.threshold_scale * std_dev[0];
     threshold = std::max(threshold, config_.gradient_threshold);
     
-    tools::logger()->debug("[TGD] Adaptive threshold: {:.2f} (mean={:.2f}, std={:.2f})", 
+    LOG_TGD("[TGD] Adaptive threshold: {:.2f} (mean={:.2f}, std={:.2f})", 
                            threshold, mean_val[0], std_dev[0]);
     
     // 固定阈值二值化
@@ -212,7 +212,7 @@ auto TGDDetector::process(const cv::Mat& bgr_img, double timestamp) -> TGDResult
   
   // 调试日志
   if (config_.debug_mode) {
-    tools::logger()->debug(
+    LOG_TGD(
       "[TGD] Frame {}: centers={}, motion_intensity={:.2f}%",
       frame_count_, result.centers.size(), result.motion_intensity * 100);
   }

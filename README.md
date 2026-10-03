@@ -232,41 +232,58 @@ tools/scripts/run.sh infantry --strict-board                    # 没下位机�
 ⚠️ **虚拟下位机的限制**：IMU 姿态恒为单位四元数、弹速取 yaml 配置值
 ⇒ **EKF 的 yaw/ω 预测、弹道误差、命中判定都不可信**；但**检测/跟踪/解算/规划的内部量可以照常看**。
 
-#### ⭐⭐ 日志太吵？（按模块过滤）
+#### ⭐⭐⭐ 日志太吵？—— **编译期开关**（推荐）
 
-全局级别（热键 `d`）只有一档，想「关掉 `yolov5` 的逐帧刷屏、但保留其它 debug」做不到。
-现在可以**按模块**控制：
+⭐ **所有细节日志的开关都在一个文件**：`utils/log/debug_config.hpp`
 
-```bash
-# ⭐ 静音指定模块（逗号分隔）
-tools/scripts/run.sh infantry --log-off=yolov5,VirtualBoard
-
-# ⭐ 只看指定模块（白名单，其余全丢）
-tools/scripts/run.sh infantry --log-only=Tracker,Planner,Shooter
+```cpp
+// utils/log/debug_config.hpp —— 一行一个模块，`#define` = 开 / 注释 = 关
+// #define HZMIR_LOG_YOLO       // YOLO 逐帧候选/过滤统计（⚠️ 每帧 1~2 条，最吵）
+// #define HZMIR_LOG_EKF        // EKF 新息（NIS）/ 收敛 / 发散
+// #define HZMIR_LOG_TRACKER    // 跟踪状态机切换
+// #define HZMIR_LOG_PLANNER    // MPC 迭代/弹道
+// #define HZMIR_LOG_BUFF       // 打符细节
+// ...
 ```
 
-⭐ **热键 `n`**：循环三个预设 ——
-```
-① 全部（不过滤）
-② 静音噪音   —— yolov5 / YOLOV5 / VirtualBoard / TGD / TI / ReplayCBoard / TableTrajectory
-③ 只看关键   —— Tracker / Planner / Shooter / Gimbal / Target / Priority / Aimer / Solver / ArmorFilter
+**用法**（⭐ **源码里不需要 `#ifdef`**）：
+```cpp
+LOG_YOLO("objectness 通过 {} → 输出 {}", n_pass, n_out);
+LOG_EKF("[Target] r={:.3f}, l={:.3f}", ekf_x[8], ekf_x[9]);
 ```
 
-**规则**（实测行为）：
-| 情况 | 行为 |
-|---|---|
-| 模块名 = 消息开头的 `[xxx]` | 按黑白名单过滤 |
-| ⚠️ **消息不以 `[` 开头** | ⭐ **一律放行**（如 `Switch to AUTO_AIM`、启动横幅） |
-| ⭐ **大小写敏感** | `--log-off=yolov5` **不会**命中 `[YOLOV5]` |
-| 白名单 vs 黑名单 | **后设置的覆盖前面的** |
-| 环境变量 | `HZMIR_LOG_OFF=` / `HZMIR_LOG_ONLY=`（CLI 优先） |
+### ⭐ 为什么用宏而不是运行期过滤（实测数据）
 
-⭐ **实测效果**（录像回放 687 帧）：
+| 方式 | 成本（含昂贵参数） | 说明 |
+|---|---|---|
+| ⭐ **编译期宏（默认关）** | **1.65 ns/次** | ⭐ **与纯循环基准（1.78 ns）持平 = 零成本** |
+| ⚠️ 运行期过滤 `--log-off` | **89.44 ns/次** | 参数**照样求值** + 级别检查 |
+
+**⇒ 54× 差距**。原因：宏关掉时**整条语句连参数一起消失**；运行期过滤只挡住"打印"，**参数已经算完了**。
+
+⭐ **实测效果**（录像 687 帧）：
 ```
-不过滤              : yolov5 日志 142 条
---log-off=yolov5    : yolov5 日志   0 条   ← ⭐ 完全静音
---log-only=Planner  : 其它模块       0 条   ← ⭐ 完全排他
+默认（全关）        : debug 日志  9 条（只剩启动期一次性）
+打开 HZMIR_LOG_YOLO : yolo 日志 144 条
 ```
+
+### ⚠️ 运行期过滤还留着吗？
+
+**留着**（`--log-off` / `--log-only`）—— 它适合「临时试一下不想重编」。
+⚠️ 但**不要长期依赖**：有 89 ns/次的代价，且 ⚠️ **热键 `n` 已移除**（用户反馈"很难记忆"）。
+
+### ⭐ 怎么加一个新模块
+
+1. `debug_config.hpp` 的「开关」段加一行 `#define HZMIR_LOG_你的模块`
+2. 加一对宏：
+   ```cpp
+   #ifdef HZMIR_LOG_你的模块
+   #  define LOG_你的模块(...) tools::logger()->debug("[tag] " __VA_ARGS__)
+   #else
+   #  define LOG_你的模块(...)   // ⭐ 展开为空 ⇒ 零成本
+   #endif
+   ```
+3. 源码里把 `tools::logger()->debug("[tag] …", …)` 换成 `LOG_你的模块("…", …)`
 
 ---
 

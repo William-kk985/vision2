@@ -268,7 +268,7 @@ bool Detector::check_name(const Armor & armor) const
   if (name_ok && !confidence_ok) save(armor);
 
   // 出现 5号 则显示 debug 信息。但不过滤。
-  if (armor.name == ArmorName::five) tools::logger()->debug("See pattern 5");
+  if (armor.name == ArmorName::five) LOG_DETECTOR("See pattern 5");
 
   return name_ok && confidence_ok;
 }

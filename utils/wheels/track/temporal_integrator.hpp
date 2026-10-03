@@ -110,7 +110,7 @@ public:
     if (current_window <= 0) {
       // 高速场景：旁路时序积分，直接返回原始结果
       if (config_.debug_mode && frame_count_ % 10 == 0)
-        tools::logger()->debug(
+        LOG_TI(
           "[TI] Frame {}: 高速 (v={:.1f} m/s) → 旁路 TI", frame_count_, target_velocity);
       return items;
     }
@@ -123,7 +123,7 @@ public:
 
     // 4. 调试日志
     if (config_.debug_mode && frame_count_ % 10 == 0)
-      tools::logger()->debug(
+      LOG_TI(
         "[TI] Frame {}: window={} verified={}/{}", frame_count_, history_window_.size(),
         verified.size(), items.size());
 

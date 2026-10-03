@@ -245,7 +245,7 @@ bool Target::diverged() const
 
   if (r_ok && l_ok) return false;
 
-  tools::logger()->debug("[Target] r={:.3f}, l={:.3f}", ekf_.x[8], ekf_.x[9]);
+  LOG_EKF("[Target] r={:.3f}, l={:.3f}", ekf_.x[8], ekf_.x[9]);
   return true;
 }
 

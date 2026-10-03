@@ -41,7 +41,7 @@ Tracker::Tracker(const std::string & config_path, Solver & solver)
     tools::logger()->info("[Tracker] priority_mode = {} （已启用，偏离同济默认）",
                           to_string(priority_mode_));
   } else {
-    tools::logger()->debug("[Tracker] 未配置 priority_mode（同济行为）");
+    LOG_TRACKER("[Tracker] 未配置 priority_mode（同济行为）");
   }
 }
 
@@ -138,7 +138,7 @@ TrackerResult Tracker::track(
 
   // 发散检测
   if (state_ != "lost" && target_.diverged()) {
-    tools::logger()->debug("[Tracker] Target diverged!");
+    LOG_TRACKER("[Tracker] Target diverged!");
     state_ = "lost";
     return finish({});
   }
@@ -148,7 +148,7 @@ TrackerResult Tracker::track(
     std::accumulate(
       target_.ekf().recent_nis_failures.begin(), target_.ekf().recent_nis_failures.end(), 0) >=
     (0.4 * target_.ekf().window_size)) {
-    tools::logger()->debug("[Target] Bad Converge Found!");
+    LOG_EKF("[Target] Bad Converge Found!");
     state_ = "lost";
     return finish({});
   }
@@ -202,7 +202,7 @@ std::tuple<omniperception::DetectionResult, std::list<Target>> Tracker::track(
   // 此时主相机画面中出现了优先级更高的装甲板，切换目标
   else if (state_ == "tracking" && !armors.empty() && armors.front().priority < target_.priority) {
     found = set_target(armors, t);
-    tools::logger()->debug("auto_aim switch target to {}", ARMOR_NAMES[armors.front().name]);
+    LOG_TRACKER("auto_aim switch target to {}", ARMOR_NAMES[armors.front().name]);
   }
 
   // 此时全向感知相机画面中出现了优先级更高的装甲板，切换目标
@@ -214,7 +214,7 @@ std::tuple<omniperception::DetectionResult, std::list<Target>> Tracker::track(
       temp_target.armors, t, temp_target.delta_yaw, temp_target.delta_pitch};
     omni_target_priority_ = temp_target.armors.front().priority;
     found = false;
-    tools::logger()->debug("omniperception find higher priority target");
+    LOG_TRACKER("omniperception find higher priority target");
   }
 
   else if (state_ == "switching") {
@@ -235,7 +235,7 @@ std::tuple<omniperception::DetectionResult, std::list<Target>> Tracker::track(
 
   // 发散检测
   if (state_ != "lost" && target_.diverged()) {
-    tools::logger()->debug("[Tracker] Target diverged!");
+    LOG_TRACKER("[Tracker] Target diverged!");
     state_ = "lost";
     return {switch_target, {}};  // 返回switch_target和空的targets
   }

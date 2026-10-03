@@ -70,7 +70,7 @@ void SmallTarget::get_target(
   // 处理识别时间间隔过大
   if (lost_cn > 6) {
     unsolvable_ = true;
-    tools::logger()->debug("[Target] 丢失buff");
+    LOG_BUFF("[Target] 丢失buff");
     lost_cn = 0;
     first_in_ = true;
     return;
@@ -83,7 +83,7 @@ void SmallTarget::get_target(
   // 处理发散
   if (std::abs(ekf_.x[6]) > SMALL_W + CV_PI / 18 || std::abs(ekf_.x[6]) < SMALL_W - CV_PI / 18) {
     unsolvable_ = true;
-    tools::logger()->debug("[Target] 小符角度发散spd: {:.2f}", ekf_.x[6] * 180 / CV_PI);
+    LOG_BUFF("[Target] 小符角度发散spd: {:.2f}", ekf_.x[6] * 180 / CV_PI);
     first_in_ = true;
     return;
   }
@@ -380,7 +380,7 @@ void BigTarget::get_target(
   // 处理识别时间间隔过大
   if (lost_cn > 6) {
     unsolvable_ = true;
-    tools::logger()->debug("[Target] 丢失buff");
+    LOG_BUFF("[Target] 丢失buff");
     lost_cn = 0;
     first_in_ = true;
     return;

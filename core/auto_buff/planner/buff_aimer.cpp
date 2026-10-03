@@ -165,7 +165,7 @@ bool Aimer::get_send_angle(
   // 创建弹道对象
   tools::Trajectory trajectory0(bullet_speed, d, h);
   if (trajectory0.unsolvable) {  // 如果弹道无法解算，返回未命中结果
-    tools::logger()->debug(
+    LOG_BUFF(
       "[Aimer] Unsolvable trajectory0: {:.2f} {:.2f} {:.2f}", bullet_speed, d, h);
     return false;
   }
@@ -180,7 +180,7 @@ bool Aimer::get_send_angle(
   h = aim_in_world[2];
   tools::Trajectory trajectory1(bullet_speed, d, h);
   if (trajectory1.unsolvable) {  // 如果弹道无法解算，返回未命中结果
-    tools::logger()->debug(
+    LOG_BUFF(
       "[Aimer] Unsolvable trajectory1: {:.2f} {:.2f} {:.2f}", bullet_speed, d, h);
     return false;
   }

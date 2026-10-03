@@ -1,0 +1,181 @@
+/**
+ * @file utils/log/debug_config.hpp
+ * @brief ⭐⭐⭐ **细节日志的集中开关**（W99）—— 「一行一个模块，定义=开 / 注释=关」
+ *
+ * ## 为什么需要（替代"运行期热键切模块"）
+ * W95 做了运行期按模块过滤（`--log-off` / 热键 `n`）—— **灵活，但有两个问题**：
+ *   ① ⚠️ **热键记不住**（用户实测反馈："这个我不想热插拔很难记忆"）
+ *   ② ⚠️ **过滤发生在格式化【之后】** ⇒ 参数**照样求值**（实测 `49 ns/次` vs 零成本）
+ *
+ * ⇒ 本文件提供**编译期开关**：关掉的模块，**日志语句连同参数一起消失**。
+ *
+ * ## 设计（参考 cyberdog_race 的 `debug_config.hpp`）
+ * ```
+ * ① 集中开关：一行一个模块，`#define` = 开，注释掉 = 关
+ * ② 每个模块一对宏：`LOG_XXX(...)`（关时展开成【空】）
+ * ③ 使用处直接写 `LOG_YOLO("...", a, b);` —— ⭐ **不需要 `#ifdef`**
+ * ```
+ *
+ * ## ⭐ 与「宏纪律」的关系（不冲突）
+ * 本项目的宏规范说「宏只干 3 类事：编不编 / 默认值 / 互斥检查」，且
+ * `#ifdef` 只允许出现在 4 处 —— ⚠️ **那是针对【业务逻辑】的**。
+ * 日志开关属于「编不编」这一类，且**开关集中在本文件**，
+ * 使用处写的是**普通函数调用样式的宏**（无 `#ifdef`），
+ * ⇒ 既守住了纪律，又拿到了零成本。
+ *
+ * ## ⚠️ 为什么 W60 废弃了 `DEBUG_L3_ENABLE`，这里却要做宏开关？
+ * | | L3（存图/窗口） | 本文件（细节日志） |
+ * |---|---|---|
+ * | 关掉的后果 | ⚠️ **按键按不动**（但帮助文本还列着）→ **误导** | 只是少打日志，**无语义变化** |
+ * | 省下的开销 | **0**（依赖本来就链接） | ⭐ **真实**（参数求值 + 格式化） |
+ * | 会不会让人误判 | ⚠️ **会**（以为功能坏了） | ✅ **不会** |
+ * ⇒ 判据是：**关掉后是否会让用户误判"功能坏了"**。日志不会，功能开关会。
+ *
+ * ## 怎么加一个新模块
+ * 1. 下面「开关」段加一行 `#define HZMIR_LOG_你的模块`
+ * 2. 在对应的 `#ifdef` 段加一对宏：
+ *    ```cpp
+ *    #ifdef HZMIR_LOG_你的模块
+ *      #define LOG_你的模块(...) tools::logger()->debug("[tag] " __VA_ARGS__)
+ *    #else
+ *      #define LOG_你的模块(...)
+ *    #endif
+ *    ```
+ * 3. 把源码里的 `tools::logger()->debug("[tag] ...", ...)` 换成 `LOG_你的模块("...", ...)`
+ */
+#ifndef HZMIR_UTILS_LOG_DEBUG_CONFIG_HPP
+#define HZMIR_UTILS_LOG_DEBUG_CONFIG_HPP
+
+#include "utils/log/logger.hpp"
+
+// ═══════════════════════════════════════════════════════════════
+// ⭐⭐⭐ 开关：`#define` = 开，注释掉 = 关
+//
+// ⚠️ 建议默认【关】的是「每帧刷屏」的细节日志；【开】的是低频的状态变化。
+//    调哪个模块就打开哪个，调完记得关回去（否则长时间跑批会刷屏）。
+// ═══════════════════════════════════════════════════════════════
+
+// ── 检测链路（⚠️ 每帧 1~2 条，最吵）──
+// #define HZMIR_LOG_YOLO            // YOLO 逐帧候选/过滤统计（objectness → NMS → 输出）
+// #define HZMIR_LOG_DETECTOR        // 传统检测器的灯条/装甲板配对细节
+
+// ── 跟踪 / 估计（⚠️ EKF 细节很能刷）──
+// #define HZMIR_LOG_EKF             // EKF 新息（NIS）/ 收敛 / 发散判定
+// #define HZMIR_LOG_TRACKER         // 跟踪状态机切换（lost/detecting/tracking/temp_lost）
+// #define HZMIR_LOG_TARGET          // 目标选择/跳变/小陀螺判据
+
+// ── 规划 / 射击 ──
+// #define HZMIR_LOG_PLANNER         // MPC 迭代/弹道/重合度
+// #define HZMIR_LOG_AIMER           // 瞄点选择/延迟补偿
+// #define HZMIR_LOG_SHOOTER         // 开火判据为什么没过
+
+// ── 打符 ──
+// #define HZMIR_LOG_BUFF            // 打符检测/拟合/预测
+
+// ── 硬件 / 板卡 ──
+// #define HZMIR_LOG_CAMERA          // 相机 SDK 参数/带宽/丢帧
+// #define HZMIR_LOG_BOARD           // 下位机收发（⚠️ 每帧都发，很吵）
+// #define HZMIR_LOG_IMU             // IMU 数据/时间戳对齐
+
+// ── 轮子（utils/wheels/）──
+// #define HZMIR_LOG_TI               // 时序积分器（TemporalIntegrator）
+// #define HZMIR_LOG_TGD              // 传统检测的 TGD（目标引导检测）
+
+// ── 调试体系自身 ──
+// #define HZMIR_LOG_SINK            // sink 生命周期（挂上/摘掉/队列深度）
+
+// ═══════════════════════════════════════════════════════════════
+// 宏定义（⚠️ 下面的格式统一：关时展开成【空】，连参数都不求值）
+// ═══════════════════════════════════════════════════════════════
+
+#ifdef HZMIR_LOG_YOLO
+#  define LOG_YOLO(...) tools::logger()->debug("[yolo] " __VA_ARGS__)
+#else
+#  define LOG_YOLO(...)   // ⭐ 展开为空 ⇒ 零成本
+#endif
+
+#ifdef HZMIR_LOG_DETECTOR
+#  define LOG_DETECTOR(...) tools::logger()->debug("[detector] " __VA_ARGS__)
+#else
+#  define LOG_DETECTOR(...)
+#endif
+
+#ifdef HZMIR_LOG_EKF
+#  define LOG_EKF(...) tools::logger()->debug("[ekf] " __VA_ARGS__)
+#else
+#  define LOG_EKF(...)
+#endif
+
+#ifdef HZMIR_LOG_TRACKER
+#  define LOG_TRACKER(...) tools::logger()->debug("[tracker] " __VA_ARGS__)
+#else
+#  define LOG_TRACKER(...)
+#endif
+
+#ifdef HZMIR_LOG_TARGET
+#  define LOG_TARGET(...) tools::logger()->debug("[target] " __VA_ARGS__)
+#else
+#  define LOG_TARGET(...)
+#endif
+
+#ifdef HZMIR_LOG_PLANNER
+#  define LOG_PLANNER(...) tools::logger()->debug("[planner] " __VA_ARGS__)
+#else
+#  define LOG_PLANNER(...)
+#endif
+
+#ifdef HZMIR_LOG_AIMER
+#  define LOG_AIMER(...) tools::logger()->debug("[aimer] " __VA_ARGS__)
+#else
+#  define LOG_AIMER(...)
+#endif
+
+#ifdef HZMIR_LOG_SHOOTER
+#  define LOG_SHOOTER(...) tools::logger()->debug("[shooter] " __VA_ARGS__)
+#else
+#  define LOG_SHOOTER(...)
+#endif
+
+#ifdef HZMIR_LOG_BUFF
+#  define LOG_BUFF(...) tools::logger()->debug("[buff] " __VA_ARGS__)
+#else
+#  define LOG_BUFF(...)
+#endif
+
+#ifdef HZMIR_LOG_CAMERA
+#  define LOG_CAMERA(...) tools::logger()->debug("[camera] " __VA_ARGS__)
+#else
+#  define LOG_CAMERA(...)
+#endif
+
+#ifdef HZMIR_LOG_BOARD
+#  define LOG_BOARD(...) tools::logger()->debug("[board] " __VA_ARGS__)
+#else
+#  define LOG_BOARD(...)
+#endif
+
+#ifdef HZMIR_LOG_IMU
+#  define LOG_IMU(...) tools::logger()->debug("[imu] " __VA_ARGS__)
+#else
+#  define LOG_IMU(...)
+#endif
+
+#ifdef HZMIR_LOG_TI
+#  define LOG_TI(...) tools::logger()->debug("[TI] " __VA_ARGS__)
+#else
+#  define LOG_TI(...)
+#endif
+
+#ifdef HZMIR_LOG_TGD
+#  define LOG_TGD(...) tools::logger()->debug("[TGD] " __VA_ARGS__)
+#else
+#  define LOG_TGD(...)
+#endif
+
+#ifdef HZMIR_LOG_SINK
+#  define LOG_SINK(...) tools::logger()->debug("[sink] " __VA_ARGS__)
+#else
+#  define LOG_SINK(...)
+#endif
+
+#endif  // HZMIR_UTILS_LOG_DEBUG_CONFIG_HPP

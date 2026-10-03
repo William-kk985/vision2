@@ -149,6 +149,11 @@ void HikRobot::capture_start()
     return;
   }
 
+  // ⭐⭐⭐ W91：**必须在【覆盖之前】dump** —— 否则打印的是我们刚设的值（如强制 2 ms），
+  //   而用户想看的是【MVS 里调好的、相机上电后的当前值】。
+  //   ⇒ 这是「MVS 调好 → --dump-camera-params → 抄进 yaml」流程能成立的前提。
+  if (dump_params_) dump_camera_params();
+
   // ⚠️ 默认开【连续自动白平衡】—— 光照/色温变化时白平衡会漂，可能影响颜色判定。
   //   ⭐ 想关掉/锁死：在 yaml 的 `camera_params.enum` 里写 `BalanceWhiteAuto: 0`
   //     （0=Off 1=Once 2=Continuous）—— 见 W90 的通用参数通道。
@@ -158,9 +163,7 @@ void HikRobot::capture_start()
   set_float_value("ExposureTime", exposure_us_);
   set_float_value("Gain", gain_);
 
-  // ⭐⭐ W90：先 dump（如请求），再应用 yaml 的额外参数（**可覆盖上面的默认值**）
-  if (dump_params_) dump_camera_params();
-  apply_extra_params(extra_);
+
 
   // ⭐⭐⭐ W57：**必须显式关掉触发模式** —— 这是 `0x80000007`（取图超时）的头号嫌疑
   //

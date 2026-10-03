@@ -55,6 +55,13 @@ struct Plan
   int   pitch_iters = 0;      // pitch solver 迭代次数
   float acc_max = 0;          // 规划轨迹最大加速度（看有没有超物理上限）
 
+  // ⭐⭐⭐ W113：**瞄准点的世界坐标 (x, y, z, yaw)** —— 从 `Planner::debug_xyza` 带进来
+  //   ⚠️ 为什么必须进 `Plan`：`Planner::debug_xyza` 在 **plan 线程**里写，
+  //     主循环直接读它 = **数据竞争**。`Plan` 随 `psnap`（带锁）传递 ⇒ 安全。
+  //   ⭐ 用途：主循环 `reproject_armor()` 把它投回像素 ⇒ **画旧版赫兹那个"红圈瞄准点"**。
+  //   ⭐ 默认零向量 ⇒ 主循环判 `norm() > 1e-6` 即知"没填"（不需额外标志位）。
+  Eigen::Vector4d debug_xyza = Eigen::Vector4d::Zero();
+
   // ⭐⭐ W98：**把本 Plan 的调试量路由到三个角色的 Debug 结构**
   //
   // ## 为什么放在这里（而不是各主循环手写）

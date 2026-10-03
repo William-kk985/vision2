@@ -386,6 +386,16 @@ int main(int argc, char * argv[])
     };
     std::vector<DbgArmor> dbg_armors;
 
+    // ⭐⭐⭐ W113：**EKF 预测 + 瞄准点**（照搬旧版赫兹，新版重构时没搬）
+    //   ⚠️ 为什么必须"带出来"：`targets`（442 行）和 `psnap.plan`（515 行）
+    //     都在**更内层的作用域**里，而 overlay 在 551 行 ⇒ 只能先把【已投回像素的点】
+    //     存下来。⭐ 好处：投影只在真要图时算（`wants_image()` 门控）。
+    std::vector<std::vector<cv::Point2f>> dbg_pred;   // ⭐ 绿：EKF 预测的装甲板四点
+    std::vector<cv::Point2f> dbg_aim;                 // ⭐⭐ 红：瞄准点四点
+    // ⭐ 瞄准点投影要用【目标的类型/名字】（决定装甲板尺寸）⇒ 从 track 段带出来
+    auto_aim::ArmorType dbg_tgt_type = auto_aim::ArmorType::small;
+    auto_aim::ArmorName dbg_tgt_name = auto_aim::ArmorName::not_armor;
+
     // ⭐ W16：本帧调试快照
     auto_aim::FrameDebug fd;
     fd.frame_id = frame_id++;
@@ -452,6 +462,17 @@ int main(int argc, char * argv[])
         // ⭐⭐ W70：填 `tgt_*`（原来 `fd.target.*` **从没被赋值** → CSV 里 13 列永远 0）
         //   EKF 状态布局（见 target.cpp）：x vx y vy z vz a w r l h
         if (!targets.empty()) {
+          // ⭐⭐⭐ W113：**EKF 预测点 + 记录目标类型/名字**（给后面的瞄准点投影用）
+          //   ⭐ 成本：只在真要图时做（`wants_image()`）⇒ 没人看图时零开销。
+          if (hub.wants_image()) {
+            const auto & tg = targets.front();
+            dbg_tgt_type = tg.armor_type;
+            dbg_tgt_name = tg.name;
+            for (const auto & xyza : tg.armor_xyza_list()) {
+              dbg_pred.push_back(solver.reproject_armor(
+                xyza.head(3), xyza[3], tg.armor_type, tg.name));   // ⭐ 3D → 像素
+            }
+          }
           auto_aim::fill_target_debug(fd.target, targets.front(), fd.solver.t_solve_us);
           // ⭐⭐ W72：`tgt_invincible` + `sht_blocked_inv`（原来都是 0）
           //   无敌在 Tracker 的 filter 层判定 → 这里查掩码是否含该目标的兵种
@@ -517,6 +538,14 @@ int main(int argc, char * argv[])
         const auto & p = psnap.plan;
         // ⭐⭐ W98：**路由映射收进 `Plan::fill_debug()`**（原来四兵种各手写 10 行）
         p.fill_debug(fd.planner, fd.shooter, fd.controller);
+        // ⭐⭐⭐ W113：**瞄准点投回像素**（旧版赫兹的"红圈"就是它）
+        //   `Plan::debug_xyza` = 瞄准点的 (x,y,z,yaw)（`mpc.cpp:209` 被填）
+        //   ⚠️ 只在 [真要图] 且 [有目标] 时算 —— 每帧几次 4×4 矩阵乘，可忽略。
+        if (hub.wants_image() && dbg_tgt_name != auto_aim::ArmorName::not_armor &&
+            p.debug_xyza.head(3).norm() > 1e-6) {
+          dbg_aim = solver.reproject_armor(
+            p.debug_xyza.head(3), p.debug_xyza[3], dbg_tgt_type, dbg_tgt_name);
+        }
         fd.planner.t_plan_us = psnap.us;
         fd.controller.t_ctrl_us = psnap.ctl_us;   // ⭐ W73：board->send() 真实耗时
       }
@@ -557,6 +586,17 @@ int main(int argc, char * argv[])
       for (const auto & d : dbg_armors) {
         if (d.points.size() >= 2) tools::draw_points(overlay, d.points, {0, 255, 0}, 2);
         tools::draw_text(overlay, d.label, d.center, {0, 255, 0}, 0.6, 1);
+      }
+
+      // ⭐⭐⭐ W113：**EKF 预测点（绿）+ 瞄准点（红）** —— 照搬旧版赫兹
+      //   ⚠️ 与上面"检测四点"的区别：检测是【这一帧看到了什么】，
+      //     预测是【EKF 认为目标在哪】⇒ 两者不重合时说明"跟踪在补偿"。
+      for (const auto & pts : dbg_pred) {
+        if (pts.size() >= 2) tools::draw_points(overlay, pts, {0, 255, 0}, 1);   // ⭐ 绿：EKF 预测
+      }
+      if (dbg_aim.size() >= 2) {
+        tools::draw_points(overlay, dbg_aim, {0, 0, 255}, 3);          // ⭐ 红：瞄准点四点
+        tools::draw_aim_point(overlay, dbg_aim, {0, 0, 255}, 20, 3);   // ⭐⭐ 红圈 + 十字
       }
       cv::putText(
         overlay, cv::format("f%u %s", fd.frame_id, tracker.state().c_str()), {12, 40},

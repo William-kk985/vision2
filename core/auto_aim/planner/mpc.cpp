@@ -129,6 +129,8 @@ Plan Planner::plan(Target target, double bullet_speed)
   plan.acc_max = static_cast<float>(std::max(
     std::abs(yaw_solver_->work->u.row(0).maxCoeff()),
     std::abs(pitch_solver_->work->u.row(0).maxCoeff())));
+  // ⭐⭐⭐ W113：把瞄准点带进 `Plan`（供主循环画"红圈"；直接读 `debug_xyza` 有竞争）
+  plan.debug_xyza = debug_xyza;
   return plan;
 }
 

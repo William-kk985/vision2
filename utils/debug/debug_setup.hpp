@@ -67,6 +67,12 @@ struct DebugOptions
 {
   std::string csv_prefix;              ///< 空 = 不落 CSV
   bool pj = false;                     ///< 启动就发 PlotJuggler UDP
+    // ⭐ W88：**跨机器看** —— 目标地址可配（默认本机）。
+    //   对方机器上 PlotJuggler 的 UDP Server 监听 `0.0.0.0`（默认就是），
+    //   这里填它的 IP 即可；⚠️ 记得放行对方防火墙的 UDP 9870。
+    //   ⭐ 流量很小：一帧 JSON ≈ 400 B × 30 fps ≈ **12 KB/s**，WiFi 完全够。
+    std::string pj_host = "127.0.0.1";   ///< 目标 IP（跨机器时填对方 IP）
+    uint16_t pj_port = 9870;             ///< 目标端口
   bool img = false;                    ///< L3：启动就开存图
   bool window = false;                 ///< L3：启动就开可视化窗口
   bool verbose_hotkeys = true;         ///< 打印热键帮助
@@ -94,12 +100,15 @@ struct DebugRuntime
   {
     // ── ① 启动就挂的 sink ──
     if (!opt.csv_prefix.empty()) hub.add(std::make_shared<CsvSink>(opt.csv_prefix));
-    hub.add(std::make_shared<PlotJugglerSink>("127.0.0.1", 9870, opt.pj));
+    hub.add(std::make_shared<PlotJugglerSink>(opt.pj_host, opt.pj_port, opt.pj));
 
     // ── ② 热键用的工厂（按键时现场造 sink）──
     const std::string csv_prefix = opt.csv_prefix.empty() ? opt.csv_fallback : opt.csv_prefix;
     factories.csv = [csv_prefix] { return std::make_shared<CsvSink>(csv_prefix); };
-    factories.plotjuggler = [] { return std::make_shared<PlotJugglerSink>("127.0.0.1", 9870, true); };
+    {
+        const std::string h = opt.pj_host; const uint16_t pt = opt.pj_port;
+        factories.plotjuggler = [h, pt] { return std::make_shared<PlotJugglerSink>(h, pt, true); };
+      }
 
     // ── ③ L3 装配（⭐⭐ W60：**不再用 `#ifdef`** —— 总是编入，纯运行期控制）──
     const auto o = opt;   // 捕获副本

@@ -114,10 +114,33 @@ ss -lunp | grep 9870        # ⭐ 有输出 = PlotJuggler 真的在监听
 grep -i 268E /proc/net/udp  # 9870=0x268E；⭐ rx_queue 持续非 0 = 收到了但没消费（流没启动）
 ```
 
-##### ④ 跑起来
+##### ⭐ ④ 跨机器看（笔记本跑自瞄，台式/另一台看图）
+
+⭐ **PlotJuggler 侧默认就支持**（它的 UDP Server 监听 `0.0.0.0`，能收任何来源）。
+只要在我们这边指定对方 IP：
 
 ```bash
-tools/scripts/run.sh infantry --pj=true       # 启动即发
+# 在【机器人/小电脑】上跑（把 IP 换成看图那台机器的）
+tools/scripts/run.sh infantry --pj=true --pj-host=192.168.1.50 --pj-port=9870
+#                              ↑ 开             ↑ 对方 IP            ↑ 默认 9870
+```
+
+⭐ **流量极小**（实测）：一帧 JSON **≈ 420 B** → @30fps 仅 **12 KB/s（0.10 Mbps）**
+，@150fps 也才 **0.5 Mbps** ⇒ **WiFi 完全够**。
+
+⚠️ **两个注意点**：
+| 项 | 说明 |
+|---|---|
+| **防火墙** | 看图那台要放行 **UDP 9870**（`sudo ufw allow 9870/udp`，或 Windows 防火墙入站规则） |
+| **无线丢包** | ⚠️ 无线比有线易丢包 → 曲线会跳。**重要调试建议有线**；UDP 丢包**不重传** |
+| **不跨网段** | ⚠️ UDP 广播不穿透路由器；同一局域网内直接用 IP 即可 |
+
+⭐ **自检（在图那台上）**：`ss -lunp | grep 9870` —— 有输出才说明它在等数据。
+
+##### ⑤ 跑起来
+
+```bash
+tools/scripts/run.sh infantry --pj=true       # 启动即发（本机）
 # 或跑起来后按 3（热插拔，随时开关）
 ```
 

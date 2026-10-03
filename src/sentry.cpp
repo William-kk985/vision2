@@ -82,6 +82,8 @@ const std::string keys =
   "{csv            | | ⭐ Debug CSV 输出前缀}"
   "{record         | false | ⭐⭐ 录像到 output/video/（默认**不录**；录会占一个核做 MJPG 编码）}"
   "{pj             | false | ⭐ 是否发 PlotJuggler UDP}"
+  "{pj-host        | 127.0.0.1 | ⭐ PlotJuggler 目标 IP（跨机器时填对方 IP）}"
+  "{pj-port        | 9870 | ⭐ PlotJuggler 目标端口}"
   "{tongji         | true | ⭐⭐ 同济兼容模式（默认 true = 完全同济行为）}"
   "{strict-device  | false | ⭐ 严格设备模式（true = 设备不可用就抛异常）}"
   "{no-board       | false | ⭐⭐ 强制虚拟下位机（不碰串口；只有摄像头时用）}"
@@ -128,7 +130,8 @@ template <typename Board>
 int run_sentry(
   io::CameraBase & camera, Board & cboard, const auto_aim::Color /*enemy_color*/,
   const std::string & config_path, const std::string & csv_prefix, bool verbose_hotkeys,
-  bool record)
+  bool record, bool pj = false,
+  const std::string & pj_host = "127.0.0.1", uint16_t pj_port = 9870)
 {
   auto_aim::YOLO yolo(config_path, true);
   auto_aim::Solver solver(config_path);
@@ -153,8 +156,9 @@ int run_sentry(
     // ⚠️ 这两个兵种的 `cli` 不在本作用域 → 用默认 30 天
     tools::guard_on_startup(30, tools::paths::video());   // ⭐ W84
 
-    tools::DebugRuntime dbg(
-      {.csv_prefix = csv_prefix, .verbose_hotkeys = verbose_hotkeys, .name = "sentry"});
+      tools::DebugRuntime dbg({.csv_prefix = csv_prefix, .pj = pj, .pj_host = pj_host,
+                               .pj_port = pj_port, .verbose_hotkeys = verbose_hotkeys,
+                               .name = "sentry"});
     auto & hub = dbg.hub;                 // ⭐ 别名：保持下游代码一字不改
     auto & expense = dbg.expense;
     auto & hotkeys = dbg.hotkeys;
@@ -317,7 +321,9 @@ int main(int argc, char * argv[])
     io::Camera camera(config_path);
     io::CBoard cboard(config_path);
     tools::logger()->info("[sentry] 真实硬件模式（CBoard/CAN）");
-    return run_sentry(camera, cboard, enemy_color, config_path, csv_prefix, true, cli.get<bool>("record"));
+    return run_sentry(camera, cboard, enemy_color, config_path, csv_prefix, true, cli.get<bool>("record"),
+                     cli.get<bool>("pj"), cli.get<std::string>("pj-host"),
+                     static_cast<uint16_t>(cli.get<int>("pj-port")));
   }
 
   // ── 录像回放（零硬件）──
@@ -339,7 +345,9 @@ int main(int argc, char * argv[])
     (shoot_mode == io::ShootMode::left_shoot    ? "left"
      : shoot_mode == io::ShootMode::right_shoot ? "right"
                                                 : "both"));
-  const int rc = run_sentry(camera, cboard, enemy_color, config_path, csv_prefix, true, cli.get<bool>("record"));
+  const int rc = run_sentry(camera, cboard, enemy_color, config_path, csv_prefix, true, cli.get<bool>("record"),
+                     cli.get<bool>("pj"), cli.get<std::string>("pj-host"),
+                     static_cast<uint16_t>(cli.get<int>("pj-port")));
   tools::logger()->info("[sentry] 录像播放完毕（共 {} 帧），退出", cboard.sent_count);
   return rc;
 }

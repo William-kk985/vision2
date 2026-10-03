@@ -63,6 +63,9 @@ const std::string keys =
   "{force-mode     | 1 | ⭐ 录像模式档位：0=idle 1=auto_aim 2=small_buff 3=big_buff 4=outpost}"
   "{bullet-speed   | 22.0 | 录像模式下的弹速}"
   "{csv            | | ⭐ Debug CSV 输出前缀}"
+  "{pj             | false | ⭐ 是否发 PlotJuggler UDP（跨机器请看 --pj-host）}"
+  "{pj-host        | 127.0.0.1 | ⭐ PlotJuggler 目标 IP（跨机器时填对方 IP）}"
+  "{pj-port        | 9870 | ⭐ PlotJuggler 目标端口}"
   "{record         | false | ⭐⭐ 录像到 output/video/（默认**不录**；录会占一个核做 MJPG 编码）}"
   "{tongji         | true | ⭐⭐ 同济兼容模式（默认 true = 完全同济行为）}"
   "{strict-device  | false | ⭐ 严格设备模式}"
@@ -106,7 +109,8 @@ struct ReplayCBoard
 /// @brief 无人机主循环（⭐ 一份逻辑，`io::CBoard` / `ReplayCBoard` 各实例化一次）
 template <typename Board>
 int run_uav(io::CameraBase & camera, Board & cboard, const std::string & config_path,
-            const std::string & csv_prefix, bool record)
+            const std::string & csv_prefix, bool record,
+            bool pj = false, const std::string & pj_host = "127.0.0.1", uint16_t pj_port = 9870)
 {
   tools::Exiter exiter;
   // ⭐⭐ W48：录像**默认关**（录会占一个核做 MJPG 编码；要录传 --record）
@@ -132,7 +136,8 @@ int run_uav(io::CameraBase & camera, Board & cboard, const std::string & config_
     // ⚠️ 这两个兵种的 `cli` 不在本作用域 → 用默认 30 天
     tools::guard_on_startup(30, tools::paths::video());   // ⭐ W84
 
-    tools::DebugRuntime dbg({.csv_prefix = csv_prefix, .name = "uav"});
+    tools::DebugRuntime dbg({.csv_prefix = csv_prefix, .pj = pj, .pj_host = pj_host,
+                             .pj_port = pj_port, .name = "uav"});
     auto & hub = dbg.hub;                 // ⭐ 别名：保持下游代码一字不改
     auto & expense = dbg.expense;
     auto & hotkeys = dbg.hotkeys;
@@ -278,7 +283,9 @@ int main(int argc, char * argv[])
     io::Camera camera(config_path);
     io::CBoard cboard(config_path);
     tools::logger()->info("[uav] 真实硬件模式（CBoard/CAN）");
-    return run_uav(camera, cboard, config_path, csv_prefix, cli.get<bool>("record"));
+    return run_uav(camera, cboard, config_path, csv_prefix, cli.get<bool>("record"),
+            cli.get<bool>("pj"), cli.get<std::string>("pj-host"),
+            static_cast<uint16_t>(cli.get<int>("pj-port")));
   }
 
   // ── 录像回放（零硬件）──
@@ -293,7 +300,9 @@ int main(int argc, char * argv[])
   tools::logger()->info(
     "[uav] 录像回放模式: {} mode={}({})", video_path, int(m),
     (m >= 0 && m < int(io::MODES.size())) ? io::MODES[m] : "?");
-  const int rc = run_uav(camera, cboard, config_path, csv_prefix, cli.get<bool>("record"));
+  const int rc = run_uav(camera, cboard, config_path, csv_prefix, cli.get<bool>("record"),
+            cli.get<bool>("pj"), cli.get<std::string>("pj-host"),
+            static_cast<uint16_t>(cli.get<int>("pj-port")));
   tools::logger()->info("[uav] 录像播放完毕（共 {} 帧），退出", cboard.sent_count);
   return rc;
 }

@@ -67,6 +67,8 @@ const std::string keys =
 
   "{record         | false | ⭐⭐ 录像到 output/video/（默认**不录**；录会占一个核做 MJPG 编码）}"
   "{pj             | false | ⭐ 是否发 PlotJuggler UDP}"
+  "{pj-host        | 127.0.0.1 | ⭐ PlotJuggler 目标 IP（跨机器时填对方 IP）}"
+  "{pj-port        | 9870 | ⭐ PlotJuggler 目标端口}"
   "{debug-img      | false | ⭐ L3：启动就开存图（每 30 张 1 张，上限 500）}"
   "{debug-window   | false | ⭐ L3：启动就开可视化窗口（需 DISPLAY）}"
   "{tongji         | true | ⭐⭐ 同济兼容模式：true(默认)=完全同济行为；false=启用本项目优化}"
@@ -163,6 +165,8 @@ int main(int argc, char * argv[])
     tools::DebugRuntime dbg(
       {.csv_prefix = cli.get<std::string>("csv"),
        .pj = cli.get<bool>("pj"),
+      .pj_host = cli.get<std::string>("pj-host"),
+      .pj_port = static_cast<uint16_t>(cli.get<int>("pj-port")),
        .img = cli.get<bool>("debug-img"),
        .window = cli.get<bool>("debug-window"),
        .name = "infantry"},

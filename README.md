@@ -317,12 +317,24 @@ tools/scripts/run.sh infantry --log-off=yolo
 
 ⭐ **日志**（**已节流**：无候选每 60 帧一条、输出统计每 30 帧一条 ⇒ 不会刷屏）：
 ```
-[YOLOV5] 本帧无候选：objectness 峰值 0.002 < 阈值 0.70
+[yolov5] 本帧无候选：objectness 峰值 0.002 < 阈值 0.70
          （采样 25200 个 anchor；>0.3 有 0 个、>0.1 有 0 个）      ← ⭐ "有没有戏"一眼看出
 [yolov5] objectness 通过 6 → 输出 1（滤掉 not_armor 0 / conf 0 / type 0）
-[yolov5] objectness 通过 2 个候选 → 全被滤掉：not_armor 0 / 置信度 1 / 类型不符 0
+[yolov5] objectness 通过 2 个候选 → 全被滤掉：not_armor 0 / 置信度 1 / 类型不符 0（—）
          ↑ ⭐ "卡在哪一步"（每 30 帧一条）
 ```
+
+⭐ **W107 新增：`check_type` 丢掉的会【按名字】列出来**（不再是光秃秃的数字）：
+```
+[yolov5] objectness 通过 3 → 输出 1（滤掉 not_armor 0 / conf 0 / type 1）　⚠️ type 丢的是：base×1
+                                                                           ↑ ⭐ 一眼看出"丢的是基地"
+[yolov5] …全被滤掉：… 类型不符 2（base×1 three×1）…
+```
+⚠️ **为什么需要它**：`v5` 的 `type` 规则是 `num_id == 1 ? big : small`（**只有 `one` 判 big**），
+而 `armor_properties` 的 big 是 `base`/`three`/`four`/`five`
+⇒ ⚠️ **`base` 必然被判成 `small`，然后被 `check_type` 丢掉**。
+⭐ **旧日志只报 `type 1`（数字）⇒ 属于"静默丢目标"** —— 现在能看见了
+（测试 `test_detect_filter` 钉住了这个事实）。
 
 ⭐ **数值（`FrameDebug` → CSV / PlotJuggler，**不用重编、能看趋势**）：
 

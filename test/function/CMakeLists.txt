@@ -99,3 +99,7 @@ set_tests_properties(test_debug_layout PROPERTIES WORKING_DIRECTORY ${CMAKE_SOUR
 add_executable(test_csv_schema test_csv_schema.cpp)
 target_link_libraries(test_csv_schema hzmir_utils)
 add_test(NAME test_csv_schema COMMAND test_csv_schema)
+
+add_executable(test_log_filter test_log_filter.cpp)
+target_link_libraries(test_log_filter hzmir_utils)
+add_test(NAME test_log_filter COMMAND test_log_filter)

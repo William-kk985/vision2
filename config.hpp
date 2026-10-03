@@ -59,7 +59,7 @@
 // ═══════════════════════════════════════════════════════════════
 // E. 运行期默认值
 // ═══════════════════════════════════════════════════════════════
-#define CONFIG_DEFAULT_YAML  "params/infantry.yaml"
+#define CONFIG_DEFAULT_YAML  "params/robots/infantry.yaml"
 #define CONFIG_DEFAULT_ROBOT "infantry"
 
 // ═══════════════════════════════════════════════════════════════

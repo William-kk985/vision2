@@ -8,6 +8,7 @@
 #include <functional>
 #include <sstream>
 
+#include "utils/log/log_filter.hpp"
 #include "utils/log/logger.hpp"
 
 namespace tools
@@ -182,6 +183,12 @@ void DebugKeyBindings::bind(
   hk.on('d', "日志级别循环", [] {
     // ⭐⭐ W78：**必须绕过 logger** —— 否则切到 err/off 时这句自己也被过滤（实测踩到）
     hotkey_feedback("日志级别 -> %s", tools::log_level_name(tools::cycle_log_level()));
+  });
+
+  // ⭐⭐ W95：n —— 按模块过滤日志（全局级别之外的细粒度控制）
+  //   循环：全部 → 静音噪音（yolov5/VirtualBoard/TGD…）→ 只看关键（Tracker/Planner/…）
+  hk.on('n', "日志模块过滤循环", [] {
+    hotkey_feedback("%s", tools::cycle_log_filter().c_str());   // ⭐ 同样绕过 logger
   });
 
   // p —— 暂停/继续

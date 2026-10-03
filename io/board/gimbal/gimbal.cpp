@@ -41,7 +41,7 @@ Gimbal::Gimbal(const std::string & config_path)
       tools::logger()->error("[Gimbal]  本机没有任何 /dev/ttyUSB* / ttyACM* 设备");
     }
 
-    // ⭐ 从配置路径推导兵种名（如 params/hero.yaml → "hero"），避免硬编码
+    // ⭐ 从配置路径推导兵种名（如 params/robots/hero.yaml → "hero"），避免硬编码
     std::string robot = "infantry";
     {
       const auto stem = std::filesystem::path(config_path).stem().string();

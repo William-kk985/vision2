@@ -14,7 +14,7 @@
 
 ```bash
 # 录像回放 + 落 CSV（主链路一行不用改）
-./src/infantry --video=demo.avi --force-mode=1 --csv=run params/infantry.yaml
+./src/infantry --video=demo.avi --force-mode=1 --csv=run params/robots/infantry.yaml
 #                                          ↑ 0=IDLE 1=自瞄 2=小符 3=大符
 # 产出 run_frames.csv（57 列）+ run_series.csv（曲线）
 ```

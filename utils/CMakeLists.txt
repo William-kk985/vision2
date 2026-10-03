@@ -3,6 +3,7 @@ add_library(hzmir_utils STATIC
   math/math_tools.cpp
   math/crc.cpp
   log/logger.cpp
+  log/log_filter.cpp
   concurrency/exiter.cpp
   ekf/extended_kalman_filter.cpp
   debug/img_tools.cpp

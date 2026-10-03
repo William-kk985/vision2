@@ -186,7 +186,7 @@ d,_=s.recvfrom(65535); o=json.loads(d); print(len(o),'字段:',sorted(o)[:6])"
 四个兵种程序都支持 **录像回放**，没有相机/下位机也能跑通整条链路：
 
 ```bash
-./src/infantry --video=demo.avi --force-mode=1 --csv=run params/infantry.yaml
+./src/infantry --video=demo.avi --force-mode=1 --csv=run params/robots/infantry.yaml
 python3 scripts/analyze.py run_frames.csv        # 帧预算占用
 python3 scripts/plot.py    run_frames.csv --preset plan
 python3 scripts/compare.py A_frames.csv B_frames.csv    # A/B 实验对比
@@ -231,6 +231,44 @@ tools/scripts/run.sh infantry --strict-board                    # 没下位机�
 
 ⚠️ **虚拟下位机的限制**：IMU 姿态恒为单位四元数、弹速取 yaml 配置值
 ⇒ **EKF 的 yaw/ω 预测、弹道误差、命中判定都不可信**；但**检测/跟踪/解算/规划的内部量可以照常看**。
+
+#### ⭐⭐ 日志太吵？（按模块过滤）
+
+全局级别（热键 `d`）只有一档，想「关掉 `yolov5` 的逐帧刷屏、但保留其它 debug」做不到。
+现在可以**按模块**控制：
+
+```bash
+# ⭐ 静音指定模块（逗号分隔）
+tools/scripts/run.sh infantry --log-off=yolov5,VirtualBoard
+
+# ⭐ 只看指定模块（白名单，其余全丢）
+tools/scripts/run.sh infantry --log-only=Tracker,Planner,Shooter
+```
+
+⭐ **热键 `n`**：循环三个预设 ——
+```
+① 全部（不过滤）
+② 静音噪音   —— yolov5 / YOLOV5 / VirtualBoard / TGD / TI / ReplayCBoard / TableTrajectory
+③ 只看关键   —— Tracker / Planner / Shooter / Gimbal / Target / Priority / Aimer / Solver / ArmorFilter
+```
+
+**规则**（实测行为）：
+| 情况 | 行为 |
+|---|---|
+| 模块名 = 消息开头的 `[xxx]` | 按黑白名单过滤 |
+| ⚠️ **消息不以 `[` 开头** | ⭐ **一律放行**（如 `Switch to AUTO_AIM`、启动横幅） |
+| ⭐ **大小写敏感** | `--log-off=yolov5` **不会**命中 `[YOLOV5]` |
+| 白名单 vs 黑名单 | **后设置的覆盖前面的** |
+| 环境变量 | `HZMIR_LOG_OFF=` / `HZMIR_LOG_ONLY=`（CLI 优先） |
+
+⭐ **实测效果**（录像回放 687 帧）：
+```
+不过滤              : yolov5 日志 142 条
+--log-off=yolov5    : yolov5 日志   0 条   ← ⭐ 完全静音
+--log-only=Planner  : 其它模块       0 条   ← ⭐ 完全排他
+```
+
+---
 
 #### ⭐⭐ 调相机参数（不用每次开 MVS）
 
@@ -291,7 +329,9 @@ fps: 30                 # 帧率
 
 ⭐ **换路径 / 禁用**：`--camera-config=<path>`；传**空** `--camera-config=` 就只用兵种 yaml（兼容原行为）。
 
-# ⭐⭐ W90：通用通道 —— 任意海康参数都能设（名字与 MVS 里显示的一致）
+⭐ **通用通道（任意海康参数）**：
+```yaml
+# params/cameras/<兵种>.yaml 或 params/cameras/hikrobot.yaml
 camera_params:
   float:                      # MV_CC_SetFloatValue
     Gamma: 1.0
@@ -425,7 +465,7 @@ cd build && ctest          # 20 个用例，约 8 s
 ### 跑起来（零硬件）
 
 ```bash
-./build/src/infantry --video=demo.avi --force-mode=1 --csv=run params/infantry.yaml
+./build/src/infantry --video=demo.avi --force-mode=1 --csv=run params/robots/infantry.yaml
 #                                   ↑ 0=IDLE 1=自瞄 2=小符 3=大符
 ```
 
@@ -444,9 +484,9 @@ cd build && ctest          # 20 个用例，约 8 s
 
 ```bash
 # 完全同济行为（默认）
-./src/infantry params/infantry.yaml
+./src/infantry params/robots/infantry.yaml
 # 启用本项目的优化
-./src/infantry --tongji=false params/infantry.yaml
+./src/infantry --tongji=false params/robots/infantry.yaml
 ```
 
 ⭐ **每一处改动都能枚举、能关闭** —— 详见 `docs/`。

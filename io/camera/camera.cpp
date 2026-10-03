@@ -18,13 +18,13 @@ namespace
 {
 /// ⭐⭐ W92：**按优先级读一个键**：兵种 yaml > 相机专配 > 空
 ///
-/// 这样「4 兵种共用的相机参数」只写在 `params/camera.yaml` 一处；
-/// 某个兵种要特殊值（如 sentry 曝光 0.8ms、uav 用 mindvision），
-/// 就在自己的 yaml 里写同名键覆盖即可。
+/// 相机配置的定位链：`--camera-config` CLI > 兵种 yaml 的 `camera_config:` 键
+/// > 品牌默认 `params/cameras/<品牌>.yaml` > 内置默认。
+/// 某个兵种要特殊值，就在 `params/cameras/<兵种>.yaml` 里写（或直接在兵种 yaml 覆盖）。
 struct MergedYaml
 {
   YAML::Node robot;    ///< 兵种 yaml（`params/<兵种>.yaml`）—— 优先级最高
-  YAML::Node camera;   ///< 相机专配（`params/camera.yaml`）
+  YAML::Node camera;   ///< 兵种相机配置（`params/cameras/<兵种>.yaml`）
   YAML::Node vendor;   ///< ⭐ 品牌专配（`params/cameras/<品牌>.yaml`）—— 优先级最低
 
   YAML::Node get(const char * key) const
@@ -80,27 +80,30 @@ Camera::Camera(
   MergedYaml y;
   y.robot = tools::load(config_path);
 
-  // ⭐⭐ W94：**兵种 yaml 可以用一行 `camera_config:` 指向自己的相机配置**，
-  //   这样兵种 yaml 里不再堆相机参数（曝光/增益/vid_pid/品牌…）。
-  //   优先级：`--camera-config` CLI  >  兵种 yaml 的 `camera_config`  >  默认 `params/camera.yaml`
-  std::string cam_path = camera_config;
-  if (y.robot["camera_config"]) {
-    const auto from_yaml = y.robot["camera_config"].as<std::string>();
-    // ⚠️ CLI 显式给了（且与默认不同）就以 CLI 为准；否则用兵种 yaml 指定的
-    if (camera_config == "params/camera.yaml") cam_path = from_yaml;
+  // ⭐⭐ W94：**相机配置的定位链**（不再有全局的 `params/camera.yaml`）：
+  //     `--camera-config=<path>` CLI（显式给才有）
+  //        ↓ 否则
+  //     兵种 yaml 的 `camera_config:` 键（如 `params/cameras/infantry.yaml`）
+  //        ↓ 该文件的 `camera_name` 再自动带出
+  //     品牌默认 `params/cameras/<品牌>.yaml`（如 hikrobot.yaml / mindvision.yaml）
+  //   优先级（低→高）：品牌默认 < 兵种相机配置 < 兵种 yaml 里同名的相机键
+  std::string cam_path = camera_config;          // ⭐ CLI 优先
+  if (cam_path.empty() && y.robot["camera_config"]) {
+    cam_path = y.robot["camera_config"].as<std::string>();
   }
 
-  // ⭐⭐ W92：相机专配（默认 `params/camera.yaml`）—— 4 兵种共用，不用每份都改
   if (!cam_path.empty() && std::filesystem::exists(cam_path)) {
     y.camera = tools::load(cam_path);
-    tools::logger()->info("[Camera] 相机专配: {}", cam_path);
+    tools::logger()->info("[Camera] 相机配置: {}", cam_path);
   } else if (!cam_path.empty()) {
-    tools::logger()->debug("[Camera] 无相机专配 {} → 只用兵种 yaml 的相机段", cam_path);
+    tools::logger()->warn(
+      "[Camera] ⚠️ 兵种 yaml 指定的 camera_config 不存在: {} → 只用品牌默认 + 内置默认",
+      cam_path);
   }
 
   // ⭐⭐ W93：**按品牌分文件** —— `params/cameras/<camera_name>.yaml`
   //   放"这个品牌特有的东西"（如海康的 PixelFormat、迈德威视的 gamma），
-  //   ⇒ 换相机品牌时不用动 `params/camera.yaml` 和兵种 yaml。
+  //   ⇒ 换相机品牌时不用动兵种 yaml。
   //   优先级最低（可被上面两层覆盖）。
   auto camera_name = y.read<std::string>("camera_name", "hikrobot");
   {
@@ -108,7 +111,7 @@ Camera::Camera(
     //   ① 与 cam_path **同目录**的 `<品牌>.yaml`
     //      （如 `params/cameras/infantry.yaml` → `params/cameras/hikrobot.yaml`）
     //   ② `<cam_path.parent>/cameras/<品牌>.yaml`
-    //      （如 `params/camera.yaml` → `params/cameras/hikrobot.yaml`）
+    //      （如 `params/cameras/infantry.yaml` → `params/cameras/hikrobot.yaml`）
     //   ⚠️ 修复：原来只试 ②，当 cam_path 已在 `cameras/` 下时会变成
     //      `params/cameras/cameras/hikrobot.yaml`（多一层，永远找不到）。
     const auto parent = std::filesystem::path(cam_path).parent_path();

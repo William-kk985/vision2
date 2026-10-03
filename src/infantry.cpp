@@ -29,6 +29,7 @@
 #include "core/auto_buff/type.hpp"
 #include "utils/concurrency/exiter.hpp"
 #include "utils/debug/img_tools.hpp"
+#include "utils/log/log_filter.hpp"
 #include "utils/log/logger.hpp"
 #include "utils/math/math_tools.hpp"
 #include "utils/debug/plotter.hpp"
@@ -64,7 +65,7 @@ const std::string keys =
   "{video-speed    | 1.0 | ⭐ 录像播放速率（1.0=实时；调大=快放；⭐ 0=不节流全速跑批）}"
   "{bullet-speed   | 22.0 | 录像模式下的弹速（下位机不可用时）}"
   "{dump-camera-params | false | ⭐ 只打印相机常用参数的当前值（用于把 MVS 里的好值抄进 yaml 的 camera_params）}"
-  "{camera-config  | params/camera.yaml | ⭐⭐ 相机专配 yaml（4 兵种共用；兵种 yaml 的相机段可覆盖；传空=不用）}"
+  "{camera-config  | | ⭐ 覆盖相机配置路径（默认用兵种 yaml 的 camera_config 键）}"
   "{csv            |      | ⭐ Debug CSV 输出前缀（给路径才落 CSV）}"
 
   "{record         | false | ⭐⭐ 录像到 output/video/（默认**不录**；录会占一个核做 MJPG 编码）}"
@@ -79,7 +80,9 @@ const std::string keys =
   "{no-board       | false | ⭐⭐ 强制虚拟下位机（不碰串口；只有摄像头时用）}"
   "{strict-board   | false | ⭐⭐ 串口不存在就失败退出（同济行为）；默认自动降级虚拟板}"
   "{det-stats      | true | ⭐ 逐帧打印检测统计（候选→各步过滤）；false 硬关}"
-  "{log-keep-days  | 30 | ⭐ 日志保留天数（超期自动清理 output/logs/；0=不清理）}";
+  "{log-keep-days  | 30 | ⭐ 日志保留天数（超期自动清理 output/logs/；0=不清理）}"
+  "{log-off        | | ⭐⭐ 按模块静音日志，逗号分隔（如 yolov5,VirtualBoard）}"
+  "{log-only       | | ⭐⭐ 只打印这些模块（如 Tracker,Planner,Shooter）}";
 
 using namespace std::chrono_literals;
 
@@ -87,6 +90,16 @@ int main(int argc, char * argv[])
 {
   cv::CommandLineParser cli(argc, argv, keys);
   auto config_path = cli.get<std::string>("@config-path");
+
+  // ⭐⭐⭐ W95：**按模块过滤日志必须尽早设置** —— 否则启动期日志
+  //   （如 `[infantry] 同济兼容模式` / `[VideoCamera]` / `[ReplayBoard]`）
+  //   会在过滤生效前就打出来（实测踩过）。
+  {
+    const auto log_off = cli.get<std::string>("log-off");
+    const auto log_only = cli.get<std::string>("log-only");
+    if (!log_off.empty())  tools::set_log_modules_off(tools::parse_module_list(log_off));
+    if (!log_only.empty()) tools::set_log_modules_only(tools::parse_module_list(log_only));
+  }
   if (cli.has("help") || !cli.has("@config-path")) {
     cli.printMessage();
     return 0;

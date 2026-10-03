@@ -84,7 +84,7 @@ fi
 ok "$BIN  [$BT]"
 
 # ── ② 参数文件 ──
-PARAMS="${PARAMS_OVERRIDE:-$ROOT/params/$ROBOT.yaml}"
+PARAMS="${PARAMS_OVERRIDE:-$ROOT/params/robots/$ROBOT.yaml}"
 if [ -f "$PARAMS" ]; then ok "参数: $PARAMS"
 else warn "找不到 $PARAMS（程序会用默认值）"; fi
 

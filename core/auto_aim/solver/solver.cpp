@@ -61,10 +61,22 @@ void Solver::solve(Armor & armor) const
   const auto & object_points =
     (armor.type == ArmorType::big) ? BIG_ARMOR_POINTS : SMALL_ARMOR_POINTS;
 
+  // ⭐⭐ W119：**`solvePnP` 失败不再静默**（原来完全不检查返回值）
+  //   ⚠️ 点不足 4 个 / 四点退化（共线）时 `solvePnP` 会抛异常 ⇒ 原来直接把异常
+  //     抛给调用方（Tracker），**现场看不到"是这个装甲板的 PnP 挂了"**。
   cv::Vec3d rvec, tvec;
-  cv::solvePnP(
-    object_points, armor.points, camera_matrix_, distort_coeffs_, rvec, tvec, false,
-    cv::SOLVEPNP_IPPE);
+  try {
+    cv::solvePnP(
+      object_points, armor.points, camera_matrix_, distort_coeffs_, rvec, tvec, false,
+      cv::SOLVEPNP_IPPE);
+  } catch (const cv::Exception & e) {
+    static int n_pnp_fail = 0;
+    if (++n_pnp_fail % 60 == 1)
+      tools::logger()->warn(
+        "[Solver] solvePnP 失败 ×{}：点数={} type={} name={} | {}", n_pnp_fail, armor.points.size(),
+        static_cast<int>(armor.type), static_cast<int>(armor.name), e.what());
+    throw;   // ⭐ 行为不变：仍然抛给调用方（只是多了一条日志）
+  }
 
   Eigen::Vector3d xyz_in_camera;
   cv::cv2eigen(tvec, xyz_in_camera);
@@ -101,6 +113,29 @@ void Solver::solve(Armor & armor) const
   last_dbg_.solved = 1;
   last_dbg_.yaw_offset = armor.ypr_in_world[0] - armor.yaw_raw;
   last_dbg_.reprojection_error = armor_reprojection_error(armor, armor.ypr_in_world[0], 0.0);
+  // ⭐⭐ W119：**重投影误差过大 ⇒ PnP 解不可信**
+  //   ⭐ 这是"PnP 解错了"的**直接指标** —— 比看 `xyz_in_world` 跳变更早发现。
+  //
+  //   ⚠️⚠️ **阈值必须实测决定**：我一开始拍脑袋写 20 px，实测后发现**那就是中位数**
+  //     ⇒ 会把一半的帧都报出来。**实测分布**（demo.avi，687 帧，`sol_reproj_err` 列）：
+  //     | 统计 | 值 |
+  //     |---|---|
+  //     | min | **3.71 px** |
+  //     | 中位 | **20.23 px** |
+  //     | p90 | **60.01 px** |
+  //     | max | **378.66 px** |
+  //   ⇒ ⭐ 取 **100 px**（≈8% 画宽）：**在 p90 之上、max 之下** ⇒ **只抓真正的异常**，
+  //     不会把"正常但误差中等"的帧也报出来。
+  //   ⚠️ 每帧每装甲板都会走这里 ⇒ **限频**（每 120 次一条）。
+  constexpr double kReprojWarnPx = 100.0;
+  if (last_dbg_.reprojection_error > kReprojWarnPx) {
+    static int n_bad_reproj = 0;
+    if (++n_bad_reproj % 120 == 1)
+      tools::logger()->warn(
+        "[Solver] 重投影误差过大 ×{}：{:.1f}px（>{:.0f}，实测中位 20 / p90 60） 距离={:.2f}m type={} name={}",
+        n_bad_reproj, last_dbg_.reprojection_error, kReprojWarnPx, armor.xyz_in_gimbal.norm(),
+        static_cast<int>(armor.type), static_cast<int>(armor.name));
+  }
   last_dbg_.t_solve_us = std::chrono::duration_cast<std::chrono::microseconds>(
                            std::chrono::steady_clock::now() - t_solve0).count();
 }

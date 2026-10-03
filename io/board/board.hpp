@@ -30,6 +30,9 @@
 #include <string>
 
 #include <Eigen/Geometry>
+#include <opencv2/core.hpp>   // CV_PI（W119 首次指令日志用）
+
+#include "utils/log/logger.hpp"   // W119
 
 namespace io
 {
@@ -55,6 +58,31 @@ struct GimbalState
 };
 
 /// @brief 下位机统一接口
+/// W119: log the FIRST control command -- confirm the "auto-aim -> MCU" link is alive.
+///
+/// WHY HERE (not `Controller::to_command()`):
+///   `grep -rn "to_command" core/ src/` shows only the definition + declaration
+///   => `Controller::to_command()` is DEAD CODE: all four main loops call
+///      `board->send(plan.control, plan.fire, ...)` directly, bypassing Controller,
+///      so its deadband/hysteresis logic never takes effect.
+///   Putting it at the board layer covers all four robots + all board impls.
+///
+/// WHY THIS LOG: neither `Controller` nor `board->send()` had ANY log, so when the
+///   gimbal does not move you cannot tell whether (1) send was never reached,
+///   (2) it was sent but the MCU ignored it, or (3) the deadband ate it.
+///   This line rules out (1). Reported once only -- no spam.
+inline void log_first_control_command(
+  bool control, bool fire, float yaw, float yaw_vel, float pitch)
+{
+  static bool reported = false;
+  if (reported || !control) return;
+  reported = true;
+  tools::logger()->info(
+    "[Board] first control command: fire={} yaw={:.2f}deg yaw_vel={:.2f} pitch={:.2f}deg"
+    " (if this line never appears, send was never reached)",
+    fire, yaw * 180.0 / CV_PI, yaw_vel, pitch * 180.0 / CV_PI);
+}
+
 class IBoard
 {
 public:

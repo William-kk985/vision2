@@ -73,7 +73,15 @@ Plan Planner::plan(Target target, double bullet_speed)
     yaw0 = aim(target, bullet_speed)(0);
     traj = get_trajectory(target, yaw0, bullet_speed);
   } catch (const std::exception & e) {
-    tools::logger()->warn("Unsolvable target {:.2f}", bullet_speed);
+    // ⭐⭐ W119：**补全"为什么无解"** —— 原来只报弹速（`"Unsolvable target 22.00"`），
+    //   ⚠️ 看不出是【距离太近/太远】还是【高度离谱】还是【弹速配置错】。
+    //   ⭐ 现在报：弹速 + 最近距离 + 高度 + 异常原因。⭐ 限频（每 60 次一条）避免刷屏。
+    static int n_unsolvable = 0;
+    ++n_unsolvable;
+    if (n_unsolvable % 60 == 1)
+      tools::logger()->warn(
+        "[Planner] 弹道无解 ×{}：弹速={:.2f} 最近距离={:.2f}m 高度={:.2f}m | {}",
+        n_unsolvable, bullet_speed, min_dist, xyz.z(), e.what());
     return {false};
   }
 

@@ -178,6 +178,7 @@ void Gimbal::send(
   bool control, bool fire, float yaw, float yaw_vel, float yaw_acc, float pitch, float pitch_vel,
   float pitch_acc)
 {
+  log_first_control_command(control, fire, yaw, yaw_vel, pitch);   // W119
   tx_data_.mode = control ? (fire ? 2 : 1) : 0;
   tx_data_.yaw = yaw;
   tx_data_.yaw_vel = yaw_vel;

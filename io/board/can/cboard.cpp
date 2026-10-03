@@ -1,3 +1,4 @@
+#include "io/board/board.hpp"   // W119: log_first_control_command
 #include "cboard.hpp"
 
 #include "utils/math/math_tools.hpp"
@@ -46,6 +47,9 @@ Eigen::Quaterniond CBoard::imu_at(std::chrono::steady_clock::time_point timestam
 
 void CBoard::send(Command command) const
 {
+  log_first_control_command(
+    command.control, command.shoot, command.yaw, 0, command.pitch);   // W119
+
   can_frame frame;
   frame.can_id = send_canid_;
   frame.can_dlc = 8;

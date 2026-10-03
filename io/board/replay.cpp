@@ -51,6 +51,7 @@ void ReplayBoard::send(
   bool control, bool fire, float yaw, float yaw_vel, float yaw_acc, float pitch, float pitch_vel,
   float pitch_acc)
 {
+  log_first_control_command(control, fire, yaw, yaw_vel, pitch);   // W119
   sent_log_.push_back({control, fire, yaw, yaw_vel, yaw_acc, pitch, pitch_vel, pitch_acc});
   ++sent_count_;
 }

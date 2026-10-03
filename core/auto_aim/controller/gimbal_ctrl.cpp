@@ -9,6 +9,12 @@
 namespace auto_aim
 {
 
+/// ⚠️⚠️ **W119 发现：本函数目前是【死代码】—— 没有任何调用点！**
+///   实测 `grep -rn "to_command" core/ src/` 只有「本定义 + 头文件声明」。
+///   ⭐ 四个主循环（`src/*.cpp`）**都直接调 `board->send(plan.control, plan.fire, ...)`**，
+///     绕过了 Controller ⇒ 这里的迟滞/死区**当前根本没生效**。
+///   ⭐ 首次下指令的日志因此改到 `io/board/virtual_board.hpp` 的 `send()`（一处覆盖四兵种）。
+///   📌 待办：要么主循环改走 `to_command`（迟滞才生效），要么删掉本函数。
 io::Command Controller::to_command(bool control, bool shoot, double yaw, double pitch)
 {
   if (cfg_.enable_deadband && has_last_) {

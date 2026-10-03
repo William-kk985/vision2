@@ -2,8 +2,35 @@
 
 #include <yaml-cpp/yaml.h>
 
+#include "utils/log/logger.hpp"
+
 namespace auto_aim
 {
+namespace
+{
+/// ⭐⭐ W119：**分类器"静默失败"的计数器** —— 4 处早返回**原来完全没日志**
+///   ⇒ 用户看到"识别不到"，却不知道是**分类器**判的 `not_armor`
+///   （⭐ 这正是《无数字装甲板为何识别不到》那条路径）。
+///   ⚠️ 分类器**每个装甲板每帧都调** ⇒ **必须限频**（每 60 次报一次）。
+struct ClassifyStats
+{
+  int empty_pattern = 0;   // `pattern.empty()` ⇒ 没截到图案
+  int zero_size = 0;       // resize 后 h/w 为 0 ⇒ 图案太小
+};
+ClassifyStats & stats()
+{
+  static ClassifyStats s;
+  return s;
+}
+/// 限频上报（每 `n` 次一条）
+void report(const char * what, int n)
+{
+  if (n % 60 != 1) return;
+  tools::logger()->debug(
+    "[Classifier] {} 累计 {} 次（empty_pattern={} zero_size={}）⇒ 判 not_armor",
+    what, n, stats().empty_pattern, stats().zero_size);
+}
+}  // namespace
 Classifier::Classifier(const std::string & config_path)
 {
   auto yaml = YAML::LoadFile(config_path);
@@ -18,6 +45,7 @@ void Classifier::classify(Armor & armor)
 {
   if (armor.pattern.empty()) {
     armor.name = ArmorName::not_armor;
+    report("pattern 为空", ++stats().empty_pattern);   // ⭐ W119：不再静默
     return;
   }
 
@@ -33,6 +61,7 @@ void Classifier::classify(Armor & armor)
 
   if (h == 0 || w == 0) {
     armor.name = ArmorName::not_armor;
+    report("图案尺寸为 0", ++stats().zero_size);   // ⭐ W119：不再静默
     return;
   }
   auto roi = cv::Rect(0, 0, w, h);
@@ -62,6 +91,7 @@ void Classifier::ovclassify(Armor & armor)
 {
   if (armor.pattern.empty()) {
     armor.name = ArmorName::not_armor;
+    report("pattern 为空", ++stats().empty_pattern);   // ⭐ W119：不再静默
     return;
   }
 
@@ -78,6 +108,7 @@ void Classifier::ovclassify(Armor & armor)
 
   if (h == 0 || w == 0) {
     armor.name = ArmorName::not_armor;
+    report("图案尺寸为 0", ++stats().zero_size);   // ⭐ W119：不再静默
     return;
   }
 

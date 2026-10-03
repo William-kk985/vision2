@@ -81,6 +81,9 @@ public:
     bool control, bool fire, float yaw, float yaw_vel, float yaw_acc, float pitch, float pitch_vel,
     float pitch_acc) override
   {
+    log_first_control_command(control, fire, yaw, yaw_vel, pitch);   // W119
+
+
     (void)yaw_vel; (void)yaw_acc; (void)pitch_vel; (void)pitch_acc;
     const auto n = ++sent_;
     last_ = {control, fire, yaw, yaw_vel, yaw_acc, pitch, pitch_vel, pitch_acc};

@@ -201,14 +201,14 @@ void print_effective_config(
   }
 
   // ═══ ③.5 ⭐⭐ 实验开关（core/debug.hpp §二）═══
-  detail::print_group(os, "③.5 🧪 实验开关（⭐ core/debug.hpp §四；⚠️ 开了就【不是】同济行为）");
+  detail::print_group(os, "③.5 实验开关（core/debug.hpp §四；开启后偏离同济行为）");
   {
     int on = 0;
 #ifdef HZMIR_EXP_NO_TRAD_SAVE
     { detail::print_kv(os, "HZMIR_EXP_NO_TRAD_SAVE", "开", "关掉传统检测器落图"); ++on; }
 #endif
     if (on == 0)
-      os << "    （全部【关】= 同济默认）⭐ 要试新算法就改 core/debug.hpp §四\n";
+      os << "    （全部关闭 = 同济默认）新增实验请修改 core/debug.hpp §四\n";
     else
       os << "    ⚠️ 共 " << on << " 个实验【开】—— 结论出来后请【转正】或【删除】\n";
   }
@@ -217,7 +217,7 @@ void print_effective_config(
   // ⭐⭐ W122：**改 `core/debug.hpp`**（不是 `debug_config.hpp` —— 那只是"展开器"）。
   // ⚠️ 原来这里只列了 8 个宏，漏了 7 个 ⇒ 用户开的开关可能"查不到"。
   // ⭐ 现在**列全 15 个**，且对**空宏**（定义但无调用点）明确标注 ⇒ 不会白开。
-  detail::print_group(os, "④ 编译期开关（⭐ 改 core/debug.hpp §三 后重编）");
+  detail::print_group(os, "④ 编译期开关（修改 core/debug.hpp §三 后重新编译）");
   {
     int on = 0;
     // ⭐ 宏：`(名字, 是否空宏)` —— 空宏 = 代码里还没有调用点，开了不出日志
@@ -228,59 +228,50 @@ void print_effective_config(
       {"TI", false},       {"TGD", false},      {"SINK", true},
     };
 #ifdef HZMIR_LOG_YOLO
-    { detail::print_kv(os, "HZMIR_LOG_YOLO", "开 ⭐ 有效"); ++on; }
+    { detail::print_kv(os, "HZMIR_LOG_YOLO", "已开启"); ++on; }
 #endif
 #ifdef HZMIR_LOG_DETECTOR
-    { detail::print_kv(os, "HZMIR_LOG_DETECTOR", "开 ⭐ 有效"); ++on; }
+    { detail::print_kv(os, "HZMIR_LOG_DETECTOR", "已开启"); ++on; }
 #endif
 #ifdef HZMIR_LOG_EKF
-    { detail::print_kv(os, "HZMIR_LOG_EKF", "开 ⭐ 有效"); ++on; }
+    { detail::print_kv(os, "HZMIR_LOG_EKF", "已开启"); ++on; }
 #endif
 #ifdef HZMIR_LOG_TRACKER
-    { detail::print_kv(os, "HZMIR_LOG_TRACKER", "开 ⭐ 有效"); ++on; }
+    { detail::print_kv(os, "HZMIR_LOG_TRACKER", "已开启"); ++on; }
 #endif
 #ifdef HZMIR_LOG_TARGET
-    { detail::print_kv(os, "HZMIR_LOG_TARGET", "开 ⭐ 有效"); ++on; }
+    { detail::print_kv(os, "HZMIR_LOG_TARGET", "已开启"); ++on; }
 #endif
 #ifdef HZMIR_LOG_PLANNER
-    { detail::print_kv(os, "HZMIR_LOG_PLANNER", "开 ⭐ 有效"); ++on; }
+    { detail::print_kv(os, "HZMIR_LOG_PLANNER", "已开启"); ++on; }
 #endif
 #ifdef HZMIR_LOG_AIMER
-    { detail::print_kv(os, "HZMIR_LOG_AIMER", "开 ⭐ 有效"); ++on; }
+    { detail::print_kv(os, "HZMIR_LOG_AIMER", "已开启"); ++on; }
 #endif
 #ifdef HZMIR_LOG_SHOOTER
-    { detail::print_kv(os, "HZMIR_LOG_SHOOTER", "开 ⭐ 有效"); ++on; }
+    { detail::print_kv(os, "HZMIR_LOG_SHOOTER", "已开启"); ++on; }
 #endif
 #ifdef HZMIR_LOG_BUFF
-    { detail::print_kv(os, "HZMIR_LOG_BUFF", "开 ⭐ 有效"); ++on; }
+    { detail::print_kv(os, "HZMIR_LOG_BUFF", "已开启"); ++on; }
 #endif
 #ifdef HZMIR_LOG_CAMERA
-    { detail::print_kv(os, "HZMIR_LOG_CAMERA", "开 ⚠️ 未接（无调用点 ⇒ 不会出日志）"); ++on; }
-#endif
-#ifdef HZMIR_LOG_BOARD
-    { detail::print_kv(os, "HZMIR_LOG_BOARD", "开 🗑️ 冗余（gimbal.cpp 已有 19 处）"); ++on; }
-#endif
-#ifdef HZMIR_LOG_IMU
-    { detail::print_kv(os, "HZMIR_LOG_IMU", "开 🗑️ 冗余（与 BOARD 同文件）"); ++on; }
+    { detail::print_kv(os, "HZMIR_LOG_CAMERA", "已开启（未接入，无输出）"); ++on; }
 #endif
 #ifdef HZMIR_LOG_TI
-    { detail::print_kv(os, "HZMIR_LOG_TI", "开 ⭐ 有效"); ++on; }
+    { detail::print_kv(os, "HZMIR_LOG_TI", "已开启"); ++on; }
 #endif
 #ifdef HZMIR_LOG_TGD
-    { detail::print_kv(os, "HZMIR_LOG_TGD", "开 ⭐ 有效"); ++on; }
-#endif
-#ifdef HZMIR_LOG_SINK
-    { detail::print_kv(os, "HZMIR_LOG_SINK", "开 🗑️ 冗余（生命周期已有 4 处 info）"); ++on; }
+    { detail::print_kv(os, "HZMIR_LOG_TGD", "已开启"); ++on; }
 #endif
     (void)sw;
     if (on == 0)
-      os << "    （全部【关】= 默认）⭐ 要开哪个就改 core/debug.hpp §三\n"
-         << "    ⭐ 可用的 11 个：YOLO DETECTOR EKF TRACKER TARGET PLANNER AIMER\n"
-         << "       SHOOTER BUFF TI TGD\n"
-         << "    ⚠️ CAMERA 未接（开了不出日志）\n"
-         << "    🗑️ BOARD / IMU / SINK 冗余（模块已有现成日志）⇒ 用 --log-only= 过滤\n";
+      os << "    （全部关闭 = 默认）开启方式：修改 core/debug.hpp §三 后重新编译\n"
+         << "    可用开关（11 个）：YOLO DETECTOR EKF TRACKER TARGET PLANNER AIMER\n"
+         << "                        SHOOTER BUFF TI TGD\n"
+         << "    未接入（打开无输出）：CAMERA\n"
+         << "    已删除（改用运行期过滤）：BOARD / IMU → --log-only=gimbal，SINK → --log-only=sink\n";
     else
-      os << "    共 " << on << " 个细节日志开关【开】\n";
+      os << "    共 " << on << " 个日志开关已开启\n";
   }
 
   os << "\n╚══════════════════════════════════════════════════════════════╝\n";

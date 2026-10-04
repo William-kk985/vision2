@@ -139,17 +139,7 @@
 #  define LOG_CAMERA(...)
 #endif
 
-#ifdef HZMIR_LOG_BOARD
-#  define LOG_BOARD(...) tools::logger()->debug("[board] " __VA_ARGS__)
-#else
-#  define LOG_BOARD(...)
-#endif
 
-#ifdef HZMIR_LOG_IMU
-#  define LOG_IMU(...) tools::logger()->debug("[imu] " __VA_ARGS__)
-#else
-#  define LOG_IMU(...)
-#endif
 
 #ifdef HZMIR_LOG_TI
 #  define LOG_TI(...) tools::logger()->debug("[TI] " __VA_ARGS__)
@@ -163,10 +153,5 @@
 #  define LOG_TGD(...)
 #endif
 
-#ifdef HZMIR_LOG_SINK
-#  define LOG_SINK(...) tools::logger()->debug("[sink] " __VA_ARGS__)
-#else
-#  define LOG_SINK(...)
-#endif
 
 #endif  // HZMIR_UTILS_LOG_DEBUG_CONFIG_HPP

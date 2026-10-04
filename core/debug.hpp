@@ -148,40 +148,133 @@
 // `#define` 即开启，注释掉即关闭。目前共 12 个，默认全部关闭。
 // 展开为 `LOG_xxx(...)` 的位置在 `utils/log/debug_config.hpp`。
 // 建议：每帧刷屏的细节保持关闭，低频的状态变化按需开启。
+//
+// 每个开关下方给出该日志的【实际输出格式】与【各字段含义】，
+// 便于开启后直接对照阅读，无需另行查代码。
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 检测链路 ──
-// #define HZMIR_LOG_YOLO            // YOLO 逐帧细节，每帧 2 行。输出内容：
-//   1. `infer()` 单次推理耗时（注意与 CSV 的 `det_t_infer_us` 不同，后者为整段检测）
-//   2. 两道阈值：objectness 与分类置信度，附 NMS 阈值
-//      概览日志仅报告第一道阈值，不说明第二道容易造成误判
-//   3. 完整漏斗：anchor 总数 → 各阈值通过数 → NMS → 最终输出
-//   4. 峰值所在的归一化图像坐标，用于区分图像质量问题与背景误检
-//   5. 被 `check_type` 丢弃的装甲板名称
-// #define HZMIR_LOG_DETECTOR        // 传统检测器灯条与装甲板配对细节
+
+// #define HZMIR_LOG_YOLO
+// 输出两行（每帧）。
+//
+// 第 1 行：① 推理 4220us ｜ ② 门槛 obj 0.70 → conf 0.80（NMS 0.30） ｜ ④ 峰值 0.842 @归一化(0.595,0.642) anchor#21583
+//   ① 推理        `infer()` 单次推理耗时。注意与 CSV 的 `det_t_infer_us` 不同，后者为整段检测
+//   ② 门槛        objectness 阈值 0.70 → 分类置信度阈值 0.80（NMS IoU 阈值 0.30）
+//                 概览日志仅报告第一道阈值，不说明第二道容易造成误判
+//   ④ 峰值        本帧最高 objectness、其归一化图像坐标与所在 anchor 序号
+//                 用于区分图像质量问题（峰值居中）与背景误检（峰值在边缘）
+//
+// 第 2 行：③ 漏斗 25200 anchor → >0.5:7 >0.3:13 >0.1:19 → pass 1 → NMS 1 → 输出 1（丢 not_armor 0 / conf 0 / type 0）
+//   25200 anchor 候选总数。输入 640x640，三个检测头 80²+40²+20² 格 x 3 anchor
+//   >0.5 / >0.3 / >0.1   objectness 超过该值的 anchor 数，反映"离能用还有多远"
+//   pass          通过 objectness 阈值 0.70 的候选数
+//   NMS           非极大值抑制后的存活数（合并重叠框）
+//   输出          最终装甲板数
+//   丢 not_armor  被判为"不是装甲板"而丢弃的数量
+//   丢 conf       分类置信度不足（<= 0.80）而丢弃的数量
+//   丢 type       大/小装甲板类型不符（`check_type`）而丢弃的数量
+//
+// 诊断示例：`pass 5 → 输出 0（丢 conf 5）` 表示候选全被分类置信度拦下，
+// 即《无数字装甲板为何识别不到》所描述的情形。
+
+// #define HZMIR_LOG_DETECTOR
+// 传统检测器（`detector_impl=traditional`）的灯条与装甲板配对细节。
+// 输出样例：`See pattern 5` —— 识别到编号 5 的图案时提示。
+// 说明：目前调用点较少；传统检测器的主要信息在概览日志中。
 
 // ── 跟踪与估计 ──
-// #define HZMIR_LOG_EKF             // EKF 新息（NIS）、收敛与发散判定，输出最频繁
-// #define HZMIR_LOG_TRACKER         // 跟踪状态机切换（lost / detecting / tracking / temp_lost）
-// #define HZMIR_LOG_TARGET          // 目标选择、跳变、小陀螺判据、发散原因、首次收敛
+
+// #define HZMIR_LOG_EKF
+// EKF 层信息，输出最频繁。
+// 输出样例：`[Target] r=0.041, l=0.000`
+//   r   装甲板半径估计（`ekf_.x[8]`），合法区间 (0.05, 0.5)
+//   l   另一侧板宽估计（`ekf_.x[9]`），合法条件 r+l ∈ (0.05, 0.5)
+// 两者越界即判定为"发散"，见 `LOG_TARGET` 的输出。
+// 其他输出：`[Target] Bad Converge Found!` —— 收敛检查未通过。
+
+// #define HZMIR_LOG_TRACKER
+// 跟踪状态机事件，频率低。输出样例：
+//   `auto_aim switch target to three`   切换目标为编号 3
+//   `[Tracker] Target diverged!`        目标发散，状态退回 lost
+//   `omniperception find higher priority target`  发现更高优先级目标
+//   `[Tracker] 未配置 priority_mode（同济行为）`  启动期提示
+// 状态机取值：lost / detecting / tracking / temp_lost（见 CSV 的 `trk_state`）
+
+// #define HZMIR_LOG_TARGET
+// 目标级事件，频率低。输出样例：
+//   `✅ 首次收敛：update_count=4 r=0.180 l=0.000 yaw=132.6° vyaw=-0.70 name=5`
+//     update_count  已关联的观测帧数
+//     r / l         半径与板宽估计（同 `LOG_EKF`）
+//     yaw           目标朝向（度）；vyaw 为角速度（弧度/秒）
+//     name          装甲板编号（`ArmorName` 枚举值）
+//   `发散：r=0.041 l=0.000（r+l=0.041）合法区间 r,l+r ∈ (0.05, 0.5) name=5`
+//     给出越界的具体数值，用于区分"半径估计飞出"与"板宽估计飞出"
 
 // ── 规划与射击 ──
-// #define HZMIR_LOG_PLANNER         // MPC 迭代次数、重合度、加速度上限、弹道
-// #define HZMIR_LOG_AIMER           // 瞄点选择、弹道无解
-// #define HZMIR_LOG_SHOOTER         // 开火判据未通过的原因（traj_err/thresh/弹速/飞行/距离）
+
+// #define HZMIR_LOG_PLANNER
+// MPC 解算结果。输出样例：
+//   `trajectory_impl = ideal (ideal)`   当前弹道实现（启动期提示）
+//   `yaw_iters=1 pitch_iters=10 重合度=1.000 acc_max=0.00 飞行=0.0426s 距离=0.94m`
+//     yaw_iters / pitch_iters  MPC 求解器迭代次数（接近上限说明未收敛）
+//     重合度                  前瞻段重合度，0~1，越高越接近参考轨迹
+//     acc_max                 规划轨迹最大加速度，用于检查是否超物理上限
+//     飞行                    弹丸飞行时间 `t_fly`
+//     距离                    最近装甲板水平距离
+
+// #define HZMIR_LOG_AIMER
+// 瞄点选择。仅在弹道无解时输出，样例：
+//   `[Aimer] unsolvable traj0: speed=22.00 d=1.23 z=0.45`
+//     traj0 / iter  第 0 次（初始解）或第 N 次迭代
+//     speed         弹速（m/s）；d 水平距离（m）；z 高度（m）
+//   判据为 `Trajectory::unsolvable`，无解时本轮不下发瞄点。
+
+// #define HZMIR_LOG_SHOOTER
+// 开火判据。输出样例：
+//   `fire=true traj_err=0.00000 / thresh=0.00300 弹速=22.00 飞行=0.0426s 距离=0.94m`
+//     fire      本帧是否满足开火条件
+//     traj_err  前瞻点的「参考轨迹 vs 规划轨迹」误差
+//     thresh    开火阈值（`fire_thresh`，默认 0.003）
+//     弹速 / 飞行 / 距离  同 `LOG_PLANNER`
+//   判据为 `traj_err < fire_thresh`，等价于"云台能跟上目标"。
+//   `fire=false` 时可直接读出差距，判断是"差一点"还是"完全跟不上"。
 
 // ── 打符 ──
-// #define HZMIR_LOG_BUFF            // 打符检测、拟合、预测
+
+// #define HZMIR_LOG_BUFF
+// 打符模块。输出样例：
+//   `[Aimer] Unsolvable trajectory0: 22.00 1.23 0.45`  弹道无解（弹速 水平距离 高度）
+//   `[Target] 丢失buff`                                 目标丢失
+//   `[Target] 小符角度发散spd: 12.34`                    角度发散，值为角速度（度/秒）
 
 // ── 硬件 ──
-// #define HZMIR_LOG_CAMERA          // 相机队列满导致的丢帧。接在采集队列的 full_handler
-//   回调上：queue_(1) 只缓冲 1 帧，模板默认 PopWhenFull = false，队列满时丢弃新帧。
-//   接入回调前丢帧完全静默，只能观察到帧率下降而无从判断原因。
-//   本开关只做上报，不改变队列容量与丢弃策略。限频（每 60 次一条）。
+
+// #define HZMIR_LOG_CAMERA
+// 相机采集队列满导致的丢帧。输出样例：
+//   `HikRobot 队列满 ⇒ 丢帧 ×120（消费者跟不上采集；这是丢帧的真实来源）`
+//     驱动名  hikrobot / mindvision / usbcamera
+//     ×N      累计丢帧次数（每 60 次输出一条）
+//   原理：采集队列 `queue_(1)` 只缓冲 1 帧，模板默认 `PopWhenFull = false`，
+//   队列满时丢弃**新**帧。接入本回调前丢帧完全静默，只能观察到帧率下降而无从判断原因。
+//   本开关只做上报，不改变队列容量与丢弃策略。
+//   若持续出现，说明消费者（自瞄主循环）跟不上采集速率。
 
 // ── 轮子 utils/wheels/ ──
-// #define HZMIR_LOG_TI              // 时序积分器 TemporalIntegrator
-// #define HZMIR_LOG_TGD             // 传统检测的目标引导检测 TGD
+
+// #define HZMIR_LOG_TI
+// 时序积分器 `TemporalIntegrator`。输出样例：
+//   `[TI] Frame 123: 高速 (v=15.3 m/s) → 旁路 TI`      目标过快，跳过时序积分
+//   `[TI] Frame 123: window=5 verified=3/5`             窗口内 5 条历史，验证通过 3 条
+//     window    历史窗口长度；verified 通过验证数；末项为窗口内总条目数
+
+// #define HZMIR_LOG_TGD
+// 传统检测的目标引导检测（`tgd.cpp`）。输出样例：
+//   `[TGD] Adaptive threshold: 12.34 (mean=8.10, std=3.20)`
+//     自适应二值化阈值，及其依据的局部均值与标准差
+//   `[TGD] Frame 123: centers=4, motion_intensity=2.35%`
+//     centers           检出的运动中心数
+//     motion_intensity  运动区域占画面的百分比
 
 // ═══════════════════════════════════════════════════════════════════════════
 // §四  算法实验开关

@@ -51,6 +51,9 @@ public:
 private:
   // ⭐⭐ E2 家族修复（保留）：`Target(x, vyaw, r, h)` 只设 `armor_num_`，其余原来全未初始化
   int armor_num_ = 0;
+
+  // ⭐ W123：`LOG_TARGET` 的"只报一次"标志（首次收敛）
+  bool converged_reported_ = false;
   int switch_count_ = 0;
   int update_count_ = 0;
 

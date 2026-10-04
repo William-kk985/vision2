@@ -20,7 +20,7 @@ Planner::Planner(const std::string & config_path)
   const std::string impl =
     yaml["trajectory_impl"] ? yaml["trajectory_impl"].as<std::string>() : "ideal";
   trajectory_ = make_trajectory(impl);
-  tools::logger()->debug("[Planner] trajectory_impl = {} ({})", impl, trajectory_->name());
+  LOG_PLANNER("trajectory_impl = {} ({})", impl, trajectory_->name());
 
   setup_yaw_solver(config_path);
   setup_pitch_solver(config_path);
@@ -123,6 +123,16 @@ Plan Planner::plan(Target target, double bullet_speed)
         pitch_solver_->work->x(0, HALF_HORIZON + shoot_offset_));
   plan.fire = traj_err < fire_thresh_;
 
+  // ⭐⭐ W123：**开火判据的完整理由**（原来 `LOG_SHOOTER` 是空宏，开了什么都不出）
+  //   ⭐ 这是场景 C（"能跟踪但不开火"）的**第一手信息**：
+  //     判据 = `traj_err < fire_thresh`，两个数都报出来 ⇒ **一眼看出差多少**。
+  //   ⭐ **不限频**：本宏**默认关**（opt-in）⇒ 你打开就是"要看每一帧"，
+  //     限频反而会让你以为"怎么没打几行"。⭐ 关掉时零成本（宏参数不求值）。
+  LOG_SHOOTER(
+    "fire={} traj_err={:.5f} / thresh={:.5f}{} 弹速={:.2f} 飞行={:.4f}s 距离={:.2f}m",
+    plan.fire, traj_err, fire_thresh_, plan.fire ? "" : " ⚠️不过", bullet_speed, dbg_t_fly,
+    dbg_min_dist);
+
   // ⭐ W8：填充内部量（~十几条赋值，成本可忽略）
   plan.t_fly = dbg_t_fly;
   plan.bullet_pitch = dbg_bullet_pitch;
@@ -137,6 +147,14 @@ Plan Planner::plan(Target target, double bullet_speed)
   plan.acc_max = static_cast<float>(std::max(
     std::abs(yaw_solver_->work->u.row(0).maxCoeff()),
     std::abs(pitch_solver_->work->u.row(0).maxCoeff())));
+
+  // ⭐⭐ W123：**MPC 解算结果一览**（原来 `LOG_PLANNER` 是空宏，开了什么都不出）
+  //   ⭐ 报迭代次数 + 重合度 + 加速度上限 ⇒ 回答"MPC 收敛了吗 / 规划合理吗"。
+  //   ⚠️ 位置必须在这里：上面**所有** `plan.*` 字段都已填完。
+  //   ⭐ **不限频**（宏默认关=opt-in；⚠️ 且宏自带 `[planner]` 前缀，消息里别再写 `[Planner]`）
+  LOG_PLANNER(
+    "yaw_iters={} pitch_iters={} 重合度={:.3f} acc_max={:.2f} 飞行={:.4f}s 距离={:.2f}m",
+    plan.yaw_iters, plan.pitch_iters, plan.overlap, plan.acc_max, plan.t_fly, plan.min_dist);
   // ⭐⭐⭐ W113：把瞄准点带进 `Plan`（供主循环画"红圈"；直接读 `debug_xyza` 有竞争）
   plan.debug_xyza = debug_xyza;
   return plan;

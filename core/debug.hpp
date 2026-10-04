@@ -47,8 +47,14 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // §一 ⭐⭐ 总览：16 个开关一览（先看这张表，再决定开哪个）
 //
-// ⚠️⚠️ **先看【状态】列** —— `⚠️ 空` = 宏定义了但**代码里还没有调用点**，
-//   打开后**什么都不会发生**（不是坏了，是"待接入"）。⭐ 目前 7 有效 / 8 空。
+// ⚠️⚠️ **先看【状态】列**（W123 更新）：
+//   · ✅ **有效** —— 打开就有日志（**11 个**）
+//   · ⚠️ **未接** —— 宏在、但代码里没有调用点，**打开后什么都不会发生**（1 个：`CAMERA`）
+//   · 🗑️ **冗余** —— ⚠️ **它的模块【已经有 info/debug 日志】了**，再加宏只会重复
+//     （`BOARD` 的 `gimbal.cpp` 有 **19 处**、`SINK` 的生命周期有 **4 处 info**、
+//      `IMU` 与 `BOARD` 同文件且边界不清）⇒ ⭐ **别用这三个，用 `--log-only=` 过滤现成的**
+//   ⭐ **实际可用的 11 个**：`YOLO` `DETECTOR` `EKF` `TRACKER` `TARGET` `PLANNER`
+//     `AIMER` `SHOOTER` `BUFF` `TI` `TGD`
 //
 // | 开关 | 状态 | 看什么 | 吵不吵 |
 // |---|---|---|---|
@@ -56,17 +62,17 @@
 // | **HZMIR_LOG_DETECTOR** | ✅ | 传统检测器：灯条 / 装甲板**配对**细节 | ⚠️⚠️ 每帧多行 |
 // | **HZMIR_LOG_EKF** | ✅ | EKF 新息（NIS）/ 收敛 / 发散判定 | ⚠️⚠️⚠️ **最吵** |
 // | **HZMIR_LOG_TRACKER** | ✅ | 跟踪**状态机切换**（lost/detecting/tracking/temp_lost） | ⭐ 低频 |
-// | **HZMIR_LOG_TARGET** | ⚠️ **空** | 目标选择 / 跳变 / **小陀螺判据** | ⭐ 中频 |
-// | **HZMIR_LOG_PLANNER** | ⚠️ **空** | MPC **迭代次数** / 弹道 / 重合度 | ⭐ 中频 |
-// | **HZMIR_LOG_AIMER** | ⚠️ **空** | 瞄点选择 / **延迟补偿** | ⭐ 中频 |
+// | **HZMIR_LOG_TARGET** | ✅ | 目标选择 / 跳变 / **小陀螺判据** | ⭐ 中频 |
+// | **HZMIR_LOG_PLANNER** | ✅ | MPC **迭代次数** / 弹道 / 重合度 | ⭐ 中频 |
+// | **HZMIR_LOG_AIMER** | ✅ | 瞄点选择 / **延迟补偿** | ⭐ 中频 |
 // | ⭐ **HZMIR_LOG_SHOOTER** | ⚠️ **空** | **开火判据为什么没过** | ⭐ 中频 |
 // | **HZMIR_LOG_BUFF** | ✅ | 打符：检测 / 拟合 / 预测 | ⭐ 中频 |
-// | **HZMIR_LOG_CAMERA** | ⚠️ **空** | 相机 SDK 参数 / 带宽 / **丢帧** | ⭐ 低频 |
-// | **HZMIR_LOG_BOARD** | ⚠️ **空** | 下位机**收发** | ⚠️⚠️⚠️ **每帧都发，极吵** |
-// | **HZMIR_LOG_IMU** | ⚠️ **空** | IMU 数据 / **时间戳对齐** | ⚠️ 高频 |
+// | **HZMIR_LOG_CAMERA** | ⚠️ **未接** | 相机 SDK 参数 / 带宽 / **丢帧** | ⭐ 低频 |
+// | **HZMIR_LOG_BOARD** | 🗑️ **冗余** | 下位机**收发** | ⚠️⚠️⚠️ **每帧都发，极吵** |
+// | **HZMIR_LOG_IMU** | 🗑️ **冗余** | IMU 数据 / **时间戳对齐** | ⚠️ 高频 |
 // | **HZMIR_LOG_TI** | ✅ | 时序积分器（`TemporalIntegrator`） | ⭐ 低频 |
 // | **HZMIR_LOG_TGD** | ✅ | 传统检测的 **TGD**（目标引导检测） | ⭐ 中频 |
-// | **HZMIR_LOG_SINK** | ⚠️ **空** | sink 生命周期（挂上 / 摘掉 / 队列深度） | ⭐ 低频 |
+// | **HZMIR_LOG_SINK** | 🗑️ **冗余** | sink 生命周期（挂上 / 摘掉 / 队列深度） | ⭐ 低频 |
 // | ⭐ **HZMIR_EXP_NO_TRAD_SAVE** | ✅ | **关掉**传统检测器的落图（跑批调参省盘） | — |
 //
 // ⭐ **"关掉 = 零开销"是真的**：宏展开成 `LOG_xxx(...)`，关掉时**整条语句连参数一起消失**
@@ -92,19 +98,21 @@
 // ── B：EKF 状态不对 / 目标乱跳 / 小陀螺打不准 ──
 //   ① 先开 **`HZMIR_LOG_TRACKER`**（低频）—— 看状态机有没有正常 `tracking`
 //   ② 再开 **`HZMIR_LOG_EKF`** ✅（⚠️⚠️⚠️ 最吵，建议配 `--log-only=ekf`）
-//   ③ 目标选择问题 ⇒ `HZMIR_LOG_TARGET` ⚠️ 空
+//   ③ 目标选择问题 ⇒ `HZMIR_LOG_TARGET` ✅（发散原因 + 首次收敛）
 //
 // ── C：能跟踪但打不中 / 不开火 ──
-//   ① ⭐ **`HZMIR_LOG_SHOOTER`** ⚠️ **（当前是空宏，见 §一 状态列）** —— 开火判据为什么没过
+//   ① ⭐ **`HZMIR_LOG_SHOOTER`** ✅ —— 开火判据为什么没过（报 traj_err/thresh/弹速/飞行/距离）
 //      （判据 = `traj_err < fire_thresh`，默认 0.003，见 `planner/mpc.cpp`）
-//   ② `HZMIR_LOG_PLANNER` ⚠️ 空（MPC 迭代/弹道/重合度）③ `HZMIR_LOG_AIMER` ⚠️ 空（瞄点/延迟补偿）
+//   ② `HZMIR_LOG_PLANNER` ✅（迭代/重合度/acc_max）③ `HZMIR_LOG_AIMER` ✅（瞄点/弹道无解）
 //   ④ ⭐ **云台不动？不用开宏** —— 看有没有这条 **info**：
 //        `[Board] first control command: fire=... yaw=...`
 //      长时间没有 ⇒ **没走到发送**（W119 新增，一处覆盖四兵种）
 //
 // ── D：打符 ⇒ `HZMIR_LOG_BUFF` ✅ ──
-// ── E：硬件层 ⇒ `HZMIR_LOG_CAMERA` ⚠️空（丢帧）/ `HZMIR_LOG_BOARD` ⚠️空（⚠️极吵）/ `HZMIR_LOG_IMU` ⚠️空 ──
-// ── F：想知道 sink（存图/窗口/CSV）挂上没 ⇒ `HZMIR_LOG_SINK` ⚠️ 空
+// ── E：硬件层 ⇒ ⭐ **不用开宏**：`io/board/gimbal/gimbal.cpp` 已有 **19 处**日志，
+//        用 `--log-only=gimbal` 过滤即可（`CAMERA` 宏暂未接；`BOARD`/`IMU` 是冗余）──
+// ── F：想知道 sink（存图/窗口/CSV）挂上没 ⇒ ⭐ **不用开宏**：
+//        `[ImageSink]` / `[WindowSink]` 的生命周期**已经有 info 日志**（`--log-only=sink`）
 //        或者直接看启动时的 `[ImageSink] -> output/images ...` info ──
 // ── G：跑批调参，想省盘 ⇒ ⭐ **`HZMIR_EXP_NO_TRAD_SAVE`** ──
 // ═══════════════════════════════════════════════════════════════════════════
@@ -115,10 +123,11 @@
 // ⚠️ 展开成 `LOG_xxx(...)` 的地方在 `utils/log/debug_config.hpp`（本文件只声明开关）。
 // ⭐ 建议：【关】每帧刷屏的细节；【开】低频的状态变化。
 // ⚠️ 15 个宏都**默认关**。
-// ⚠️⚠️ **标了「空宏」的 8 个：打开后【什么都不会发生】**（代码里还没有调用点）
-//    ⇒ ⭐ **别白开**：`TARGET` / `PLANNER` / `AIMER` / `SHOOTER` / `CAMERA` / `BOARD` / `IMU` / `SINK`
-//    ⭐ **当前真能出日志的 7 个**：`YOLO` / `DETECTOR` / `EKF` / `TRACKER` / `BUFF` / `TI` / `TGD`
-//    📌 要接上那 8 个 ⇒ 说一声（在对应模块加 `LOG_xxx(...)` 调用即可）
+// ⭐ **W123 后能出日志的 11 个**：`YOLO` `DETECTOR` `EKF` `TRACKER` `TARGET` `PLANNER`
+//    `AIMER` `SHOOTER` `BUFF` `TI` `TGD`
+// ⚠️ **`CAMERA` 未接**（宏在、无调用点）⇒ ⭐ **别白开**
+// 🗑️ **`BOARD` `IMU` `SINK` 是冗余**（模块已有现成日志）⇒ ⭐ **改用 `--log-only=`**：
+//      `--log-only=gimbal`（19 处）· `--log-only=sink`（生命周期 4 处 info）
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 检测链路 ──
@@ -133,27 +142,27 @@
 // ── 跟踪 / 估计 ──
 // #define HZMIR_LOG_EKF             // ⚠️⚠️⚠️ 最吵：EKF 新息（NIS）/ 收敛 / 发散判定
 // #define HZMIR_LOG_TRACKER         // ⭐ 低频：跟踪状态机切换（lost/detecting/tracking/temp_lost）
-// #define HZMIR_LOG_TARGET          // ⚠️ 空宏（无调用点）· 目标选择 / 跳变 / 小陀螺判据
+// #define HZMIR_LOG_TARGET          // ✅ 目标选择 / 跳变 / 小陀螺判据 / 发散原因 / 首次收敛
 
 // ── 规划 / 射击 ──
-// #define HZMIR_LOG_PLANNER         // ⚠️ 空宏（无调用点）· MPC 迭代 / 弹道 / 重合度
-// #define HZMIR_LOG_AIMER           // ⚠️ 空宏（无调用点）· 瞄点选择 / 延迟补偿
-// #define HZMIR_LOG_SHOOTER         // ⚠️ 空宏（无调用点）· 开火判据为什么没过（场景 C 首选）
+// #define HZMIR_LOG_PLANNER         // ✅ MPC 迭代 / 重合度 / acc_max / 弹道
+// #define HZMIR_LOG_AIMER           // ✅ 瞄点选择 / 弹道无解
+// #define HZMIR_LOG_SHOOTER         // ✅ 开火判据为什么没过（traj_err/thresh/弹速/飞行/距离）
 
 // ── 打符 ──
 // #define HZMIR_LOG_BUFF            // 打符：检测 / 拟合 / 预测
 
 // ── 硬件 / 板卡 ──
-// #define HZMIR_LOG_CAMERA          // ⚠️ 空宏（无调用点）· 相机 SDK 参数 / 带宽 / 丢帧
-// #define HZMIR_LOG_BOARD           // ⚠️ 空宏（无调用点）· 下位机收发（⚠️⚠️⚠️ 极吵）
-// #define HZMIR_LOG_IMU             // ⚠️ 空宏（无调用点）· IMU 数据 / 时间戳对齐
+// #define HZMIR_LOG_CAMERA          // ⚠️ 未接（无调用点）· 相机 SDK 参数 / 带宽 / 丢帧
+// #define HZMIR_LOG_BOARD           // 🗑️ 冗余（gimbal.cpp 已有 19 处）· 用 --log-only=gimbal
+// #define HZMIR_LOG_IMU             // 🗑️ 冗余（与 BOARD 同文件）· 用 --log-only=gimbal
 
 // ── 轮子（`utils/wheels/`）──
 // #define HZMIR_LOG_TI              // 时序积分器（TemporalIntegrator）
 // #define HZMIR_LOG_TGD             // 传统检测的 TGD（目标引导检测）
 
 // ── 调试体系自身 ──
-// #define HZMIR_LOG_SINK            // ⚠️ 空宏（无调用点）· sink 生命周期（挂上/摘掉/队列深度）
+// #define HZMIR_LOG_SINK            // 🗑️ 冗余（生命周期已有 4 处 info）· 用 --log-only=sink
 
 // ═══════════════════════════════════════════════════════════════════════════
 // §四 ⭐⭐ 实验层 —— 「临时添加 / 替换算法」用这一层

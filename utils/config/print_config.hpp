@@ -240,28 +240,28 @@ void print_effective_config(
     { detail::print_kv(os, "HZMIR_LOG_TRACKER", "开 ⭐ 有效"); ++on; }
 #endif
 #ifdef HZMIR_LOG_TARGET
-    { detail::print_kv(os, "HZMIR_LOG_TARGET", "开 ⚠️ 空宏（无调用点 ⇒ 不会出日志）"); ++on; }
+    { detail::print_kv(os, "HZMIR_LOG_TARGET", "开 ⭐ 有效"); ++on; }
 #endif
 #ifdef HZMIR_LOG_PLANNER
-    { detail::print_kv(os, "HZMIR_LOG_PLANNER", "开 ⚠️ 空宏（无调用点 ⇒ 不会出日志）"); ++on; }
+    { detail::print_kv(os, "HZMIR_LOG_PLANNER", "开 ⭐ 有效"); ++on; }
 #endif
 #ifdef HZMIR_LOG_AIMER
-    { detail::print_kv(os, "HZMIR_LOG_AIMER", "开 ⚠️ 空宏（无调用点 ⇒ 不会出日志）"); ++on; }
+    { detail::print_kv(os, "HZMIR_LOG_AIMER", "开 ⭐ 有效"); ++on; }
 #endif
 #ifdef HZMIR_LOG_SHOOTER
-    { detail::print_kv(os, "HZMIR_LOG_SHOOTER", "开 ⚠️ 空宏（无调用点 ⇒ 不会出日志）"); ++on; }
+    { detail::print_kv(os, "HZMIR_LOG_SHOOTER", "开 ⭐ 有效"); ++on; }
 #endif
 #ifdef HZMIR_LOG_BUFF
     { detail::print_kv(os, "HZMIR_LOG_BUFF", "开 ⭐ 有效"); ++on; }
 #endif
 #ifdef HZMIR_LOG_CAMERA
-    { detail::print_kv(os, "HZMIR_LOG_CAMERA", "开 ⚠️ 空宏（无调用点 ⇒ 不会出日志）"); ++on; }
+    { detail::print_kv(os, "HZMIR_LOG_CAMERA", "开 ⚠️ 未接（无调用点 ⇒ 不会出日志）"); ++on; }
 #endif
 #ifdef HZMIR_LOG_BOARD
-    { detail::print_kv(os, "HZMIR_LOG_BOARD", "开 ⚠️ 空宏（无调用点 ⇒ 不会出日志）"); ++on; }
+    { detail::print_kv(os, "HZMIR_LOG_BOARD", "开 🗑️ 冗余（gimbal.cpp 已有 19 处）"); ++on; }
 #endif
 #ifdef HZMIR_LOG_IMU
-    { detail::print_kv(os, "HZMIR_LOG_IMU", "开 ⚠️ 空宏（无调用点 ⇒ 不会出日志）"); ++on; }
+    { detail::print_kv(os, "HZMIR_LOG_IMU", "开 🗑️ 冗余（与 BOARD 同文件）"); ++on; }
 #endif
 #ifdef HZMIR_LOG_TI
     { detail::print_kv(os, "HZMIR_LOG_TI", "开 ⭐ 有效"); ++on; }
@@ -270,14 +270,15 @@ void print_effective_config(
     { detail::print_kv(os, "HZMIR_LOG_TGD", "开 ⭐ 有效"); ++on; }
 #endif
 #ifdef HZMIR_LOG_SINK
-    { detail::print_kv(os, "HZMIR_LOG_SINK", "开 ⚠️ 空宏（无调用点 ⇒ 不会出日志）"); ++on; }
+    { detail::print_kv(os, "HZMIR_LOG_SINK", "开 🗑️ 冗余（生命周期已有 4 处 info）"); ++on; }
 #endif
     (void)sw;
     if (on == 0)
       os << "    （全部【关】= 默认）⭐ 要开哪个就改 core/debug.hpp §三\n"
-         << "    ⭐ 当前【有效】的 7 个：YOLO / DETECTOR / EKF / TRACKER / BUFF / TI / TGD\n"
-         << "    ⚠️ 【空宏】8 个（开了不出日志）：TARGET / PLANNER / AIMER / SHOOTER /\n"
-         << "       CAMERA / BOARD / IMU / SINK\n";
+         << "    ⭐ 可用的 11 个：YOLO DETECTOR EKF TRACKER TARGET PLANNER AIMER\n"
+         << "       SHOOTER BUFF TI TGD\n"
+         << "    ⚠️ CAMERA 未接（开了不出日志）\n"
+         << "    🗑️ BOARD / IMU / SINK 冗余（模块已有现成日志）⇒ 用 --log-only= 过滤\n";
     else
       os << "    共 " << on << " 个细节日志开关【开】\n";
   }

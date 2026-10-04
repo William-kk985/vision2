@@ -245,6 +245,13 @@ bool Target::diverged() const
 
   if (r_ok && l_ok) return false;
 
+  // ⭐⭐ W123：**发散的具体原因**（原来 `LOG_TARGET` 是空宏）
+  //   ⭐ 报出 r / r+l 各是多少、越界在哪一侧 ⇒ 区分「半径估计飞了」vs「板宽估计飞了」
+  //   ⚠️ 发散时可能每帧都报 ⇒ **限频**（每 30 次一条）。
+  // ⭐ **不限频**（宏默认关=opt-in；⚠️ 宏自带 `[target]` 前缀，消息里别再写 `[Target]`）
+  LOG_TARGET(
+    "发散：r={:.3f} l={:.3f}（r+l={:.3f}）合法区间 r,l+r ∈ (0.05, 0.5) name={}", ekf_.x[8],
+    ekf_.x[9], ekf_.x[8] + ekf_.x[9], static_cast<int>(this->name));
   LOG_EKF("[Target] r={:.3f}, l={:.3f}", ekf_.x[8], ekf_.x[9]);
   return true;
 }
@@ -258,6 +265,16 @@ bool Target::convergened()
   //前哨站特殊判断
   if (this->name == ArmorName::outpost && update_count_ > 10 && !this->diverged()) {
     is_converged_ = true;
+  }
+
+  // ⭐⭐ W123：**首次收敛时报一次**（低频，不用限频）——
+  //   ⭐ 回答"EKF 到底有没有锁上"，是场景 B 的第一个问题。
+  if (is_converged_ && !converged_reported_) {
+    converged_reported_ = true;
+    LOG_TARGET(
+      "✅ 首次收敛：update_count={} r={:.3f} l={:.3f} yaw={:.1f}° vyaw={:.2f} name={}",
+      update_count_, ekf_.x[8], ekf_.x[9], ekf_.x[6] * 180 / CV_PI, ekf_.x[7],
+      static_cast<int>(this->name));
   }
 
   return is_converged_;

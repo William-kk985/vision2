@@ -91,7 +91,7 @@ AimResult Aimer::aim(
   auto aim_point0 = choose_aim_point(target);
   debug_aim_point = aim_point0;
   if (!aim_point0.valid) {
-    // tools::logger()->debug("Invalid aim_point0.");
+    // LOG_AIMER("Invalid aim_point0.");
     return make({false, false, 0, 0});
   }
 
@@ -99,8 +99,8 @@ AimResult Aimer::aim(
   auto d0 = std::sqrt(xyz0[0] * xyz0[0] + xyz0[1] * xyz0[1]);
   tools::Trajectory trajectory0(bullet_speed, d0, xyz0[2]);
   if (trajectory0.unsolvable) {
-    tools::logger()->debug(
-      "[Aimer] Unsolvable trajectory0: {:.2f} {:.2f} {:.2f}", bullet_speed, d0, xyz0[2]);
+    LOG_AIMER(   // W123: per-frame -> compile-time macro (was unconditional debug)
+      "[Aimer] unsolvable traj0: speed={:.2f} d={:.2f} z={:.2f}", bullet_speed, d0, xyz0[2]);
     debug_aim_point.valid = false;
     return make({false, false, 0, 0});
   }
@@ -130,9 +130,9 @@ AimResult Aimer::aim(
 
     // 检查弹道是否可解
     if (current_traj.unsolvable) {
-      tools::logger()->debug(
-        "[Aimer] Unsolvable trajectory in iter {}: speed={:.2f}, d={:.2f}, z={:.2f}", iter + 1,
-        bullet_speed, d, xyz.z());
+      LOG_AIMER(   // W123: per-frame -> compile-time macro
+        "[Aimer] unsolvable iter={}: speed={:.2f} d={:.2f} z={:.2f}", iter + 1, bullet_speed, d,
+        xyz.z());
       debug_aim_point.valid = false;
       return make({false, false, 0, 0});
     }

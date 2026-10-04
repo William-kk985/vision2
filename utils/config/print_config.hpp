@@ -7,7 +7,8 @@
  * ```
  * ① 命令行参数（含默认值）
  * ② yaml 多层合并（品牌相机默认 < 兵种相机配置 < 兵种 yaml 的同名键）
- * ③ 编译期开关（LOG_* 哪些开着 → 见 utils/log/debug_config.hpp）
+ * ③ 编译期开关（LOG_* 哪些开着 → ⭐ 见 core/debug.hpp §三；
+ *    `debug_config.hpp` 只是"展开器"，改它没用）
  * ```
  * ⚠️ 实际踩过的坑：`--tongji` / `exposure_ms` / `enemy_color` 都出现过
  *   "以为读的是 A、实际生效是 B"。
@@ -200,48 +201,83 @@ void print_effective_config(
   }
 
   // ═══ ③.5 ⭐⭐ 实验开关（core/debug.hpp §二）═══
-  detail::print_group(os, "③.5 🧪 实验开关（core/debug.hpp §二；⚠️ 开了就【不是】同济行为）");
+  detail::print_group(os, "③.5 🧪 实验开关（⭐ core/debug.hpp §四；⚠️ 开了就【不是】同济行为）");
   {
     int on = 0;
 #ifdef HZMIR_EXP_NO_TRAD_SAVE
     { detail::print_kv(os, "HZMIR_EXP_NO_TRAD_SAVE", "开", "关掉传统检测器落图"); ++on; }
 #endif
     if (on == 0)
-      os << "    （全部【关】= 同济默认）⭐ 要试新算法就改 core/debug.hpp §二\n";
+      os << "    （全部【关】= 同济默认）⭐ 要试新算法就改 core/debug.hpp §四\n";
     else
       os << "    ⚠️ 共 " << on << " 个实验【开】—— 结论出来后请【转正】或【删除】\n";
   }
 
   // ═══ ④ 编译期开关 ═══
-  detail::print_group(os, "④ 编译期开关（改 utils/log/debug_config.hpp 后重编）");
+  // ⭐⭐ W122：**改 `core/debug.hpp`**（不是 `debug_config.hpp` —— 那只是"展开器"）。
+  // ⚠️ 原来这里只列了 8 个宏，漏了 7 个 ⇒ 用户开的开关可能"查不到"。
+  // ⭐ 现在**列全 15 个**，且对**空宏**（定义但无调用点）明确标注 ⇒ 不会白开。
+  detail::print_group(os, "④ 编译期开关（⭐ 改 core/debug.hpp §三 后重编）");
   {
     int on = 0;
+    // ⭐ 宏：`(名字, 是否空宏)` —— 空宏 = 代码里还没有调用点，开了不出日志
+    const std::pair<const char *, bool> sw[] = {
+      {"YOLO", false},     {"DETECTOR", false}, {"EKF", false},      {"TRACKER", false},
+      {"TARGET", true},    {"PLANNER", true},   {"AIMER", true},     {"SHOOTER", true},
+      {"BUFF", false},     {"CAMERA", true},    {"BOARD", true},     {"IMU", true},
+      {"TI", false},       {"TGD", false},      {"SINK", true},
+    };
 #ifdef HZMIR_LOG_YOLO
-    { detail::print_kv(os, "HZMIR_LOG_YOLO", "开"); ++on; }
+    { detail::print_kv(os, "HZMIR_LOG_YOLO", "开 ⭐ 有效"); ++on; }
+#endif
+#ifdef HZMIR_LOG_DETECTOR
+    { detail::print_kv(os, "HZMIR_LOG_DETECTOR", "开 ⭐ 有效"); ++on; }
 #endif
 #ifdef HZMIR_LOG_EKF
-    { detail::print_kv(os, "HZMIR_LOG_EKF", "开"); ++on; }
+    { detail::print_kv(os, "HZMIR_LOG_EKF", "开 ⭐ 有效"); ++on; }
 #endif
 #ifdef HZMIR_LOG_TRACKER
-    { detail::print_kv(os, "HZMIR_LOG_TRACKER", "开"); ++on; }
+    { detail::print_kv(os, "HZMIR_LOG_TRACKER", "开 ⭐ 有效"); ++on; }
+#endif
+#ifdef HZMIR_LOG_TARGET
+    { detail::print_kv(os, "HZMIR_LOG_TARGET", "开 ⚠️ 空宏（无调用点 ⇒ 不会出日志）"); ++on; }
 #endif
 #ifdef HZMIR_LOG_PLANNER
-    { detail::print_kv(os, "HZMIR_LOG_PLANNER", "开"); ++on; }
+    { detail::print_kv(os, "HZMIR_LOG_PLANNER", "开 ⚠️ 空宏（无调用点 ⇒ 不会出日志）"); ++on; }
+#endif
+#ifdef HZMIR_LOG_AIMER
+    { detail::print_kv(os, "HZMIR_LOG_AIMER", "开 ⚠️ 空宏（无调用点 ⇒ 不会出日志）"); ++on; }
+#endif
+#ifdef HZMIR_LOG_SHOOTER
+    { detail::print_kv(os, "HZMIR_LOG_SHOOTER", "开 ⚠️ 空宏（无调用点 ⇒ 不会出日志）"); ++on; }
 #endif
 #ifdef HZMIR_LOG_BUFF
-    { detail::print_kv(os, "HZMIR_LOG_BUFF", "开"); ++on; }
+    { detail::print_kv(os, "HZMIR_LOG_BUFF", "开 ⭐ 有效"); ++on; }
 #endif
-#ifdef HZMIR_LOG_TI
-    { detail::print_kv(os, "HZMIR_LOG_TI", "开"); ++on; }
-#endif
-#ifdef HZMIR_LOG_TGD
-    { detail::print_kv(os, "HZMIR_LOG_TGD", "开"); ++on; }
+#ifdef HZMIR_LOG_CAMERA
+    { detail::print_kv(os, "HZMIR_LOG_CAMERA", "开 ⚠️ 空宏（无调用点 ⇒ 不会出日志）"); ++on; }
 #endif
 #ifdef HZMIR_LOG_BOARD
-    { detail::print_kv(os, "HZMIR_LOG_BOARD", "开"); ++on; }
+    { detail::print_kv(os, "HZMIR_LOG_BOARD", "开 ⚠️ 空宏（无调用点 ⇒ 不会出日志）"); ++on; }
 #endif
+#ifdef HZMIR_LOG_IMU
+    { detail::print_kv(os, "HZMIR_LOG_IMU", "开 ⚠️ 空宏（无调用点 ⇒ 不会出日志）"); ++on; }
+#endif
+#ifdef HZMIR_LOG_TI
+    { detail::print_kv(os, "HZMIR_LOG_TI", "开 ⭐ 有效"); ++on; }
+#endif
+#ifdef HZMIR_LOG_TGD
+    { detail::print_kv(os, "HZMIR_LOG_TGD", "开 ⭐ 有效"); ++on; }
+#endif
+#ifdef HZMIR_LOG_SINK
+    { detail::print_kv(os, "HZMIR_LOG_SINK", "开 ⚠️ 空宏（无调用点 ⇒ 不会出日志）"); ++on; }
+#endif
+    (void)sw;
     if (on == 0)
-      os << "    （全部【关】= 默认）⭐ 要开哪个就改 utils/log/debug_config.hpp\n";
+      os << "    （全部【关】= 默认）⭐ 要开哪个就改 core/debug.hpp §三\n"
+         << "    ⭐ 当前【有效】的 7 个：YOLO / DETECTOR / EKF / TRACKER / BUFF / TI / TGD\n"
+         << "    ⚠️ 【空宏】8 个（开了不出日志）：TARGET / PLANNER / AIMER / SHOOTER /\n"
+         << "       CAMERA / BOARD / IMU / SINK\n";
     else
       os << "    共 " << on << " 个细节日志开关【开】\n";
   }

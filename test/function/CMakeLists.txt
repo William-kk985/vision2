@@ -113,3 +113,7 @@ add_test(NAME test_detect_filter COMMAND test_detect_filter)
 add_executable(test_can_throttle test_can_throttle.cpp)
 target_link_libraries(test_can_throttle hzmir_utils)
 add_test(NAME test_can_throttle COMMAND test_can_throttle)
+
+add_executable(test_queue_drop test_queue_drop.cpp)
+target_link_libraries(test_queue_drop hzmir_utils)
+add_test(NAME test_queue_drop COMMAND test_queue_drop)

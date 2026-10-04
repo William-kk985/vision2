@@ -10,13 +10,29 @@ using namespace std::chrono_literals;
 
 namespace io
 {
+namespace
+{
+/// @brief 队列满导致丢帧时的上报（限频，每 60 次一条）。
+///
+/// 背景：相机队列 `queue_(1)` 只缓冲 1 帧，且模板默认 `PopWhenFull = false`
+/// —— 队列满时**丢弃新帧**并回调 `full_handler_`。此前未传该回调，
+/// **丢帧完全静默**（主循环只会看到帧率下降，无从判断原因）。
+/// 注意：此处只做**上报**，不改变队列容量与丢弃策略（保持原有行为）。
+void report_queue_drop(const char * who)
+{
+  static int n = 0;
+  if (++n % 60 == 1)
+    LOG_CAMERA("{} 队列满 ⇒ 丢帧 ×{}（消费者跟不上采集；这是丢帧的真实来源）", who, n);
+}
+}  // namespace
+
 MindVision::MindVision(double exposure_ms, double gamma, const std::string & vid_pid)
 : exposure_ms_(exposure_ms),
   gamma_(gamma),
   handle_(-1),
   quit_(false),
   ok_(false),
-  queue_(1),
+  queue_(1, [] { report_queue_drop("MindVision"); }),
   vid_(-1),
   pid_(-1)
 {

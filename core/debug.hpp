@@ -90,7 +90,7 @@
 // | `HZMIR_LOG_BUFF` | ✅ | 打符检测、拟合、预测 | 中 |
 // | `HZMIR_LOG_TI` | ✅ | 时序积分器 `TemporalIntegrator` | 低 |
 // | `HZMIR_LOG_TGD` | ✅ | 传统检测的目标引导检测（TGD） | 中 |
-// | `HZMIR_LOG_CAMERA` | ⚠️ | 相机 SDK 参数、带宽、丢帧（尚无调用点） | — |
+// | `HZMIR_LOG_CAMERA` | ✅ | 相机队列满导致的丢帧（真实丢帧来源） | 低 |
 // | `HZMIR_EXP_NO_TRAD_SAVE` | ✅ | 关闭传统检测器的落图（见 §四） | — |
 //
 // 已删除的开关：`HZMIR_LOG_BOARD`、`HZMIR_LOG_IMU`、`HZMIR_LOG_SINK`。
@@ -130,9 +130,11 @@
 //
 // 场景 D —— 打符：开启 `HZMIR_LOG_BUFF`
 //
-// 场景 E —— 硬件层：使用 `--log-only=gimbal` 过滤现成日志
-//   `io/board/gimbal/gimbal.cpp` 已覆盖串口收发、CRC 校验、线程启停。
-//   相机丢帧统计需要修改相机 SDK 回调，非日志改动可解决。
+// 场景 E —— 硬件层
+//   下位机：使用 `--log-only=gimbal` 过滤现成日志，
+//     `io/board/gimbal/gimbal.cpp` 已覆盖串口收发、CRC 校验、线程启停。
+//   相机丢帧：开启 `HZMIR_LOG_CAMERA`，报告采集队列满导致的丢帧。
+//     若持续出现该日志，说明消费者（自瞄主循环）跟不上采集速率。
 //
 // 场景 F —— 确认 sink 挂载情况：使用 `--log-only=sink`
 //   `[ImageSink]` 与 `[WindowSink]` 的生命周期已有 info 级日志。
@@ -172,7 +174,10 @@
 // #define HZMIR_LOG_BUFF            // 打符检测、拟合、预测
 
 // ── 硬件 ──
-// #define HZMIR_LOG_CAMERA          // 相机 SDK 参数、带宽、丢帧（暂未接入，打开无输出）
+// #define HZMIR_LOG_CAMERA          // 相机队列满导致的丢帧。接在采集队列的 full_handler
+//   回调上：queue_(1) 只缓冲 1 帧，模板默认 PopWhenFull = false，队列满时丢弃新帧。
+//   接入回调前丢帧完全静默，只能观察到帧率下降而无从判断原因。
+//   本开关只做上报，不改变队列容量与丢弃策略。限频（每 60 次一条）。
 
 // ── 轮子 utils/wheels/ ──
 // #define HZMIR_LOG_TI              // 时序积分器 TemporalIntegrator

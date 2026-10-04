@@ -266,9 +266,8 @@ void print_effective_config(
     (void)sw;
     if (on == 0)
       os << "    （全部关闭 = 默认）开启方式：修改 core/debug.hpp §三 后重新编译\n"
-         << "    可用开关（11 个）：YOLO DETECTOR EKF TRACKER TARGET PLANNER AIMER\n"
-         << "                        SHOOTER BUFF TI TGD\n"
-         << "    未接入（打开无输出）：CAMERA\n"
+         << "    可用开关（12 个）：YOLO DETECTOR EKF TRACKER TARGET PLANNER AIMER\n"
+         << "                        SHOOTER BUFF CAMERA TI TGD\n"
          << "    已删除（改用运行期过滤）：BOARD / IMU → --log-only=gimbal，SINK → --log-only=sink\n";
     else
       os << "    共 " << on << " 个日志开关已开启\n";

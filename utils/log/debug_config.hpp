@@ -85,11 +85,6 @@
 #  define LOG_YOLO(...)   // ⭐ 展开为空 ⇒ 零成本
 #endif
 
-#ifdef HZMIR_LOG_DETECTOR
-#  define LOG_DETECTOR(...) tools::logger()->debug("[detector] " __VA_ARGS__)
-#else
-#  define LOG_DETECTOR(...)
-#endif
 
 #ifdef HZMIR_LOG_EKF
 #  define LOG_EKF(...) tools::logger()->debug("[ekf] " __VA_ARGS__)

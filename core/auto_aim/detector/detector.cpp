@@ -275,7 +275,10 @@ bool Detector::check_name(const Armor & armor) const
   if (!hzmir_exp::no_trad_save() && name_ok && !confidence_ok) save(armor);
 
   // 出现 5号 则显示 debug 信息。但不过滤。
-  if (armor.name == ArmorName::five) LOG_DETECTOR("See pattern 5");
+  // 原为 `LOG_DETECTOR("See pattern 5")`。W126：该宏已删除 ——
+  // 它只有这一个调用点，且位于 detector_impl=traditional 路径（四个兵种默认 yolo，
+  // 该路径不执行）。此处改用运行期 debug，避免为一行日志保留一个永不触发的宏。
+  if (armor.name == ArmorName::five) tools::logger()->debug("[Detector] See pattern 5");
 
   return name_ok && confidence_ok;
 }

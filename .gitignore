@@ -72,3 +72,4 @@ logs/roshome/      # run.sh 产生的 ROS home
 
 # 单帧诊断的导图
 output/diag/
+tools/bench/build/

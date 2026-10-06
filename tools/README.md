@@ -65,3 +65,11 @@ python3 tools/split_video.py records/full.avi -s 100 -e 300 -o records/clip
 | `build.sh` / `run.sh` 这类 | `tools/scripts/` | 它是 **sh 脚本** |
 | 业务算法验证 / 指标分析 | `scripts/` | 它处理**项目的数据/算法** |
 | 图片 | `docs/` | 被文档引用（⭐ 不另建图片目录：`output/` 是 gitignore 的，图放进去会丢） |
+
+---
+
+## `bench/` —— 效率对比 harness
+
+对比本项目与同济上游的纯算法耗时。⭐ **用法与【测量纪律】见 [bench/README.md](bench/README.md)**
+（⚠️ 必须交替执行，否则 CPU 热降频会让结论反向）。
+产出见 [docs/20-运行效率对比-改造架构vs同济.md](../docs/20-运行效率对比-改造架构vs同济.md)。

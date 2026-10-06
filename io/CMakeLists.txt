@@ -5,6 +5,7 @@ add_library(hzmir_io STATIC
   board/replay.cpp
   board/can/cboard.cpp
   board/gimbal/gimbal.cpp
+  board/sentry_serial/sentry_serial.cpp
 )
 target_link_libraries(hzmir_io PUBLIC
   hzmir_drivers hzmir_utils serial yaml-cpp ${OpenCV_LIBS})

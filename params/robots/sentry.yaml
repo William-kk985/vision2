@@ -93,6 +93,15 @@ bullet_speed_canid: 0x110
 send_canid: 0xff
 can_interface: "can0"
 
+# ⭐⭐ W130：**哨兵串口通信**（`io::SentrySerial`，协议见 io/board/sentry_serial/sentry_serial.hpp）
+#   ⚠️ 当前哨兵主循环**仍走 CAN**（上面四个键）；本段是串口方案的配置，**待接口替换后启用**。
+#   ⭐ 端口：优先读 `serial_port`，缺省回退 `com_port`（兼容旧配置）
+serial_port: "/dev/sentry"
+# ⭐ 波特率固定 115200（协议约定，不可配）
+# ⭐ 偏置：发送时加到 yaw/pitch 上（度）。⚠️ 参考实现里是硬编码 −1.8/−6.6，
+#   本实现改为读这里 —— 标定值不埋在代码里。缺省 0（= 不加偏置）。
+#   注意与上面 `yaw_offset`（算法层的瞄准偏置）**不是同一个东西**，不要混。
+
 #####-----tracker参数-----#####
 min_detect_count: 5
 max_temp_lost_count: 25

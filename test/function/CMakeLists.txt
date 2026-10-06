@@ -117,3 +117,8 @@ add_test(NAME test_can_throttle COMMAND test_can_throttle)
 add_executable(test_queue_drop test_queue_drop.cpp)
 target_link_libraries(test_queue_drop hzmir_utils)
 add_test(NAME test_queue_drop COMMAND test_queue_drop)
+
+# ⭐ 哨兵串口协议：逐字节布局验证（46/42 字节 + offsetof）
+add_executable(test_sentry_protocol test_sentry_protocol.cpp)
+target_link_libraries(test_sentry_protocol hzmir_io hzmir_utils)
+add_test(NAME test_sentry_protocol COMMAND test_sentry_protocol)

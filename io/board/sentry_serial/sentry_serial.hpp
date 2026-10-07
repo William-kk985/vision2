@@ -46,9 +46,32 @@
  * 0x1B   nav_x             float      4     m      ⭐ `io::Gimbal` 无此字段
  * 0x1F   nav_y             float      4     m      ⭐ 同上
  * 0x23   nav_w             float      4     rad    ⭐ 同上
- * 0x27   status_position   uint8      1     预留，默认 0
+ * 0x27   status_position   uint8      1     ⭐ 见下方"无导航时要发什么"
  * 0x28   tail[2]           uint8[2]   2     0xBB 0x66
  * ```
+ *
+ * ## ⭐⭐ 导航数据可缺省 —— 没有导航时这一帧【照发】
+ *
+ * ⭐ **本帧与导航【无关】的字段永远有效**：`mode` / `yaw{,_vel,_acc}` / `pitch{,_vel,_acc}`
+ *   ⇒ **云台控制不依赖导航包**，`nav_*` 缺失时它们照常下发（这是哨兵能独立工作的前提）。
+ *
+ * | 场景 | `nav_x` / `nav_y` / `nav_w` | `status_position` |
+ * |---|---|---|
+ * | ⭐ **导航包未移植/未就绪** | ⭐ **全部 0** | ⭐ **用它发"别的信息"**（见下） |
+ * | ⭐ **导航包已就绪** | 填入真实导航数据 | 按需（默认 0） |
+ *
+ * ### `status_position` 的语义（无导航时的"别的信息"通道）
+ * 它是 1 字节的**通用状态位**，由视觉侧填写、下位机解读。⚠️ **取值需与下位机约定**。
+ * 建议编码（⚠️ 尚未与下位机确认，接入前必须对齐）：
+ * ```
+ * bit0-1  跟踪状态    0=lost 1=detecting 2=tracking 3=temp_lost
+ * bit2    是否可开火  0=不可 1=可（= Plan::fire）
+ * bit3-6  目标编号    ArmorName（0..8），无目标时 0
+ * bit7    保留
+ * ```
+ * ⚠️ **这样在没有导航的过渡期，下位机仍能从这一帧读到"打到谁/能不能打"**，
+ *    而不必等导航包移植完成。
+ * 📌 **待办**：与下位机确认 `status_position` 的编码后再启用；在此之前保持 0。
  * 合计 2+1+36+1+2 = **42 字节**（Python `<2sB9fB2s`）
  *
  * ## ⚠️ 与参考实现（旧版赫兹 `src/drivers/sentry_serial/`）的差异
@@ -187,9 +210,18 @@ public:
   /// @brief 最近一次收到的上行包（诊断用）
   SentryToVisionPacket last_rx_packet() const;
 
-  /// @brief 下发一帧（`nav_*` 与 `status_position` 为哨兵专有字段，默认 0）
+  /// @brief 下发一帧（⭐ **`nav_*` 可缺省 —— 没有导航数据时传 0 即可，本帧照发**）
+  ///
   /// @note `control`/`fire` 编码为 `mode`：`!control → 0`，`control && !fire → 1`，
-  ///       `control && fire → 2`。yaw/pitch 会**加上 yaml 里的偏置**（见 `apply_offsets`）。
+  ///       `control && fire → 2`。`yaw`/`pitch` 会**加上 yaml 里的偏置**。
+  /// @note ⭐ **导航缺省不影响云台控制**：`nav_*` 与 `status_position` 默认 0，
+  ///       而 `mode` / `yaw*` / `pitch*` 始终按传入值下发。
+  ///       ⇒ 哨兵在**导航包移植完成前**即可正常工作。
+  /// @param nav_x 导航 X（m）。⚠️ 无导航时传 0
+  /// @param nav_y 导航 Y（m）。⚠️ 同上
+  /// @param nav_w 导航朝向（rad）。⚠️ 同上
+  /// @param status_position ⭐ **无导航时的"别的信息"通道**（1 字节，语义见文件头
+  ///        "无导航时要发什么"）。⚠️ 编码需与下位机约定；未约定前保持 0。
   void send(
     bool control, bool fire, float yaw, float yaw_vel, float yaw_acc, float pitch, float pitch_vel,
     float pitch_acc, float nav_x = 0, float nav_y = 0, float nav_w = 0,

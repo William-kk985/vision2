@@ -90,7 +90,47 @@ int main()
     CHECK(raw[40] == 0xBB && raw[41] == 0x66, "raw[40..41] = 帧尾");
   }
 
-  // ── ⑥ `SentryMode` 枚举值（对齐下位机的 0/1/2/3）──
+  // ── ⑥ ⭐ 无导航时这一帧【照发】：nav 全 0，但控制字段完整 ──
+  std::printf("\n  -- 无导航场景（导航包未就绪）--\n");
+  {
+    // 模拟：没有导航数据，只发云台控制
+    VisionToSentryPacket p{};
+    p.head[0] = io::FRAME_HEAD[0];
+    p.head[1] = io::FRAME_HEAD[1];
+    p.mode = 1;                 // 控制云台、不开火
+    p.yaw = 0.5f;
+    p.yaw_vel = 1.0f;
+    p.yaw_acc = 2.0f;
+    p.pitch = -0.2f;
+    p.pitch_vel = 0.5f;
+    p.pitch_acc = 1.0f;
+    // ⭐ nav_* 与 status_position 保持默认 0（= 无导航）
+    p.tail[0] = io::FRAME_TAIL[0];
+    p.tail[1] = io::FRAME_TAIL[1];
+
+    CHECK(p.nav_x == 0.0f && p.nav_y == 0.0f && p.nav_w == 0.0f, "无导航 ⇒ nav_x/y/w 全 0");
+    CHECK(p.status_position == 0, "未启用 status_position ⇒ 0");
+    CHECK(p.mode == 1 && p.yaw == 0.5f && p.pitch == -0.2f, "⭐ 云台控制字段【照发】（不依赖导航）");
+    CHECK(p.yaw_vel == 1.0f && p.yaw_acc == 2.0f && p.pitch_vel == 0.5f && p.pitch_acc == 1.0f,
+          "⭐ 含前馈的 vel/acc 也照发");
+    CHECK(sizeof(p) == io::SENTRY_TX_SIZE, "无导航时帧长仍为 42（不缩短）");
+  }
+
+  // ── ⑦ ⭐ 有导航时填入真实数据 ──
+  std::printf("\n  -- 有导航场景（导航包就绪后）--\n");
+  {
+    VisionToSentryPacket p{};
+    p.mode = 2;
+    p.yaw = 0.1f;
+    p.nav_x = 1.5f;
+    p.nav_y = -2.0f;
+    p.nav_w = 0.785f;   // 45°
+    p.status_position = 0;
+    CHECK(p.nav_x == 1.5f && p.nav_y == -2.0f && p.nav_w == 0.785f, "⭐ 导航就绪 ⇒ 填入真实 nav");
+    CHECK(p.mode == 2 && p.yaw == 0.1f, "导航就绪不影响控制字段");
+  }
+
+  // ── ⑧ `SentryMode` 枚举值（对齐下位机的 0/1/2/3）──
   std::printf("\n  -- 模式枚举 --\n");
   CHECK(static_cast<int>(io::SentryMode::IDLE) == 0, "IDLE = 0");
   CHECK(static_cast<int>(io::SentryMode::AUTO_AIM) == 1, "AUTO_AIM = 1");

@@ -135,6 +135,17 @@ decision_speed: 10 # rad/s
 high_speed_delay_time: 0.026 # s
 low_speed_delay_time: 0.010 # s
 
+# ⭐⭐ W136：**MPC（Planner）必需参数** —— 哨兵改用 MPC 后需要。
+#   ⚠️ 原来这些键不存在（哨兵用 legacy `Aimer`，不需要）。
+#   ⭐ 取值以步兵 `infantry.yaml` 为起点；⚠️ **哨兵云台不同，需真机标定后再调**。
+fire_thresh: 0.003          # 开火判据：弹道误差小于它才开火（与步兵一致）
+max_yaw_acc: 50             # 云台 yaw 最大角加速度
+Q_yaw: [9e6, 0]             # MPC 代价矩阵 Q（yaw）
+R_yaw: [1]                  # MPC 代价矩阵 R（yaw）
+max_pitch_acc: 100          # 云台 pitch 最大角加速度
+Q_pitch: [9e6, 0]           # MPC 代价矩阵 Q（pitch）
+R_pitch: [1]                # MPC 代价矩阵 R（pitch）
+
 #####-----shooter参数-----#####
 first_tolerance: 5 # 近距离射击容差，degree
 second_tolerance: 2 # 远距离射击容差，degree

@@ -287,6 +287,10 @@ private:
   tools::ThreadSafeQueue<
     std::tuple<Eigen::Quaterniond, std::chrono::steady_clock::time_point>>
     queue_{1000};
+
+  /// ⭐ W136：保护 `tx_data_` 与 `serial_` 的写 —— `send()` 会被 plan 线程调用，
+  ///   而 `read_thread` 同时在读串口（主循环单线程时代不需要）
+  mutable std::mutex tx_mutex_;
 };
 
 }  // namespace io

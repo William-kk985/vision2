@@ -209,6 +209,11 @@ void SentrySerial::send(
 {
   if (!connected_.load() || !serial_.isOpen()) return;
 
+  // ⭐⭐ W136：**加锁** —— `tx_data_` 是共享成员，且 `send()` 可能被 plan 线程调用，
+  //   而 `read_thread` 同时在读串口 ⇒ 两处并发访问 `serial_` 与 `tx_data_`。
+  //   ⚠️ 原来没锁（那时只有主循环单线程调 send，够用）。
+  std::lock_guard<std::mutex> lk(tx_mutex_);
+
   tx_data_.head[0] = FRAME_HEAD[0];
   tx_data_.head[1] = FRAME_HEAD[1];
   tx_data_.mode = control ? (fire ? 2 : 1) : 0;

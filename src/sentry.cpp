@@ -41,7 +41,10 @@
 #include "utils/system/paths.hpp"   // ⭐ W87   // ⭐ W83
 #include "utils/system/host_info.hpp"
 #include "utils/system/thread_tuning.hpp"   // ⭐ W82   // ⭐ W81：本机核数 + 建议   // ⭐ W63
-#include "core/auto_aim/planner/legacy.hpp"   // ⭐ 同济哨兵用 Aimer（legacy）
+#include "core/auto_aim/planner/mpc.hpp"   // ⭐⭐ W136：哨兵改用 MPC（原为 legacy Aimer）
+#include "utils/debug/img_tools.hpp"          // ⭐ W136：L3 overlay 绘制（画框/画点）
+#include "utils/debug/image_sink.hpp"         // ⭐ W136：L3 存图
+#include "utils/debug/window_sink.hpp"        // ⭐ W136：L3 可视化窗口
 #include "core/auto_aim/solver/solver.hpp"
 #include "core/auto_aim/target/target_debug_fill.hpp"   // ⭐ W70
 #include "core/auto_aim/tracker/tracker.hpp"
@@ -83,6 +86,8 @@ const std::string keys =
   "{dump-camera-params | false | ⭐ 只打印相机常用参数的当前值（用于把 MVS 里的好值抄进 yaml 的 camera_params）}"
   "{camera-config  | | ⭐ 覆盖相机配置路径（默认用兵种 yaml 的 camera_config 键）}"
   "{csv            | | ⭐ Debug CSV 输出前缀}"
+  "{debug-img      | false | ⭐⭐ L3：启动就开存图（按键 4 也可随时切换）}"
+  "{debug-window   | false | ⭐⭐ L3：启动就开可视化窗口（按键 1 也可随时切换）}"
   "{record         | false | ⭐⭐ 录像到 output/video/（默认**不录**；录会占一个核做 MJPG 编码）}"
   "{stop-after     | | ⭐⭐ 算法独立测试：跑到该阶段就停（perceive/detect/track/buff-detect/buff-solve/plan；空=全跑）}"
   "{debug-only     | | ⭐⭐ 一条命令配齐「只看这一步」= --stop-after + --log-only（perceive/detect/track/buff-detect/buff-solve/plan）}"
@@ -133,12 +138,20 @@ struct ReplayBoard
 
   Eigen::Quaterniond imu_at(std::chrono::steady_clock::time_point t) { return replay_.q(t); }
 
-  void send(io::Command c)
+  /// ⭐⭐ W136：**改为 8 个标量**（原为 `io::Command`）——
+  ///   MPC 的核心输出是 `yaw_vel/yaw_acc/pitch_vel/pitch_acc`（前馈），
+  ///   ⚠️ `io::Command` 只有 `control/shoot/yaw/pitch` ⇒ **装不下，会丢掉前馈**。
+  ///   串口 42 字节协议里本来就有这 4 个字段 ⇒ 无损。
+  void send(
+    bool control, bool fire, float yaw, float yaw_vel, float yaw_acc, float pitch, float pitch_vel,
+    float pitch_acc)
   {
     ++sent_count;
     if (sent_count % 200 == 1)
-      tools::logger()->debug("[ReplayBoard] send#{:<6} control={} shoot={} yaw={:.4f} pitch={:.4f}",
-                             sent_count, c.control, c.shoot, c.yaw, c.pitch);
+      tools::logger()->debug(
+        "[ReplayBoard] send#{:<6} control={} fire={} yaw={:.4f} yaw_v={:.3f} yaw_a={:.2f} "
+        "pitch={:.4f}",
+        sent_count, control, fire, yaw, yaw_vel, yaw_acc, pitch);
   }
 };
 
@@ -180,12 +193,15 @@ struct SentryBoard
     return serial.q(t);   // 队列内 slerp 插值
   }
 
-  /// @brief 下发一帧：`io::Command` → 串口协议的标量
+  /// @brief 下发一帧（⭐ **8 个标量，含 MPC 的 vel/acc 前馈**）
   /// @note `nav_*` 发 0（导航包未移植）；`status_position` 用默认值（当前固定 0）
-  void send(io::Command c)
+  void send(
+    bool control, bool fire, float yaw, float yaw_vel, float yaw_acc, float pitch, float pitch_vel,
+    float pitch_acc)
   {
     ++sent_count;
-    serial.send(c.control, c.shoot, static_cast<float>(c.yaw), 0, 0, static_cast<float>(c.pitch), 0, 0);
+    // ⭐ 串口 42 字节包【原生支持】这 8 个量（含 vel/acc）⇒ MPC 前馈无损下发
+    serial.send(control, fire, yaw, yaw_vel, yaw_acc, pitch, pitch_vel, pitch_acc);
   }
 };
 
@@ -196,12 +212,15 @@ int run_sentry(
   const std::string & config_path, const std::string & csv_prefix, bool verbose_hotkeys,
   bool record, bool pj = false,
   const std::string & pj_host = "127.0.0.1", uint16_t pj_port = 9870,
-  tools::Stage stop_after = tools::Stage::Plan)   // ⭐ W100：阶段门（A2）
+  tools::Stage stop_after = tools::Stage::Plan,   // ⭐ W100：阶段门（A2）
+  bool debug_img = false, bool debug_window = false)   // ⭐⭐ W136：L3 存图/窗口
 {
   auto_aim::DetectorSlot yolo(config_path, true);   // ⭐ W101（原 B2）：统一槽位
   auto_aim::Solver solver(config_path);
   auto_aim::Tracker tracker(config_path, solver);
-  auto_aim::Aimer aimer(config_path);   // ⭐ 同济哨兵用 legacy Aimer（不是 MPC）
+  // ⭐⭐ W136：**哨兵改用 MPC**（`Planner`）—— 原为 legacy `Aimer`（= 同济哨兵的做法）。
+  //   ⚠️ 与同济不同，属**今年新尝试**。buff 模式哨兵不用（无 Buff_Detector）⇒ 无需 buff_aimer。
+  auto_aim::Planner planner(config_path);
 
   // ⭐⭐ W35：ROS2 导航桥（同济 `sentry.cpp` 的 `io::ROS2 ros2;`）
   //   构造函数里 `rclcpp::init` + 两个 spin 线程（发布/订阅各一）
@@ -221,8 +240,26 @@ int run_sentry(
     // ⚠️ 这两个兵种的 `cli` 不在本作用域 → 用默认 30 天
     tools::guard_on_startup(30, tools::paths::video());   // ⭐ W84
 
-      tools::DebugRuntime dbg({.csv_prefix = csv_prefix, .pj = pj, .pj_host = pj_host,
-                               .pj_port = pj_port, .verbose_hotkeys = verbose_hotkeys,
+    // ⭐⭐ W136：**跨线程传 plan 结果**（plan 在 plan 线程算，Debug 在主线程填）—— 照步兵
+    struct PlanSnapshot
+    {
+      std::mutex mtx;
+      auto_aim::Plan plan;
+      int64_t us = 0;       // planner.plan() 耗时
+      int64_t ctl_us = 0;   // board.send() 耗时（真机 = 串口写）
+      bool valid = false;
+    } psnap;
+
+    tools::ThreadSafeQueue<std::optional<auto_aim::Target>, true> target_queue(1);
+    target_queue.push(std::nullopt);
+
+      tools::DebugRuntime dbg({.csv_prefix = csv_prefix,
+                               .pj = pj,
+                               .pj_host = pj_host,
+                               .pj_port = pj_port,
+                               .img = debug_img,        // ⭐ W136：L3 存图
+                               .window = debug_window,  // ⭐ W136：L3 窗口
+                               .verbose_hotkeys = verbose_hotkeys,
                                .name = "sentry"});
     auto & hub = dbg.hub;                 // ⭐ 别名：保持下游代码一字不改
     auto & expense = dbg.expense;
@@ -235,12 +272,72 @@ int run_sentry(
   std::chrono::steady_clock::time_point t;
   uint32_t frame_id = 0;
 
+  // ⭐⭐ W136：**独立 plan 线程**（照步兵）—— `planner.plan()` 在这里 100Hz 跑，
+  //   与感知/跟踪并行 ⇒ 云台控制频率**不受帧率限制**。
+  //   ⚠️ 这正是"用上 MPC"的关键：MPC 的价值在预测 + vel/acc 前馈，
+  //     若同步跑在主循环里，控制频率 = 帧率（~30Hz），前馈优势体现不出来。
+  std::atomic<bool> quit = false;
+  std::atomic<io::Mode> plan_mode{io::Mode::idle};
+
+  auto plan_thread = std::thread([&]() {
+    while (!quit) {
+      std::optional<auto_aim::Target> target;
+      // ⭐ `try_peek` 一次加锁完成「判空 + 取出」（避免 empty()+front() 的 TOCTOU）
+      if (plan_mode == io::Mode::auto_aim && target_queue.try_peek(target)) {
+        const auto tp0 = std::chrono::steady_clock::now();
+        auto plan = planner.plan(target, cboard.bullet_speed);
+        const auto plan_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                               std::chrono::steady_clock::now() - tp0)
+                               .count();
+        {
+          std::lock_guard<std::mutex> lk(psnap.mtx);
+          psnap.plan = plan;
+          psnap.us = plan_us;
+          psnap.valid = true;
+        }
+
+        // ⭐ 测 `send()` 的真实耗时（真机 = 串口写）
+        const auto tc0 = std::chrono::steady_clock::now();
+        cboard.send(
+          plan.control, plan.fire, plan.yaw, plan.yaw_vel, plan.yaw_acc, plan.pitch, plan.pitch_vel,
+          plan.pitch_acc);
+        const auto ctl_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                              std::chrono::steady_clock::now() - tc0)
+                              .count();
+        {
+          std::lock_guard<std::mutex> lk(psnap.mtx);
+          psnap.ctl_us = ctl_us;
+        }
+
+        std::this_thread::sleep_for(10ms);   // → 100 Hz
+      } else {
+        // 无目标 / 非自瞄档 ⇒ 发"不控制"，并降频轮询
+        cboard.send(false, false, 0, 0, 0, 0, 0, 0);
+        std::this_thread::sleep_for(200ms);
+      }
+    }
+  });
+
   while (!exiter.exit()) {
     auto_aim::FrameDebug fd;   // ⭐⭐ W97：**必须在循环内** —— 在外则跨帧残留
     // ⭐⭐ W97：`frame_id` / `mode` 必须**无条件**填（原来在 `if (auto_aim)` 分支内
     //   ⇒ ⚠️ 别的模式不递增 frame_id、mode 保留旧值 —— 与 infantry 不一致）
     fd.frame_id = frame_id++;
     fd.mode = static_cast<uint8_t>(cboard.mode);
+
+    // ⭐⭐ W136：**L3 overlay 的绘制素材**（照步兵 W112/W113）
+    //   ⚠️ 只在真要图时才填（`hub.wants_image()` 门控）⇒ 没人看图时**零开销**。
+    struct DbgArmor
+    {
+      std::vector<cv::Point2f> points;   // 模型输出的四点（连起来即装甲板四边形）
+      cv::Point2f center;                // 标签画在哪
+      std::string label;                 // "0.95 blue 3 big"
+    };
+    std::vector<DbgArmor> dbg_armors;
+    std::vector<std::vector<cv::Point2f>> dbg_pred;   // 淡蓝：EKF 预测的装甲板四点
+    std::vector<cv::Point2f> dbg_aim;                 // 红：瞄准点四点
+    auto_aim::ArmorType dbg_tgt_type = auto_aim::ArmorType::small;
+    auto_aim::ArmorName dbg_tgt_name = auto_aim::ArmorName::not_armor;
     hotkeys.poll();
     if (paused) {
       std::this_thread::sleep_for(20ms);
@@ -266,6 +363,11 @@ int run_sentry(
     fd.t_cam_wait_us = expense.us("cam_wait");   // W86: blocking wait, not CPU
     fd.t_perceive_us = expense.us("perceive");
 
+    // ⭐⭐ W136：**把当前档位同步给 plan 线程** —— 它据此决定"规划"还是"发不控制"。
+    //   ⚠️ 必须在 `if (cboard.mode == auto_aim)` 之前，且**每帧无条件**执行
+    //      （否则非自瞄档时 plan 线程会拿旧值继续规划）。
+    plan_mode = cboard.mode;
+
     if (cboard.mode == io::Mode::auto_aim) {
       // ⭐⭐ W100（原 A2）：阶段门 —— `--stop-after=perceive` 时**不检测**
       const bool do_detect = tools::stage_ok(stop_after, tools::Stage::Detect);
@@ -273,6 +375,25 @@ int run_sentry(
       auto det = do_detect ? yolo.detect(img) : auto_aim::DetectorResult{};            // ⭐⭐ W98：结果 + dbg 一起返回
       auto & armors = det.armors;
       expense.end("detect");
+
+      // ⭐ W136：装甲板素材（四点 + 中心 + 标签）
+      if (hub.wants_image()) {
+        for (const auto & a : armors) {
+          const int ci = static_cast<int>(a.color), ni = static_cast<int>(a.name),
+                    ti = static_cast<int>(a.type);
+          dbg_armors.push_back(
+            {a.points, a.center,
+             cv::format(
+               "%.2f %s %s %s", a.confidence,
+               (ci >= 0 && ci < (int)auto_aim::COLORS.size()) ? auto_aim::COLORS[ci].c_str() : "?",
+               (ni >= 0 && ni < (int)auto_aim::ARMOR_NAMES.size())
+                 ? auto_aim::ARMOR_NAMES[ni].c_str()
+                 : "?",
+               (ti >= 0 && ti < (int)auto_aim::ARMOR_TYPES.size())
+                 ? auto_aim::ARMOR_TYPES[ti].c_str()
+                 : "?")});
+        }
+      }
 
       // ⭐⭐ 4 项横切能力（W7 已实现，**默认关闭 = 同济行为**）
       //   同济在 `sentry.cpp` 的顺序：
@@ -320,13 +441,13 @@ int run_sentry(
       // ⚠️ 同济哨兵在此处会走 `decider.decide(...)` 做 **4 相机全向搜索**；
       //    本项目**单相机** → 直接自瞄（与步兵一致）
       // ⭐⭐ W100（原 A2）：**阶段门** —— `--stop-after=track/detect` 时不跑规划、不下发指令
+      // ⭐⭐ W136：**把目标喂给 plan 线程**（不再在主循环里同步 aim）
+      //   ⭐ 只有跑到 plan 阶段才喂；否则喂 nullopt ⇒ **不发云台指令**
       const bool do_plan = tools::stage_ok(stop_after, tools::Stage::Plan);
-      auto aim_r = do_plan
-                     ? aimer.aim(targets, t, cboard.bullet_speed,
-                               io::ShootMode::both_shoot)   // ⭐ W135：单枪口 ⇒ 恒 both_shoot
-                     : auto_aim::AimResult{};
-      const io::Command & command = aim_r.command;
-      if (do_plan) cboard.send(command);
+      if (do_plan && !targets.empty())
+        target_queue.push(targets.front());
+      else
+        target_queue.push(std::nullopt);
 
       // ⭐ 上行给导航（同济 `ros2.publish(decider.get_target_info(armors, targets))`）
       //   payload = {x, y, 1, ArmorName+1}，⚠️ 第 4 位从 **1** 开始
@@ -341,23 +462,93 @@ int run_sentry(
       // ⭐⭐ W71：`sol_*` 四列（原来永远是 0）
       fd.solver = trk.solver_dbg;   // ⭐ W101（原 F8）：随 TrackerResult 带出
       // ⭐⭐ W70：填 `tgt_*`（原来 `fd.target.*` 从没被赋值 → CSV 里 13 列永远 0）
-      if (!targets.empty())
+      if (!targets.empty()) {
+        // ⭐ W136：EKF 预测点 + 记录目标类型/名字（给瞄准点投影用）
+        if (hub.wants_image()) {
+          const auto & tg = targets.front();
+          dbg_tgt_type = tg.armor_type;
+          dbg_tgt_name = tg.name;
+          for (const auto & xyza : tg.armor_xyza_list())
+            dbg_pred.push_back(
+              solver.reproject_armor(xyza.head(3), xyza[3], tg.armor_type, tg.name));
+        }
         auto_aim::fill_target_debug(fd.target, targets.front(), fd.solver.t_solve_us);
-      fd.controller = aim_r.dbg;             // ⭐ W98：一行替代 4 处手写
+      }
+      // ⭐⭐ W136：从 plan 线程的快照里取 `plan`（填 planner/shooter/controller 三组调试量）
+      {
+        std::lock_guard<std::mutex> lk(psnap.mtx);
+        if (psnap.valid) {
+          const auto & p = psnap.plan;
+          p.fill_debug(fd.planner, fd.shooter, fd.controller);   // ⭐ W98：路由映射收进 Plan
+          fd.planner.t_plan_us = psnap.us;
+          fd.controller.t_ctrl_us = psnap.ctl_us;
+
+          // ⭐ W136：瞄准点投回像素（旧版赫兹的"红圈"）
+          if (hub.wants_image() && dbg_tgt_name != auto_aim::ArmorName::not_armor &&
+              p.debug_xyza.head(3).norm() > 1e-6)
+            dbg_aim = solver.reproject_armor(p.debug_xyza.head(3), p.debug_xyza[3], dbg_tgt_type,
+                                             dbg_tgt_name);
+        }
+      }
       // ⭐⭐⭐ W98 修复（**原有 bug**）：`t_frame_us` 原来在循环【末尾】才赋值，
       //   而 `hub.on_frame(fd)` 在它**之前** —— ⚠️ 于是 sink 看到的 `t_frame_us` **恒为 0**
       //   （实测：sentry 的 CSV `t_frame_us` 列 **0/687**；infantry/hero/uav 都是 687/687）。
       //   ⚠️ 注意必须放在**这里**（detect/track 都已 `expense.end` 之后）——
       //      若提到 `if (auto_aim)` 之前，`expense.us("detect"/"track")` 会读到**上一帧**的值。
       fd.t_frame_us = expense.us("perceive") + expense.us("detect") + expense.us("track");
+
+      // ⭐⭐ W136：**L3 overlay 绘制**（照步兵）——
+      //   🟢 检测装甲板 · 🔵 淡蓝 EKF 预测 · 🔴 瞄准点 · 🟡 帧号 + 跟踪状态
+      if (hub.wants_image() && !img.empty()) {
+        cv::Mat overlay = img.clone();
+        const cv::Scalar kGreen{0, 255, 0};
+        const cv::Scalar kLightBlue{255, 200, 0};   // BGR：蓝为主 + 一点绿
+        const cv::Scalar kRed{0, 0, 255};
+
+        for (const auto & d : dbg_armors) {
+          if (d.points.size() >= 2) tools::draw_points(overlay, d.points, kGreen, 3);
+          tools::draw_text(overlay, d.label, d.center, kGreen, 0.6, 1);
+        }
+        for (const auto & pts : dbg_pred)
+          if (pts.size() >= 2) tools::draw_points(overlay, pts, kLightBlue, 3);
+
+        // ⚠️ 瞄准点做合理性检查：畸变/发散时可能投到画面外很远，画出来会误导
+        bool aim_sane = (dbg_aim.size() >= 2);
+        if (aim_sane) {
+          for (const auto & pt : dbg_aim)
+            if (std::abs(pt.x) > 3.f * img.cols || std::abs(pt.y) > 3.f * img.rows) {
+              aim_sane = false;
+              break;
+            }
+        }
+        if (aim_sane) {
+          tools::draw_points(overlay, dbg_aim, kRed, 3);
+          cv::Point2f c(0, 0);
+          for (const auto & pt : dbg_aim) c += pt;
+          c.x /= static_cast<float>(dbg_aim.size());
+          c.y /= static_cast<float>(dbg_aim.size());
+          cv::circle(overlay, cv::Point(static_cast<int>(c.x), static_cast<int>(c.y)), 6, kRed, -1);
+          cv::circle(overlay, cv::Point(static_cast<int>(c.x), static_cast<int>(c.y)), 10, kRed, 2);
+        }
+        cv::putText(
+          overlay, cv::format("f%u %s", fd.frame_id, tracker.state().c_str()), {12, 40},
+          cv::FONT_HERSHEY_SIMPLEX, 1.0, {0, 255, 255}, 2);
+        hub.on_image("aim", overlay, fd.t_frame_us);
+      }
+
       hub.on_frame(fd);
     } else {
-      cboard.send({false, false, 0, 0});
+      // 非自瞄档（idle / buff）：plan 线程已经在发"不控制"，这里不再重复发
+      // ⚠️ W136：原来这里 `cboard.send({false,false,0,0})` —— 现移交给 plan 线程统一发，
+      //   避免两个线程同时写串口。
     }
 
     // ⭐ 帧总耗时 = 各正交段之和（budget_table 的假设）
     expense.next_frame();
   }
+
+  quit = true;   // ⭐ W136：停 plan 线程
+  if (plan_thread.joinable()) plan_thread.join();
 
   if (!csv_prefix.empty())
     tools::logger()->info(
@@ -463,7 +654,8 @@ int main(int argc, char * argv[])
     const int rc = run_sentry(camera, cboard, enemy_color, config_path, csv_prefix, true,
                               cli.get<bool>("record"), cli.get<bool>("pj"),
                               cli.get<std::string>("pj-host"),
-                              static_cast<uint16_t>(cli.get<int>("pj-port")), stop_after);
+                              static_cast<uint16_t>(cli.get<int>("pj-port")), stop_after,
+                              cli.get<bool>("debug-img"), cli.get<bool>("debug-window"));
     tools::logger()->info("[sentry] 退出（共发 {} 帧）", cboard.sent_count);
     return rc;
   }
@@ -481,9 +673,10 @@ int main(int argc, char * argv[])
     "[sentry] 录像回放模式: {} mode={}({})", video_path, int(m),
     (m >= 0 && m < int(io::MODES.size())) ? io::MODES[m] : "?");
   
-  const int rc = run_sentry(camera, cboard, enemy_color, config_path, csv_prefix, true, cli.get<bool>("record"),
-                     cli.get<bool>("pj"), cli.get<std::string>("pj-host"),
-                     static_cast<uint16_t>(cli.get<int>("pj-port")), stop_after);
+  const int rc = run_sentry(camera, cboard, enemy_color, config_path, csv_prefix, true,
+                     cli.get<bool>("record"), cli.get<bool>("pj"), cli.get<std::string>("pj-host"),
+                     static_cast<uint16_t>(cli.get<int>("pj-port")), stop_after,
+                     cli.get<bool>("debug-img"), cli.get<bool>("debug-window"));
   tools::logger()->info("[sentry] 录像播放完毕（共 {} 帧），退出", cboard.sent_count);
   return rc;
 }

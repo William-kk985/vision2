@@ -47,6 +47,7 @@
 #include "core/auto_aim/tracker/tracker.hpp"
 #include "drivers/dm_imu/dm_imu.hpp"
 #include "io/board/can/cboard.hpp"
+#include "io/board/sentry_serial/sentry_serial.hpp"   // ⭐ W134：串口方案
 #include "io/board/replay.hpp"
 #include "io/camera/camera.hpp"
 #include "io/camera/video.hpp"
@@ -83,6 +84,7 @@ const std::string keys =
   "{dump-camera-params | false | ⭐ 只打印相机常用参数的当前值（用于把 MVS 里的好值抄进 yaml 的 camera_params）}"
   "{camera-config  | | ⭐ 覆盖相机配置路径（默认用兵种 yaml 的 camera_config 键）}"
   "{shoot-mode     | 2 | ⭐ 哨兵枪口：0=left 1=right 2=both}"
+  "{board          | can | ⭐⭐ 下位机链路：`can`（io::CBoard，默认）/ `serial`（io::SentrySerial，⚠️ 需 /dev/sentry 在位）}"
   "{csv            | | ⭐ Debug CSV 输出前缀}"
   "{record         | false | ⭐⭐ 录像到 output/video/（默认**不录**；录会占一个核做 MJPG 编码）}"
   "{stop-after     | | ⭐⭐ 算法独立测试：跑到该阶段就停（perceive/detect/track/buff-detect/buff-solve/plan；空=全跑）}"
@@ -135,7 +137,72 @@ struct ReplayCBoard
   }
 };
 
-/// @brief 兵种程序主循环（⭐ 一份逻辑，`io::CBoard` / `ReplayCBoard` 各实例化一次）
+// ⭐⭐⭐ W134：**串口下位机适配层** —— `io::SentrySerial` → 主循环期望的 `io::CBoard` 形状
+//
+// ## 为什么需要它
+// 主循环写成模板，依赖下位机的**公开形状**（与 `ReplayCBoard` 刻意模仿的那套一致）：
+// ```
+//   double bullet_speed;  io::Mode mode;  io::ShootMode shoot_mode;
+//   Eigen::Quaterniond imu_at(t);   void send(io::Command)
+// ```
+// 而 `io::SentrySerial` 提供的是 `state()` / `mode()` / `q(t)` / `send(control, fire, yaw, ...)`
+// —— ⭐ **形状不同，故加这一层转换**（与 W31 对 `io::CBoard` 的处理一致：
+//   **不为了统一去改底层**，而是在主循环侧做适配）。
+//
+// ## ⚠️ `shoot_mode` 固定为 `both_shoot`
+// ⭐ **本项目哨兵是单枪口**（与同济的左/右/双不同）⇒ **不需要**枪口切换。
+// `shoot_mode` 唯一的功能用途是 `legacy.cpp` 里的左右枪口偏置：
+// ```cpp
+// if (shoot_mode == left_shoot && left_yaw_offset_.has_value()) yaw += ...;
+// ```
+// ⇒ ⭐ **传 `both_shoot` 即两个分支都不命中 ⇒ 不加偏置**，正是单枪口所需。
+// ⚠️ 串口 46 字节上行包里**本来就没有 `shoot_mode` 字段** —— 这与单枪口一致，非缺陷。
+struct SentrySerialBoard
+{
+  io::SentrySerial serial;
+
+  // ── 主循环读取的公开成员（每次 send 时从串口状态同步）──
+  double bullet_speed = 22.0;
+  io::Mode mode = io::Mode::idle;
+  /// ⭐ 单枪口 ⇒ 恒为 `both_shoot`（见上面说明）
+  io::ShootMode shoot_mode = io::ShootMode::both_shoot;
+  size_t sent_count = 0;
+
+  explicit SentrySerialBoard(const std::string & config_path) : serial(config_path) {}
+
+  /// @brief 从下位机的模式字节映射到主循环的 `io::Mode`
+  /// @note 串口协议：0=idle 1=auto_aim 2=small_buff 3=big_buff（⭐ 无 outpost）
+  static io::Mode to_mode(io::SentryMode m)
+  {
+    switch (m) {
+      case io::SentryMode::IDLE: return io::Mode::idle;
+      case io::SentryMode::AUTO_AIM: return io::Mode::auto_aim;
+      case io::SentryMode::SMALL_BUFF: return io::Mode::small_buff;
+      case io::SentryMode::BIG_BUFF: return io::Mode::big_buff;
+    }
+    return io::Mode::idle;
+  }
+
+  /// @brief 取 `t` 时刻云台姿态（`io::CBoard::imu_at` 的对应物）
+  Eigen::Quaterniond imu_at(std::chrono::steady_clock::time_point t)
+  {
+    const auto st = serial.state();
+    bullet_speed = st.bullet_speed;      // ⭐ 同步弹速
+    mode = to_mode(serial.mode());       // ⭐ 同步档位
+    return serial.q(t);
+  }
+
+  /// @brief 下发一帧（把 `io::Command` 拆成串口协议的标量）
+  /// @note ⭐ `nav_*` 暂发 0（导航包未移植）；`status_position` 用默认值（当前固定 0）
+  void send(io::Command c)
+  {
+    ++sent_count;
+    serial.send(c.control, c.shoot, static_cast<float>(c.yaw), 0, 0,
+                static_cast<float>(c.pitch), 0, 0);
+  }
+};
+
+/// @brief 兵种程序主循环（⭐ 一份逻辑，`io::CBoard` / `ReplayCBoard` / `SentrySerialBoard` 各实例化一次）
 template <typename Board>
 int run_sentry(
   io::CameraBase & camera, Board & cboard, const auto_aim::Color /*enemy_color*/,
@@ -394,8 +461,36 @@ int main(int argc, char * argv[])
   const auto enemy_color = auto_aim::Color::blue;   // ⭐ 同济 sentry.yaml 是 blue
 
   if (video_path.empty()) {
-    // ── 真实硬件：io::CBoard（CAN）+ io::Camera —— 与同济哨兵一致 ──
+    // ⭐⭐ W134：**先校验 `--board`** —— 放在创建相机之前。
+    //   ⚠️ 原来放在相机之后：写错值时仍会先开相机（慢且日志混乱），
+    //      且**非法的 --board 会一路走到 CAN 分支**（静默按 can 跑）。
+    const auto board_link = cli.get<std::string>("board");
+    if (board_link != "can" && board_link != "serial") {
+      tools::logger()->error("[sentry] 未知的 `--board={}` ⇒ 可选 `can` / `serial`", board_link);
+      return 1;
+    }
+
+    // ── 真实硬件：⭐ 按 `--board` 选链路 ──
     io::Camera camera(config_path, cli.get<bool>("dump-camera-params"), cli.get<std::string>("camera-config"));
+
+    if (board_link == "serial") {
+      // ⭐ W134：串口链路（io::SentrySerial + 适配层）
+      SentrySerialBoard cboard(config_path);
+      if (!cboard.serial.is_connected()) {
+        // ⚠️ 不静默降级到 CAN —— 用户显式要串口却开不了，必须让他知道
+        tools::logger()->error("[sentry] `--board=serial` 但串口未打开 ⇒ 退出（不自动改用 CAN）");
+        return 1;
+      }
+      tools::logger()->info("[sentry] 真实硬件模式（SentrySerial/串口）");
+      const int rc = run_sentry(camera, cboard, enemy_color, config_path, csv_prefix, true,
+                                cli.get<bool>("record"), cli.get<bool>("pj"),
+                                cli.get<std::string>("pj-host"),
+                                static_cast<uint16_t>(cli.get<int>("pj-port")), stop_after);
+      tools::logger()->info("[sentry] 退出（共发 {} 帧）", cboard.sent_count);
+      return rc;
+    }
+
+    // ── CAN：io::CBoard + io::Camera —— 与同济哨兵一致（默认）──
     io::CBoard cboard(config_path);
     tools::logger()->info("[sentry] 真实硬件模式（CBoard/CAN）");
     return run_sentry(camera, cboard, enemy_color, config_path, csv_prefix, true, cli.get<bool>("record"),

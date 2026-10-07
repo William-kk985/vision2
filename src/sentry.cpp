@@ -12,15 +12,15 @@
  * | 多相机队列 | `Perceptron` + `DetectionResult` 队列 | ❌ 去掉（类型已提升到 `core/types.hpp`） |
  * | 4 项横切能力 | `decider.*` | ⭐ 已内聚进 `Tracker`（**默认关 = 同济行为**） |
  * | 自瞄解算 | **`Aimer`（legacy）** ⚠️ 不是 MPC | ✅ **同**（按同济） |
- * | 下位机 | `io::CBoard`（CAN）+ `ShootMode`（左/右/双枪口） | ✅ **同** |
+ * | 下位机 | ⭐ **`io::SentrySerial`（串口，46/42 字节协议）** ⚠️ 与同济不同（他们走 CAN） |
  *
  * ## 设计：**一个循环，两个实例**
  * ```
  *   camera : io::CameraBase*   ← io::Camera（真实） / io::VideoCamera（录像）   [W10 已统一]
- *   board  : 模板参数          ← io::CBoard（真实 CAN） / ReplayCBoard（录像替身）
+ *   board  : 模板参数          ← SentryBoard（真实串口） / ReplayBoard（录像替身）
  * ```
- * ⚠️ `io::CBoard` 的 API 与 `io::Gimbal` 本质不同（见 W31 记录），
- *    **不**为了统一去改 `CBoard` —— 而是把主循环写成模板，让两种下位机各实例化一次。
+ * ⭐ **下位机链路（W135）**：哨兵只走**串口**（`io::SentrySerial`）。
+ *   主循环写成模板，`SentryBoard`（真实串口）/ `ReplayBoard`（录像替身）各实例化一次。
  *
  * ## 零硬件验证
  * ```bash
@@ -46,7 +46,6 @@
 #include "core/auto_aim/target/target_debug_fill.hpp"   // ⭐ W70
 #include "core/auto_aim/tracker/tracker.hpp"
 #include "drivers/dm_imu/dm_imu.hpp"
-#include "io/board/can/cboard.hpp"
 #include "io/board/sentry_serial/sentry_serial.hpp"   // ⭐ W134：串口方案
 #include "io/board/replay.hpp"
 #include "io/camera/camera.hpp"
@@ -83,8 +82,6 @@ const std::string keys =
   "{bullet-speed   | 22.0 | 录像模式下的弹速（下位机不可用时）}"
   "{dump-camera-params | false | ⭐ 只打印相机常用参数的当前值（用于把 MVS 里的好值抄进 yaml 的 camera_params）}"
   "{camera-config  | | ⭐ 覆盖相机配置路径（默认用兵种 yaml 的 camera_config 键）}"
-  "{shoot-mode     | 2 | ⭐ 哨兵枪口：0=left 1=right 2=both}"
-  "{board          | can | ⭐⭐ 下位机链路：`can`（io::CBoard，默认）/ `serial`（io::SentrySerial，⚠️ 需 /dev/sentry 在位）}"
   "{csv            | | ⭐ Debug CSV 输出前缀}"
   "{record         | false | ⭐⭐ 录像到 output/video/（默认**不录**；录会占一个核做 MJPG 编码）}"
   "{stop-after     | | ⭐⭐ 算法独立测试：跑到该阶段就停（perceive/detect/track/buff-detect/buff-solve/plan；空=全跑）}"
@@ -96,8 +93,6 @@ const std::string keys =
   "{nis-thresh     | | ⭐ 单独覆盖 NIS 失败阈值：tongji(0.711) / chi2(9.4877)；空=跟随 --tongji}"
   "{yaw-rate-src   | | ⭐ 单独覆盖小陀螺判据用的 EKF 分量：x8(同济) / x7(修正)；空=跟随 --tongji}"
   "{strict-device  | false | ⭐ 严格设备模式（true = 设备不可用就抛异常）}"
-  "{no-board       | false | ⭐⭐ 强制虚拟下位机（不碰串口；只有摄像头时用）}"
-  "{strict-board   | false | ⭐⭐ 串口不存在就失败退出（同济行为）；默认自动降级虚拟板}"
   "{det-stats      | true | ⭐ 逐帧打印检测统计（候选→各步过滤）；false 硬关}"
   "{log-keep-days  | 30 | ⭐ 日志保留天数（超期自动清理 output/logs/；0=不清理）}"
   "{log-off        | | ⭐ 按模块静音日志（运行期，不重编；⚠️ 有 89ns/次代价，长期请用 utils/log/debug_config.hpp 的编译期开关）}"
@@ -108,21 +103,31 @@ using namespace std::chrono_literals;
 namespace
 {
 // ═══════════════════════════════════════════════════════════════
-// ⭐ 录像模式下的「下位机替身」：**刻意模仿 `io::CBoard` 的公开形状**
-//   （`bullet_speed` / `mode` / `shoot_mode` / `imu_at(t)` / `send(Command)`）
-//   → 主循环写成模板即可**一份逻辑两种下位机**，不必动 `io::CBoard`（W31）
+// ⭐⭐⭐ W135：**哨兵只走串口** —— 下方两个结构体形状一致，
+//   主循环写成模板 ⇒ 一份逻辑两种来源：真实串口 / 录像回放。
+//
+// ⚠️ **已移除的内容**（按 2026-10 的决定）：
+//   · ❌ **CAN 链路**（`io::CBoard`）—— 哨兵不再走 CAN
+//   · ❌ **`--board` 双链路开关** —— 只走串口，不需要选
+//   · ❌ **`shoot_mode` / `--shoot-mode`** —— ⭐ **本项目哨兵是单枪口**
+//     （`shoot_mode` 唯一用途是 `legacy.cpp` 的左右枪口偏置，单枪口两次都不命中，
+//      故调用 `aimer.aim()` 时**直接传常量 `both_shoot`**，见主循环处）
+//
+// ⚠️ `io::CBoard` 与 `io::ShootMode` **本身保留** —— `uav.cpp` 仍在用，
+//   且 `Aimer::aim()` 的签名要求 `ShootMode` 参数。
 // ═══════════════════════════════════════════════════════════════
-struct ReplayCBoard
+
+/// @brief 录像模式下的「下位机替身」—— ⭐ **刻意模仿 `SentryBoard` 的公开形状**
+/// @note ⚠️ 录像回放是**没有硬件时唯一的调试手段**，故必须保留（这不是"多兼容"）
+struct ReplayBoard
 {
   double bullet_speed;
   io::Mode mode;
-  io::ShootMode shoot_mode;
   io::ReplayBoard replay_;
   size_t sent_count = 0;
 
-  ReplayCBoard(const std::string & pose_path, io::Mode m, double bs, io::ShootMode sm)
-  : bullet_speed(bs), mode(m), shoot_mode(sm),
-    replay_(pose_path, io::GimbalMode::AUTO_AIM, static_cast<float>(bs))
+  ReplayBoard(const std::string & pose_path, io::Mode m, double bs)
+  : bullet_speed(bs), mode(m), replay_(pose_path, io::GimbalMode::AUTO_AIM, static_cast<float>(bs))
   {
   }
 
@@ -132,46 +137,29 @@ struct ReplayCBoard
   {
     ++sent_count;
     if (sent_count % 200 == 1)
-      tools::logger()->debug("[ReplayCBoard] send#{:<6} control={} shoot={} yaw={:.4f} pitch={:.4f}",
+      tools::logger()->debug("[ReplayBoard] send#{:<6} control={} shoot={} yaw={:.4f} pitch={:.4f}",
                              sent_count, c.control, c.shoot, c.yaw, c.pitch);
   }
 };
 
-// ⭐⭐⭐ W134：**串口下位机适配层** —— `io::SentrySerial` → 主循环期望的 `io::CBoard` 形状
-//
-// ## 为什么需要它
-// 主循环写成模板，依赖下位机的**公开形状**（与 `ReplayCBoard` 刻意模仿的那套一致）：
-// ```
-//   double bullet_speed;  io::Mode mode;  io::ShootMode shoot_mode;
-//   Eigen::Quaterniond imu_at(t);   void send(io::Command)
-// ```
-// 而 `io::SentrySerial` 提供的是 `state()` / `mode()` / `q(t)` / `send(control, fire, yaw, ...)`
-// —— ⭐ **形状不同，故加这一层转换**（与 W31 对 `io::CBoard` 的处理一致：
-//   **不为了统一去改底层**，而是在主循环侧做适配）。
-//
-// ## ⚠️ `shoot_mode` 固定为 `both_shoot`
-// ⭐ **本项目哨兵是单枪口**（与同济的左/右/双不同）⇒ **不需要**枪口切换。
-// `shoot_mode` 唯一的功能用途是 `legacy.cpp` 里的左右枪口偏置：
-// ```cpp
-// if (shoot_mode == left_shoot && left_yaw_offset_.has_value()) yaw += ...;
-// ```
-// ⇒ ⭐ **传 `both_shoot` 即两个分支都不命中 ⇒ 不加偏置**，正是单枪口所需。
-// ⚠️ 串口 46 字节上行包里**本来就没有 `shoot_mode` 字段** —— 这与单枪口一致，非缺陷。
-struct SentrySerialBoard
+/// @brief ⭐ **哨兵的下位机** —— `io::SentrySerial`（串口，46/42 字节协议）
+///
+/// 包一层是为了给主循环提供与 `ReplayBoard` **一致的形状**
+/// （`bullet_speed` / `mode` / `imu_at(t)` / `send(Command)` / `sent_count`），
+/// 从而 `run_sentry<Board>` 一份逻辑两种来源。
+struct SentryBoard
 {
   io::SentrySerial serial;
 
-  // ── 主循环读取的公开成员（每次 send 时从串口状态同步）──
+  // ── 主循环读取的公开成员（在 `imu_at()` 里从串口状态同步）──
   double bullet_speed = 22.0;
   io::Mode mode = io::Mode::idle;
-  /// ⭐ 单枪口 ⇒ 恒为 `both_shoot`（见上面说明）
-  io::ShootMode shoot_mode = io::ShootMode::both_shoot;
   size_t sent_count = 0;
 
-  explicit SentrySerialBoard(const std::string & config_path) : serial(config_path) {}
+  explicit SentryBoard(const std::string & config_path) : serial(config_path) {}
 
-  /// @brief 从下位机的模式字节映射到主循环的 `io::Mode`
-  /// @note 串口协议：0=idle 1=auto_aim 2=small_buff 3=big_buff（⭐ 无 outpost）
+  /// @brief 下位机模式字节 → 主循环的 `io::Mode`
+  /// @note 串口协议：0=idle 1=auto_aim 2=small_buff 3=big_buff（⭐ 协议里没有 outpost）
   static io::Mode to_mode(io::SentryMode m)
   {
     switch (m) {
@@ -183,26 +171,25 @@ struct SentrySerialBoard
     return io::Mode::idle;
   }
 
-  /// @brief 取 `t` 时刻云台姿态（`io::CBoard::imu_at` 的对应物）
+  /// @brief 取 `t` 时刻云台姿态，并顺带同步弹速与档位
   Eigen::Quaterniond imu_at(std::chrono::steady_clock::time_point t)
   {
     const auto st = serial.state();
-    bullet_speed = st.bullet_speed;      // ⭐ 同步弹速
-    mode = to_mode(serial.mode());       // ⭐ 同步档位
-    return serial.q(t);
+    bullet_speed = st.bullet_speed;
+    mode = to_mode(serial.mode());
+    return serial.q(t);   // 队列内 slerp 插值
   }
 
-  /// @brief 下发一帧（把 `io::Command` 拆成串口协议的标量）
-  /// @note ⭐ `nav_*` 暂发 0（导航包未移植）；`status_position` 用默认值（当前固定 0）
+  /// @brief 下发一帧：`io::Command` → 串口协议的标量
+  /// @note `nav_*` 发 0（导航包未移植）；`status_position` 用默认值（当前固定 0）
   void send(io::Command c)
   {
     ++sent_count;
-    serial.send(c.control, c.shoot, static_cast<float>(c.yaw), 0, 0,
-                static_cast<float>(c.pitch), 0, 0);
+    serial.send(c.control, c.shoot, static_cast<float>(c.yaw), 0, 0, static_cast<float>(c.pitch), 0, 0);
   }
 };
 
-/// @brief 兵种程序主循环（⭐ 一份逻辑，`io::CBoard` / `ReplayCBoard` / `SentrySerialBoard` 各实例化一次）
+/// @brief 兵种程序主循环（⭐ 一份逻辑，`SentryBoard` / `ReplayBoard` 各实例化一次）
 template <typename Board>
 int run_sentry(
   io::CameraBase & camera, Board & cboard, const auto_aim::Color /*enemy_color*/,
@@ -335,7 +322,8 @@ int run_sentry(
       // ⭐⭐ W100（原 A2）：**阶段门** —— `--stop-after=track/detect` 时不跑规划、不下发指令
       const bool do_plan = tools::stage_ok(stop_after, tools::Stage::Plan);
       auto aim_r = do_plan
-                     ? aimer.aim(targets, t, cboard.bullet_speed, cboard.shoot_mode)   // ⭐ W98
+                     ? aimer.aim(targets, t, cboard.bullet_speed,
+                               io::ShootMode::both_shoot)   // ⭐ W135：单枪口 ⇒ 恒 both_shoot
                      : auto_aim::AimResult{};
       const io::Command & command = aim_r.command;
       if (do_plan) cboard.send(command);
@@ -461,41 +449,23 @@ int main(int argc, char * argv[])
   const auto enemy_color = auto_aim::Color::blue;   // ⭐ 同济 sentry.yaml 是 blue
 
   if (video_path.empty()) {
-    // ⭐⭐ W134：**先校验 `--board`** —— 放在创建相机之前。
-    //   ⚠️ 原来放在相机之后：写错值时仍会先开相机（慢且日志混乱），
-    //      且**非法的 --board 会一路走到 CAN 分支**（静默按 can 跑）。
-    const auto board_link = cli.get<std::string>("board");
-    if (board_link != "can" && board_link != "serial") {
-      tools::logger()->error("[sentry] 未知的 `--board={}` ⇒ 可选 `can` / `serial`", board_link);
+    // ── 真实硬件：⭐ **哨兵只走串口**（io::SentrySerial，46/42 字节协议）──
+    io::Camera camera(config_path, cli.get<bool>("dump-camera-params"), cli.get<std::string>("camera-config"));
+    SentryBoard cboard(config_path);
+
+    if (!cboard.serial.is_connected()) {
+      // ⚠️ 串口打不开就退出 —— 不静默改用别的链路
+      tools::logger()->error("[sentry] 串口未打开 ⇒ 退出（检查 `serial_port` 与下位机连接）");
       return 1;
     }
 
-    // ── 真实硬件：⭐ 按 `--board` 选链路 ──
-    io::Camera camera(config_path, cli.get<bool>("dump-camera-params"), cli.get<std::string>("camera-config"));
-
-    if (board_link == "serial") {
-      // ⭐ W134：串口链路（io::SentrySerial + 适配层）
-      SentrySerialBoard cboard(config_path);
-      if (!cboard.serial.is_connected()) {
-        // ⚠️ 不静默降级到 CAN —— 用户显式要串口却开不了，必须让他知道
-        tools::logger()->error("[sentry] `--board=serial` 但串口未打开 ⇒ 退出（不自动改用 CAN）");
-        return 1;
-      }
-      tools::logger()->info("[sentry] 真实硬件模式（SentrySerial/串口）");
-      const int rc = run_sentry(camera, cboard, enemy_color, config_path, csv_prefix, true,
-                                cli.get<bool>("record"), cli.get<bool>("pj"),
-                                cli.get<std::string>("pj-host"),
-                                static_cast<uint16_t>(cli.get<int>("pj-port")), stop_after);
-      tools::logger()->info("[sentry] 退出（共发 {} 帧）", cboard.sent_count);
-      return rc;
-    }
-
-    // ── CAN：io::CBoard + io::Camera —— 与同济哨兵一致（默认）──
-    io::CBoard cboard(config_path);
-    tools::logger()->info("[sentry] 真实硬件模式（CBoard/CAN）");
-    return run_sentry(camera, cboard, enemy_color, config_path, csv_prefix, true, cli.get<bool>("record"),
-                     cli.get<bool>("pj"), cli.get<std::string>("pj-host"),
-                     static_cast<uint16_t>(cli.get<int>("pj-port")), stop_after);
+    tools::logger()->info("[sentry] 真实硬件模式（SentrySerial/串口）");
+    const int rc = run_sentry(camera, cboard, enemy_color, config_path, csv_prefix, true,
+                              cli.get<bool>("record"), cli.get<bool>("pj"),
+                              cli.get<std::string>("pj-host"),
+                              static_cast<uint16_t>(cli.get<int>("pj-port")), stop_after);
+    tools::logger()->info("[sentry] 退出（共发 {} 帧）", cboard.sent_count);
+    return rc;
   }
 
   // ── 录像回放（零硬件）──
@@ -505,18 +475,12 @@ int main(int argc, char * argv[])
 
   const int fm = cli.get<int>("force-mode");
   const io::Mode m = (fm >= 0 && fm <= 4) ? static_cast<io::Mode>(fm) : io::Mode::auto_aim;
-  const int sm = cli.get<int>("shoot-mode");
-  const io::ShootMode shoot_mode =
-    (sm >= 0 && sm <= 2) ? static_cast<io::ShootMode>(sm) : io::ShootMode::both_shoot;
-
   io::VideoCamera camera(video_path, cli.get<double>("video-speed"));
-  ReplayCBoard cboard(pose, m, cli.get<double>("bullet-speed"), shoot_mode);
+  ReplayBoard cboard(pose, m, cli.get<double>("bullet-speed"));
   tools::logger()->info(
-    "[sentry] 录像回放模式: {} mode={}({}) shoot_mode={}", video_path, int(m),
-    (m >= 0 && m < int(io::MODES.size())) ? io::MODES[m] : "?",
-    (shoot_mode == io::ShootMode::left_shoot    ? "left"
-     : shoot_mode == io::ShootMode::right_shoot ? "right"
-                                                : "both"));
+    "[sentry] 录像回放模式: {} mode={}({})", video_path, int(m),
+    (m >= 0 && m < int(io::MODES.size())) ? io::MODES[m] : "?");
+  
   const int rc = run_sentry(camera, cboard, enemy_color, config_path, csv_prefix, true, cli.get<bool>("record"),
                      cli.get<bool>("pj"), cli.get<std::string>("pj-host"),
                      static_cast<uint16_t>(cli.get<int>("pj-port")), stop_after);

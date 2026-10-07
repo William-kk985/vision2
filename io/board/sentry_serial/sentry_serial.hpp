@@ -60,18 +60,30 @@
  * | ⭐ **导航包未移植/未就绪** | ⭐ **全部 0** | ⭐ **用它发"别的信息"**（见下） |
  * | ⭐ **导航包已就绪** | 填入真实导航数据 | 按需（默认 0） |
  *
- * ### `status_position` 的语义（无导航时的"别的信息"通道）
- * 它是 1 字节的**通用状态位**，由视觉侧填写、下位机解读。⚠️ **取值需与下位机约定**。
- * 建议编码（⚠️ 尚未与下位机确认，接入前必须对齐）：
- * ```
- * bit0-1  跟踪状态    0=lost 1=detecting 2=tracking 3=temp_lost
- * bit2    是否可开火  0=不可 1=可（= Plan::fire）
- * bit3-6  目标编号    ArmorName（0..8），无目标时 0
- * bit7    保留
- * ```
- * ⚠️ **这样在没有导航的过渡期，下位机仍能从这一帧读到"打到谁/能不能打"**，
- *    而不必等导航包移植完成。
- * 📌 **待办**：与下位机确认 `status_position` 的编码后再启用；在此之前保持 0。
+ * ### `status_position` = ⭐ **导航状态码**（约定已存在，**不是**"跟踪状态位"）
+ *
+ * ⭐ **来源**：导航脚本 `scripts/nav/sentry_nav_cartographer.py` 通过 ROS2 话题
+ *   **`/sentry/nav_status`**（`std_msgs::msg::UInt8`）发布 ⇒ 视觉侧**订阅后原样转发**，
+ *   **不自己编码**。
+ *
+ * ⭐ **编码表**（与导航脚本 `:112-114` 的注释、以及旧版赫兹
+ *   `src/drivers/ros2/subscribe2nav.cpp` 回调里的 `status_meaning[]` **逐字一致**）：
+ *
+ * | 值 | 含义 |
+ * |---|---|
+ * | `0` | 残血回血中（HOME 点，血量 150~349） |
+ * | `1` | R1↔R2 或 B1↔B2 移动（正常巡逻） |
+ * | `2` | R2↔R3 / B2↔B3 移动，**或** HOME 回血中（**也用于"识别到目标"**） |
+ * | `3` | 残血撤退中（血量 &lt;150） |
+ * | ⭐ **`4`** | ⭐ **无导航 / 待机** |
+ *
+ * ⚠️⚠️ **关键**：**"没有导航"时的值是 `4`，不是 `0`**（`0` 是"残血回血中"）。
+ *
+ * 📌 **待办**：导航包移植完成后，订阅 `/sentry/nav_status` 并转发到此字段。
+ *   在此之前 —— ⭐ **发 `4`**（无导航/待机），`nav_x/y/w` 发 0。
+ *
+ * ⚠️ 本项目**不再使用**旧版赫兹 `sentry_match.cpp:243` 的"硬编码 `status_code = 1`"
+ *   （那是当年的临时简化，语义上是"正常巡逻"，与真实状态无关）。
  * 合计 2+1+36+1+2 = **42 字节**（Python `<2sB9fB2s`）
  *
  * ## ⚠️ 与参考实现（旧版赫兹 `src/drivers/sentry_serial/`）的差异
@@ -112,6 +124,10 @@ namespace io
 constexpr uint8_t FRAME_HEAD[2] = {0x53, 0x50};
 /// 帧尾 `0xBB 0x66`（⚠️ 不是 CRC16 —— 与 `io::Gimbal` 的区别）
 constexpr uint8_t FRAME_TAIL[2] = {0xBB, 0x66};
+
+/// @brief ⭐ 导航状态码：**无导航 / 待机**（⭐ "没有导航"时发这个，不是 0）
+/// @note 完整编码见文件头表格；来源为 ROS2 话题 `/sentry/nav_status`
+constexpr uint8_t SENTRY_NAV_NO_NAV = 4;
 
 /// 上行包长度（下位机 → 上位机）
 constexpr std::size_t SENTRY_RX_SIZE = 46;
@@ -220,8 +236,9 @@ public:
   /// @param nav_x 导航 X（m）。⚠️ 无导航时传 0
   /// @param nav_y 导航 Y（m）。⚠️ 同上
   /// @param nav_w 导航朝向（rad）。⚠️ 同上
-  /// @param status_position ⭐ **无导航时的"别的信息"通道**（1 字节，语义见文件头
-  ///        "无导航时要发什么"）。⚠️ 编码需与下位机约定；未约定前保持 0。
+  /// @param status_position ⭐ **导航状态码**（0~4，编码见文件头表格）。
+  ///        ⚠️ **无导航时传 `SENTRY_NAV_NO_NAV`（= 4），不是 0**。
+  ///        导航包就绪后由 `/sentry/nav_status` 订阅值转发。
   void send(
     bool control, bool fire, float yaw, float yaw_vel, float yaw_acc, float pitch, float pitch_vel,
     float pitch_acc, float nav_x = 0, float nav_y = 0, float nav_w = 0,

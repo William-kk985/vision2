@@ -95,8 +95,19 @@ can_interface: "can0"
 
 # ⭐⭐ W130：**哨兵串口通信**（`io::SentrySerial`，协议见 io/board/sentry_serial/sentry_serial.hpp）
 #   ⚠️ 当前哨兵主循环**仍走 CAN**（上面四个键）；本段是串口方案的配置，**待接口替换后启用**。
-#   ⭐ 端口：优先读 `serial_port`，缺省回退 `com_port`（兼容旧配置）
-serial_port: "/dev/sentry"
+#   ⭐⭐ 端口：三种写法（分层策略见 io/board/serial_scan.hpp）
+#     · 具体路径（如 "/dev/sentry"）→ ⭐ 严格用它；**不存在就报错，不会自动换设备**
+#     · "auto" 或留空             → ⭐ 自适应扫描（匹配规则见下）
+#     ⚠️ 选错串口会往错误设备写数据且【不报错】⇒ 比赛建议用 udev 固定名字后写具体路径
+serial_port: "auto"
+#   ⭐ 自适应匹配规则（按可靠性降序；留空 = 不用该规则）：
+#     ① serial_serial_no  序列号（⭐ 最可靠，需下位机烧录固定序列号）
+#     ② serial_vid_pid    "VID:PID"（如 CH340 = "1a86:7523"）
+#     ③ serial_match      在 manufacturer / product / driver 里做子串匹配
+#   ⚠️ 三条都不命中时：**只有一个串口**才自动选；**多个候选则报错列出全部（不猜）**
+serial_serial_no: ""
+serial_vid_pid: ""
+serial_match: ""
 # ⭐ 波特率固定 115200（协议约定，不可配）
 # ⭐ 偏置：发送时加到 yaw/pitch 上（度）。⚠️ 参考实现里是硬编码 −1.8/−6.6，
 #   本实现改为读这里 —— 标定值不埋在代码里。缺省 0（= 不加偏置）。

@@ -11,6 +11,7 @@
 ///   ③ 帧头/帧尾常量
 ///   ④ 编码规则：mode 的三态、帧尾写入
 #include "io/board/sentry_serial/sentry_serial.hpp"
+#include "io/board/serial_scan.hpp"
 
 #include <cstddef>
 #include <cstdio>
@@ -136,6 +137,62 @@ int main()
   CHECK(static_cast<int>(io::SentryMode::AUTO_AIM) == 1, "AUTO_AIM = 1");
   CHECK(static_cast<int>(io::SentryMode::SMALL_BUFF) == 2, "SMALL_BUFF = 2");
   CHECK(static_cast<int>(io::SentryMode::BIG_BUFF) == 3, "BIG_BUFF = 3");
+
+  // ── ⑨ ⭐ 导航状态码常量（"没有导航"是 4，不是 0）──
+  std::printf("\n  -- 导航状态码 --\n");
+  CHECK(io::SENTRY_NAV_NO_NAV == 4, "SENTRY_NAV_NO_NAV = 4（无导航/待机）");
+  CHECK(io::SENTRY_NAV_NO_NAV != 0, "无导航不是 0（0 是残血回血中）");
+
+  // ── ⑩ ⭐ 串口自适应匹配逻辑 ──
+  std::printf("\n  -- 串口自适应匹配 --\n");
+  {
+    using io::SerialPortInfo;
+    // 造 3 个假设备：两个 CH340、一个 CP210x（带序列号）
+    SerialPortInfo a;
+    a.dev = "/dev/ttyUSB0"; a.vid = "1a86"; a.pid = "7523"; a.driver = "ch341";
+    SerialPortInfo b;
+    b.dev = "/dev/ttyUSB1"; b.vid = "1a86"; b.pid = "7523"; b.driver = "ch341";
+    SerialPortInfo c;
+    c.dev = "/dev/ttyACM0"; c.vid = "10c4"; c.pid = "ea60"; c.serial = "SP001";
+    c.driver = "cp210x"; c.product = "CP2102 USB to UART";
+    std::vector<SerialPortInfo> ports{a, b, c};
+
+    // ① 序列号（最可靠，即使不是第一个也能选中）
+    auto m = io::match_serial_port(ports, "SP001", "", "");
+    CHECK(m.dev == "/dev/ttyACM0" && m.rule == "serial_no", "规则①序列号命中 ttyACM0");
+
+    // ② VID:PID（两个候选 ⇒ 取排序后第一个，稳定）
+    m = io::match_serial_port(ports, "", "1a86:7523", "");
+    CHECK(m.dev == "/dev/ttyUSB0" && m.rule == "vid_pid", "规则②VID:PID 命中 ttyUSB0（稳定取首个）");
+
+    // ③ 子串（厂商/产品/驱动）
+    m = io::match_serial_port(ports, "", "", "cp210x");
+    CHECK(m.dev == "/dev/ttyACM0" && m.rule == "substr", "规则③驱动子串命中 ttyACM0");
+
+    // ⭐ 优先级：序列号 > VID:PID > 子串
+    m = io::match_serial_port(ports, "SP001", "1a86:7523", "ch341");
+    CHECK(m.rule == "serial_no", "⭐ 优先级：serial_no 压过 vid_pid 与 substr");
+
+    // ④ 唯一候选才自动选
+    std::vector<SerialPortInfo> one{a};
+    m = io::match_serial_port(one, "", "", "");
+    CHECK(m.dev == "/dev/ttyUSB0" && m.rule == "unique", "规则④唯一候选自动选中");
+
+    // ⑤ ⭐ 多候选 + 无规则命中 ⇒ 【不猜】，标记 ambiguous
+    m = io::match_serial_port(ports, "", "", "");
+    CHECK(m.dev.empty(), "⭐ 规则⑤多候选无命中 ⇒ 不选（dev 为空）");
+    CHECK(m.ambiguous, "⭐ 且标记 ambiguous（提示用户列出候选）");
+
+    // 空列表
+    m = io::match_serial_port({}, "", "", "");
+    CHECK(m.dev.empty() && !m.ambiguous, "无候选 ⇒ 不选，且不算 ambiguous");
+
+    // vid_pid() 与 describe() 的健壮性
+    CHECK(a.vid_pid() == "1a86:7523", "vid_pid() 拼接正确");
+    SerialPortInfo empty;
+    CHECK(empty.vid_pid().empty(), "空 VID/PID ⇒ vid_pid() 返回空串");
+    CHECK(!c.describe().empty(), "describe() 非空");
+  }
 
   std::printf("\n  %s\n", failures == 0 ? "全部通过" : "存在失败");
   return failures == 0 ? 0 : 1;

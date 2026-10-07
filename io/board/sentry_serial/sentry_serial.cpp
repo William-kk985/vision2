@@ -10,6 +10,7 @@
 #include <system_error>
 #include <vector>
 
+#include "io/board/serial_scan.hpp"
 #include "utils/log/logger.hpp"
 #include "utils/math/math_tools.hpp"
 #include "utils/yaml/yaml.hpp"
@@ -19,18 +20,16 @@ namespace io
 namespace
 {
 
-/// @brief 列出本机可用串口（打不开串口时给用户看，照 `io/board/gimbal/gimbal.cpp` 的做法）
-std::vector<std::string> list_serial_ports()
+/// @brief 把扫描结果拼成一行日志
+std::string describe_ports(const std::vector<SerialPortInfo> & ports)
 {
-  std::vector<std::string> avail;
-  std::error_code ec;
-  for (const auto & e : std::filesystem::directory_iterator("/dev", ec)) {
-    const auto n = e.path().filename().string();
-    if (n.rfind("ttyUSB", 0) == 0 || n.rfind("ttyACM", 0) == 0 || n.rfind("ttyS", 0) == 0)
-      avail.push_back(e.path().string());
+  if (ports.empty()) return "（无）";
+  std::string s;
+  for (const auto & p : ports) {
+    if (!s.empty()) s += " | ";
+    s += p.describe();
   }
-  std::sort(avail.begin(), avail.end());
-  return avail;
+  return s;
 }
 
 /// @brief 读 yaml 的可选 float 键（缺省返回 fallback，**不 exit**）
@@ -54,13 +53,54 @@ SentrySerial::SentrySerial(const std::string & config_path)
 {
   auto yaml = tools::load(config_path);
 
-  // ⭐ 端口：`serial_port` 优先，回退 `com_port`（兼容参考实现与现有 yaml）
-  port_name_ = read_optional_string(yaml, "serial_port", "");
-  if (port_name_.empty()) port_name_ = read_optional_string(yaml, "com_port", "");
-  if (port_name_.empty()) {
-    tools::logger()->error(
-      "[SentrySerial] 配置里没有 `serial_port` 或 `com_port`（来自 {}）⇒ 串口不会打开", config_path);
-    return;
+  // ── 端口：三种情形（见 io/board/serial_scan.hpp 的分层策略）──
+  //   ⭐ 1. 给了具体路径且存在  → 直接用（比赛要确定性）
+  //   ⚠️ 2. 给了具体路径但不存在 → 报错 + 列可用串口，**不自动换**
+  //   ⭐ 3. 为空 / "auto"       → 自适应扫描
+  auto raw_port = read_optional_string(yaml, "serial_port", "");
+  if (raw_port.empty()) raw_port = read_optional_string(yaml, "com_port", "");
+
+  const auto ports = scan_serial_ports();
+  const bool want_auto = raw_port.empty() || raw_port == "auto";
+
+  if (!want_auto) {
+    if (std::filesystem::exists(raw_port)) {
+      port_name_ = raw_port;
+      tools::logger()->info("[SentrySerial] 使用配置指定的串口: {}", port_name_);
+    } else {
+      // ⚠️ 不静默换设备 —— 选错串口会往错误设备写数据且不报错，比选不到更糟
+      tools::logger()->error(
+        "[SentrySerial] 配置指定的串口 '{}' 不存在（来自 {}）⇒ 不自动替换", raw_port, config_path);
+      tools::logger()->error("[SentrySerial]  本机可用串口: {}", describe_ports(ports));
+      tools::logger()->error(
+        "[SentrySerial]  如要启用自适应，把 `serial_port` 留空或写 `auto`");
+      return;
+    }
+  } else {
+    const auto serial_no = read_optional_string(yaml, "serial_serial_no", "");
+    const auto vid_pid = read_optional_string(yaml, "serial_vid_pid", "");
+    const auto substr = read_optional_string(yaml, "serial_match", "");
+    const auto m = match_serial_port(ports, serial_no, vid_pid, substr);
+
+    tools::logger()->info(
+      "[SentrySerial] 自适应选串口: 候选 {} 个 | 规则 serial_no='{}' vid_pid='{}' substr='{}'",
+      ports.size(), serial_no, vid_pid, substr);
+
+    if (m.dev.empty()) {
+      if (m.ambiguous) {
+        tools::logger()->error(
+          "[SentrySerial] 有 {} 个候选且无规则命中 ⇒ ⭐ 不猜。请指定其一：\n    {}",
+          ports.size(), describe_ports(ports));
+        tools::logger()->error(
+          "[SentrySerial]  可在 yaml 里设 `serial_serial_no` / `serial_vid_pid` / `serial_match`，"
+          "或直接写死 `serial_port`");
+      } else {
+        tools::logger()->error("[SentrySerial] 本机没有可用串口 ⇒ 下位机没接或驱动没装");
+      }
+      return;
+    }
+    port_name_ = m.dev;
+    tools::logger()->info("[SentrySerial] 自适应命中: {}（规则 {}）", port_name_, m.rule);
   }
 
   // ⭐ 偏置从 yaml 读（度），**不硬编码** —— 参考实现里写死 −1.8°/−6.6°
@@ -87,12 +127,7 @@ SentrySerial::SentrySerial(const std::string & config_path)
     connected_ = false;
     tools::logger()->error("[SentrySerial] 打不开串口: {}", e.what());
     tools::logger()->error("[SentrySerial]  尝试的设备: '{}'（来自 {}）", port_name_, config_path);
-    const auto avail = list_serial_ports();
-    if (avail.empty()) {
-      tools::logger()->error("[SentrySerial]  /dev 下没有 ttyUSB*/ttyACM*/ttyS* ⇒ 下位机没接或没驱动");
-    } else {
-      tools::logger()->error("[SentrySerial]  本机可用串口: {}", fmt::join(avail, " "));
-    }
+    tools::logger()->error("[SentrySerial]  本机可用串口: {}", describe_ports(ports));
     return;   // ⚠️ 不 exit：录像/无硬件时仍可跑（与 `make_board` 的哲学一致）
   }
 

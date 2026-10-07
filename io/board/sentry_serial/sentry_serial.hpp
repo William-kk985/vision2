@@ -79,8 +79,13 @@
  *
  * ⚠️⚠️ **关键**：**"没有导航"时的值是 `4`，不是 `0`**（`0` 是"残血回血中"）。
  *
- * 📌 **待办**：导航包移植完成后，订阅 `/sentry/nav_status` 并转发到此字段。
- *   在此之前 —— ⭐ **发 `4`**（无导航/待机），`nav_x/y/w` 发 0。
+ * ⭐⭐ **当前决定（2026-10）：`status_position` 一直发 `0`** —— 见常量 `SENTRY_STATUS_FIXED`。
+ *   ⚠️ **已知语义冲突**：按上表 `0` 是"残血回血中"，而"无导航"是 `4`。
+ *   做出该决定的依据是**下位机侧目前未必解读该字段**（旧版赫兹发硬编码 `1` 也能跑）。
+ *   📌 **若下位机确认按导航状态码解读 ⇒ 把 `SENTRY_STATUS_FIXED` 改成 `4`**（一行）。
+ *
+ * 📌 **待办**：导航包移植完成后，订阅 `/sentry/nav_status` 转发到此字段；
+ *   `nav_x` / `nav_y` / `nav_w` 在无导航时发 0。
  *
  * ⚠️ 本项目**不再使用**旧版赫兹 `sentry_match.cpp:243` 的"硬编码 `status_code = 1`"
  *   （那是当年的临时简化，语义上是"正常巡逻"，与真实状态无关）。
@@ -125,9 +130,17 @@ constexpr uint8_t FRAME_HEAD[2] = {0x53, 0x50};
 /// 帧尾 `0xBB 0x66`（⚠️ 不是 CRC16 —— 与 `io::Gimbal` 的区别）
 constexpr uint8_t FRAME_TAIL[2] = {0xBB, 0x66};
 
-/// @brief ⭐ 导航状态码：**无导航 / 待机**（⭐ "没有导航"时发这个，不是 0）
-/// @note 完整编码见文件头表格；来源为 ROS2 话题 `/sentry/nav_status`
-constexpr uint8_t SENTRY_NAV_NO_NAV = 4;
+/// @brief ⭐⭐ **`status_position` 固定发送值**（用户决定：一直发 0）
+///
+/// ⚠️⚠️ **注意语义冲突**：按导航脚本的约定，`0` 是 **"残血回血中（HOME 点 150~349）"**，
+///   而 **"无导航/待机"是 `4`**。⇒ 固定发 0 在导航侧语义上等于"一直在 HOME 点回血"。
+///
+/// ⭐ **决定**：当前固定发 `0`（用户 2026-10 决定）。依据是下位机侧目前**未必解读**该字段
+///   —— 旧版赫兹发的是硬编码 `1`，同样跑得通。
+///
+/// 📌 **若下位机确认按导航状态码解读**，把这一行改成 `4`（= 无导航/待机）即可，
+///   完整编码表见文件头注释。
+constexpr uint8_t SENTRY_STATUS_FIXED = 0;
 
 /// 上行包长度（下位机 → 上位机）
 constexpr std::size_t SENTRY_RX_SIZE = 46;
@@ -237,12 +250,13 @@ public:
   /// @param nav_y 导航 Y（m）。⚠️ 同上
   /// @param nav_w 导航朝向（rad）。⚠️ 同上
   /// @param status_position ⭐ **导航状态码**（0~4，编码见文件头表格）。
-  ///        ⚠️ **无导航时传 `SENTRY_NAV_NO_NAV`（= 4），不是 0**。
-  ///        导航包就绪后由 `/sentry/nav_status` 订阅值转发。
+  ///        ⭐ **当前默认 = `SENTRY_STATUS_FIXED`（= 0，即一直发 0）**。
+  ///        ⚠️ 语义冲突说明见 `SENTRY_STATUS_FIXED` 的注释；
+  ///        导航包就绪后改为转发 `/sentry/nav_status` 的值。
   void send(
     bool control, bool fire, float yaw, float yaw_vel, float yaw_acc, float pitch, float pitch_vel,
     float pitch_acc, float nav_x = 0, float nav_y = 0, float nav_w = 0,
-    uint8_t status_position = 0);
+    uint8_t status_position = SENTRY_STATUS_FIXED);
 
   /// @brief 模式名（日志用）
   static const char * mode_str(SentryMode m);

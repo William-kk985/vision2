@@ -140,8 +140,16 @@ int main()
 
   // ── ⑨ ⭐ 导航状态码常量（"没有导航"是 4，不是 0）──
   std::printf("\n  -- 导航状态码 --\n");
-  CHECK(io::SENTRY_NAV_NO_NAV == 4, "SENTRY_NAV_NO_NAV = 4（无导航/待机）");
-  CHECK(io::SENTRY_NAV_NO_NAV != 0, "无导航不是 0（0 是残血回血中）");
+  CHECK(io::SENTRY_STATUS_FIXED == 0, "SENTRY_STATUS_FIXED = 0（当前决定：一直发 0）");
+  // ⚠️ 断言"约定里 0 的含义"与我们的固定值不同 —— 这个冲突必须是【显式已知】的，不是疏忽
+  {
+    constexpr uint8_t kNavCode_RecoveringAtHome = 0;   // 导航脚本：0 = 残血回血中
+    constexpr uint8_t kNavCode_NoNav = 4;              // 导航脚本：4 = 无导航/待机
+    CHECK(kNavCode_RecoveringAtHome == 0 && kNavCode_NoNav == 4,
+          "导航约定：0=残血回血中 · 4=无导航（与固定发 0 存在语义差异）");
+    CHECK(io::SENTRY_STATUS_FIXED != kNavCode_NoNav,
+          "已明确：固定发 0 【不等于】约定的无导航值 4（若下位机按约定解读需改）");
+  }
 
   // ── ⑩ ⭐ 串口自适应匹配逻辑 ──
   std::printf("\n  -- 串口自适应匹配 --\n");

@@ -5,7 +5,7 @@
 #include <chrono>
 #include <list>
 
-#include "core/auto_aim/controller/controller_debug.hpp"   // ⭐ W98
+#include "core/controller_debug.hpp"   // ⭐ W98
 #include "io/board/can/cboard.hpp"
 #include "core/types.hpp"
 #include "core/auto_aim/target/target.hpp"

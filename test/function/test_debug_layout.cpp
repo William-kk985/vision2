@@ -31,8 +31,8 @@ static const std::vector<std::pair<const char *, const char *>> kExpected = {
   {"TrackerDebug", "core/auto_aim/tracker/tracker_debug.hpp"},
   {"TargetDebug", "core/auto_aim/target/target_debug.hpp"},
   {"PlannerDebug", "core/auto_aim/planner/planner_debug.hpp"},
-  {"ShooterDebug", "core/auto_aim/shooter/shooter_debug.hpp"},
-  {"ControllerDebug", "core/auto_aim/controller/controller_debug.hpp"},
+  {"ShooterDebug", "core/auto_aim/planner/shooter_debug.hpp"},
+  {"ControllerDebug", "core/controller_debug.hpp"},
   {"BuffDebug", "core/auto_buff/buff_debug.hpp"},
 };
 

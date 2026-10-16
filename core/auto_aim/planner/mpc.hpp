@@ -9,11 +9,11 @@
 
 #include <yaml-cpp/yaml.h>
 
-#include "core/auto_aim/controller/controller_debug.hpp"   // ⭐ W98
+#include "core/controller_debug.hpp"   // ⭐ W98
 #include "core/auto_aim/planner/planner_debug.hpp"          // ⭐ W98
-#include "core/auto_aim/shooter/shooter_debug.hpp"          // ⭐ W98
+#include "core/auto_aim/planner/shooter_debug.hpp"          // ⭐ W98
 #include "core/auto_aim/target/target.hpp"
-#include "core/auto_aim/trajectory/trajectory.hpp"   // ⭐ W15：弹道槽位（yaml 选实现）
+#include "core/auto_aim/planner/trajectory.hpp"   // ⭐ W15：弹道槽位（yaml 选实现）
 #include "third_party/tinympc/tiny_api.hpp"
 
 namespace auto_aim

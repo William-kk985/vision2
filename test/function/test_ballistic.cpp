@@ -9,7 +9,7 @@
 #include <memory>
 #include <vector>
 
-#include "core/auto_aim/trajectory/trajectory.hpp"
+#include "core/auto_aim/planner/trajectory.hpp"
 #include "utils/wheels/ballistic/rk4_ballistic.hpp"
 
 using namespace auto_aim;

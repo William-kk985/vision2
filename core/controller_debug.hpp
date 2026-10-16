@@ -1,5 +1,5 @@
 /**
- * @file core/auto_aim/controller/controller_debug.hpp
+ * @file core/controller_debug.hpp
  * @brief ⭐⭐ 控制器 的 Debug 快照 —— **由该角色自己拥有**（W50 方案 A）
  *
  * ## 为什么放在角色自己的目录（而不是 `core/debug.hpp`）
@@ -13,7 +13,7 @@
  *
  * ## ⚠️ 依赖方向（单向，无环）
  * ```
- * core/auto_aim/controller/controller_debug.hpp   →  core/debug.hpp（聚合）  →  FrameDebug
+ * core/controller_debug.hpp   →  core/debug.hpp（聚合）  →  FrameDebug
  * ```
  * 本文件是**纯数据**，只依赖 `<cstdint>`，**绝不 include `core/debug.hpp`**。
  *

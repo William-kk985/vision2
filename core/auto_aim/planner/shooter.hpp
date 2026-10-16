@@ -5,7 +5,7 @@
 
 #include "core/types.hpp"
 #include "core/auto_aim/planner/legacy.hpp"
-#include "core/auto_aim/shooter/shooter_debug.hpp"   // ⭐ W98
+#include "core/auto_aim/planner/shooter_debug.hpp"   // ⭐ W98
 
 namespace auto_aim
 {

@@ -4,7 +4,7 @@
  *
  * **来源**：`Hz_Rm_Vision/src/utils/math/ballistic_solver.{hpp,cpp}`（你的实现，321 行）
  * **落位理由**：`grep` 证明它**零业务依赖**（只需 `<cmath>`）→ 属于 `utils/wheels/`
- * **适配**：`core/auto_aim/trajectory/rk4_drag.cpp` 把它接成 `ITrajectory`
+ * **适配**：`core/auto_aim/planner/rk4_drag.cpp` 把它接成 `ITrajectory`
  *
  * 运动方程（`state = [x, y, vx, vy]`）：
  *   dvx/dt = -k·|v|·vx

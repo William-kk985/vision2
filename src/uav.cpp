@@ -27,7 +27,7 @@
 #include "drivers/dm_imu/dm_imu.hpp"
 #include "core/auto_aim/planner/legacy.hpp"
 #include "core/auto_aim/detector/detector.hpp"
-#include "core/auto_aim/shooter/shooter.hpp"
+#include "core/auto_aim/planner/shooter.hpp"
 #include "core/auto_aim/solver/solver.hpp"
 #include "core/auto_aim/target/target_debug_fill.hpp"   // ⭐ W70
 #include "core/auto_aim/tracker/tracker.hpp"

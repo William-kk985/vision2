@@ -10,8 +10,8 @@
  * core/auto_aim/tracker/tracker_debug.hpp       TrackerDebug
  * core/auto_aim/target/target_debug.hpp         TargetDebug
  * core/auto_aim/planner/planner_debug.hpp       PlannerDebug
- * core/auto_aim/shooter/shooter_debug.hpp       ShooterDebug
- * core/auto_aim/controller/controller_debug.hpp ControllerDebug
+ * core/auto_aim/planner/shooter_debug.hpp       ShooterDebug
+ * core/controller_debug.hpp ControllerDebug
  * core/auto_buff/buff_debug.hpp                 BuffDebug
  * ```
  * 本文件**只做两件事**：① include 它们 ② 定义 `FrameDebug` 聚合。
@@ -56,10 +56,10 @@
 #include "core/types.hpp"
 
 // ⭐⭐ W50：各角色的 Debug 快照（住在角色自己目录）
-#include "core/auto_aim/controller/controller_debug.hpp"
+#include "core/controller_debug.hpp"
 #include "core/auto_aim/detector/detector_debug.hpp"
 #include "core/auto_aim/planner/planner_debug.hpp"
-#include "core/auto_aim/shooter/shooter_debug.hpp"
+#include "core/auto_aim/planner/shooter_debug.hpp"
 #include "core/auto_aim/solver/solver_debug.hpp"
 #include "core/auto_aim/target/target_debug.hpp"
 #include "core/auto_aim/tracker/tracker_debug.hpp"

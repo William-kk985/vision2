@@ -1,10 +1,10 @@
 /**
- * @file core/auto_aim/trajectory/ideal.cpp
+ * @file core/auto_aim/planner/ideal.cpp
  * @brief 弹道实现①：斜抛无阻力（← 同济 tools/trajectory.cpp 的解析解）
  */
 #include <stdexcept>
 
-#include "core/auto_aim/trajectory/trajectory.hpp"
+#include "core/auto_aim/planner/trajectory.hpp"
 
 namespace auto_aim
 {

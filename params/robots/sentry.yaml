@@ -87,14 +87,11 @@ max_side_ratio: 1.5
 max_rectangular_error: 25 # degree
 min_confidence: 0.8
 
-#####-----cboard参数-----#####
-quaternion_canid: 0x01
-bullet_speed_canid: 0x110
-send_canid: 0xff
-can_interface: "can0"
+# ⚠️ W135：**CAN 配置段已删** —— 哨兵只走串口（不再用 `io::CBoard`）。
+#   原键：quaternion_canid / bullet_speed_canid / send_canid / can_interface
 
-# ⭐⭐ W130：**哨兵串口通信**（`io::SentrySerial`，协议见 io/board/sentry_serial/sentry_serial.hpp）
-#   ⚠️ 当前哨兵主循环**仍走 CAN**（上面四个键）；本段是串口方案的配置，**待接口替换后启用**。
+# ⭐⭐ W130/W135：**哨兵串口通信**（`io::SentrySerial`，协议见 io/board/sentry_serial/sentry_serial.hpp）
+#   ⭐ **这是哨兵【唯一】的下位机链路**（W135 移除 CAN 与 `--board` 开关）
 #   ⭐⭐ 端口：三种写法（分层策略见 io/board/serial_scan.hpp）
 #     · 具体路径（如 "/dev/sentry"）→ ⭐ 严格用它；**不存在就报错，不会自动换设备**
 #     · "auto" 或留空             → ⭐ 自适应扫描（匹配规则见下）

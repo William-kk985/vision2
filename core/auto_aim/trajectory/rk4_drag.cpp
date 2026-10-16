@@ -1,5 +1,5 @@
 /**
- * @file core/auto_aim/planner/rk4_drag.cpp
+ * @file core/auto_aim/trajectory/rk4_drag.cpp
  * @brief 弹道实现②：RK4 含空气阻力（⭐ 轮子 `tools::BallisticSolver` 的适配器）
  *
  * 结构：**算法在轮子里，适配在角色里**
@@ -8,7 +8,7 @@
  */
 #include <stdexcept>
 
-#include "core/auto_aim/planner/trajectory.hpp"
+#include "core/auto_aim/trajectory/trajectory.hpp"
 #include "utils/wheels/ballistic/rk4_ballistic.hpp"
 
 namespace auto_aim

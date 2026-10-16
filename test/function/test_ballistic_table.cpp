@@ -10,7 +10,7 @@
 #include <cstdio>
 #include <memory>
 
-#include "core/auto_aim/planner/trajectory.hpp"
+#include "core/auto_aim/trajectory/trajectory.hpp"
 
 using namespace auto_aim;
 using clk = std::chrono::steady_clock;

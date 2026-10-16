@@ -1,5 +1,5 @@
 /**
- * @file core/auto_aim/planner/tongji_linear.cpp
+ * @file core/auto_aim/trajectory/tongji_linear.cpp
  * @brief 弹道实现④：**同济英雄分支的线性阻力模型**（轮子 `LinearDragBallistic` 的适配器）
  *
  * ⚠️ 同济该分支把 `pitch` 的符号注释改成了「**抬头为负**」，与 `main`（抬头为正）**相反**。
@@ -8,7 +8,7 @@
  */
 #include <memory>
 
-#include "core/auto_aim/planner/trajectory.hpp"
+#include "core/auto_aim/trajectory/trajectory.hpp"
 #include "utils/wheels/ballistic/linear_drag_ballistic.hpp"
 
 namespace auto_aim

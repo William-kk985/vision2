@@ -1,8 +1,8 @@
 /**
- * @file core/auto_aim/planner/trajectory.cpp
+ * @file core/auto_aim/trajectory/trajectory.cpp
  * @brief 弹道工厂：**一处注册所有实现**（doc 09 §11.4「逻辑多角色 / 物理同函数」）
  */
-#include "core/auto_aim/planner/trajectory.hpp"
+#include "core/auto_aim/trajectory/trajectory.hpp"
 
 #include <stdexcept>
 

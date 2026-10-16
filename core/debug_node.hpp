@@ -10,7 +10,7 @@
  * core/auto_aim/tracker/tracker_debug.hpp       TrackerDebug
  * core/auto_aim/target/target_debug.hpp         TargetDebug
  * core/auto_aim/planner/planner_debug.hpp       PlannerDebug
- * core/auto_aim/planner/shooter_debug.hpp       ShooterDebug
+ * core/auto_aim/shooter/shooter_debug.hpp       ShooterDebug
  * core/controller_debug.hpp ControllerDebug
  * core/auto_buff/buff_debug.hpp                 BuffDebug
  * ```
@@ -59,7 +59,7 @@
 #include "core/controller_debug.hpp"
 #include "core/auto_aim/detector/detector_debug.hpp"
 #include "core/auto_aim/planner/planner_debug.hpp"
-#include "core/auto_aim/planner/shooter_debug.hpp"
+#include "core/auto_aim/shooter/shooter_debug.hpp"
 #include "core/auto_aim/solver/solver_debug.hpp"
 #include "core/auto_aim/target/target_debug.hpp"
 #include "core/auto_aim/tracker/tracker_debug.hpp"

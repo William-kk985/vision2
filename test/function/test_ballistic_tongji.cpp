@@ -11,7 +11,7 @@
 #include <cstdio>
 #include <memory>
 
-#include "core/auto_aim/planner/trajectory.hpp"
+#include "core/auto_aim/trajectory/trajectory.hpp"
 #include "utils/wheels/ballistic/linear_drag_ballistic.hpp"
 
 using namespace auto_aim;

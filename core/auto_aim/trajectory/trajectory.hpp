@@ -1,5 +1,5 @@
 /**
- * @file core/auto_aim/planner/trajectory.hpp
+ * @file core/auto_aim/trajectory/trajectory.hpp
  * @brief 角色：弹道解算（doc 09 §4.0）
  *
  * 槽位有两个实现（运行期选）：

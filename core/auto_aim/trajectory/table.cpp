@@ -1,5 +1,5 @@
 /**
- * @file core/auto_aim/planner/table.cpp
+ * @file core/auto_aim/trajectory/table.cpp
  * @brief 弹道实现③：**离线 RK4 建表 + 在线查表**（W12 结论的落地）
  *
  * ```
@@ -13,7 +13,7 @@
 
 #include "utils/log/logger.hpp"
 
-#include "core/auto_aim/planner/trajectory.hpp"
+#include "core/auto_aim/trajectory/trajectory.hpp"
 #include "utils/wheels/ballistic/ballistic_table.hpp"
 
 namespace auto_aim

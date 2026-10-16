@@ -978,14 +978,13 @@ udevadm info -a -n /dev/ttyACM0 | grep -E '({serial}|{idVendor}|{idProduct})'   
 ├── core/                 契约层 + 业务角色
 │   ├── types.hpp         ⭐ 零依赖契约（Armor / Target / Command …）
 │   ├── debug.hpp         六层调试的数据面
-│   ├── auto_aim/         ⭐ **6 个角色**（W139；详见 docs/22 §2b）
+│   ├── auto_aim/         ⭐ **8 个角色**（W140；详见 docs/22 §2b）
 │   │                     detector(①识别) classifier(②分类) solver(③变换)
-│   │                     tracker(④跟踪) target(⑤估计) planner(⑥规划)
-│   │                     （⑦ 下位机在 io/board/）
-│   │                     ⚠️ W139 收回 3 个多余目录：shooter/ + trajectory/
-│   │                        → 并入 planner/（同哈工程 fire_control 粒度）；
-│   │                        controller/ → 删（实现已 W121 删除，只剩
-│   │                        controller_debug.hpp → 移到 core/）
+│   │                     tracker(④跟踪) target(⑤估计) trajectory(⑥弹道)
+│   │                     planner(⑦规划) shooter(⑧开火)
+│   │                     （⑨下位机在 io/board/）
+│   │                     ⭐ 规划与开火分开：MPC 自带开火判据，
+│   │                        legacy Aimer 不带 ⇒ 需外挂 Shooter（只有 uav 用）
 ├── utils/                轮子（⛔ 不碰业务类型）
 │   ├── wheels/           ballistic detect estimate fit track
 │   ├── math/             ⭐ chi2.hpp（χ² 分位）

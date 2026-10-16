@@ -9,6 +9,7 @@
 #include <fmt/core.h>
 
 #include <algorithm>
+#include <map>
 #include <chrono>
 #include <cstdio>
 #include <opencv2/opencv.hpp>
@@ -31,6 +32,10 @@ int main(int argc, char ** argv)
   auto_aim::Tracker tracker(config, solver);
   auto_aim::Planner planner(config);
 
+  // ⭐ 统计 tracker 状态分布（判断"track 耗时差异"是否来自状态不同）
+  std::map<std::string, int> state_count;
+  std::vector<double> trk_tracking;   // ⭐ 只统计 tracking 状态（去掉双峰影响）
+  std::map<int,int> armor_hist;       // ⭐ 每帧装甲板数量分布（判断输入是否一致）
   cv::Mat img;
   std::vector<double> det, trk, pln;
 
@@ -44,6 +49,11 @@ int main(int argc, char ** argv)
     auto armors = yolo.detect(img, n);
     auto t1 = std::chrono::steady_clock::now();
     auto targets = tracker.track(armors, t, /*use_enemy_color=*/false);
+    const auto t2trk = std::chrono::steady_clock::now();   // ⭐ track 结束时刻
+    armor_hist[static_cast<int>(armors.size())]++;   // ⭐ 记录输入规模
+    state_count[tracker.state()]++;
+    if (tracker.state() == "tracking")
+      trk_tracking.push_back(std::chrono::duration<double, std::micro>(t2trk - t1).count());
     auto t2 = std::chrono::steady_clock::now();
     if (!targets.empty()) planner.plan(targets.front(), 22.0);
     auto t3 = std::chrono::steady_clock::now();
@@ -63,17 +73,25 @@ int main(int argc, char ** argv)
     if (v.empty()) return;
     std::sort(v.begin(), v.end());
     double sum = 0; for (double x : v) sum += x;
-    std::printf("  %-8s n=%zu  mean=%6.0fus  median=%6.0fus  p90=%6.0fus\n", name, v.size(),
-                sum / v.size(), v[v.size() / 2], v[(size_t)(0.9 * (v.size() - 1))]);
+    const size_t n = v.size();
+    std::printf("  %-6s n=%3zu mean=%6.0f min=%6.0f p25=%6.0f med=%6.0f p75=%6.0f p90=%6.0f max=%7.0f\n",
+                name, n, sum / n, v[0], v[n/4], v[n/2], v[n*3/4], v[(size_t)(0.9*(n-1))], v[n-1]);
   };
   std::printf("  ---- 上游完整链路（debug=false，无 waitKey）----\n");
   report("det", det);
   report("track", trk);
   report("plan", pln);
+  std::printf("  ---- ⭐ 只算 tracking 状态的帧（去双峰）----\n");
+  report("trk_trk", trk_tracking);
   if (!det.empty()) {
     std::vector<double> tot(det.size());
     for (size_t i = 0; i < det.size(); ++i) tot[i] = det[i] + trk[i] + pln[i];
     report("TOTAL", tot);
   }
+  std::printf("  ---- 每帧装甲板数分布（输入规模）----\n    ");
+  for (const auto & [k, v] : armor_hist) std::printf("%d:%d  ", k, v);
+  std::printf("\n");
+  std::printf("  ---- tracker 状态分布 ----\n");
+  for (const auto & [k, v] : state_count) std::printf("    %-12s %d\n", k.c_str(), v);
   return 0;
 }

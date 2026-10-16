@@ -978,7 +978,12 @@ udevadm info -a -n /dev/ttyACM0 | grep -E '({serial}|{idVendor}|{idProduct})'   
 ├── core/                 契约层 + 业务角色
 │   ├── types.hpp         ⭐ 零依赖契约（Armor / Target / Command …）
 │   ├── debug.hpp         六层调试的数据面
-│   ├── auto_aim/         detector classifier solver tracker target planner trajectory shooter
+│   ├── auto_aim/         ⭐ **5 个器 + 4 个支撑件**（详见 docs/22 §2b）
+│   │                     【主干 5 个器】detector(①识别) → solver(②解算)
+│   │                                   → tracker(③跟踪) → planner(④规划)
+│   │                                   → ⑤下位机在 io/board/
+│   │                     【支撑 4 个】target(EKF 本体) trajectory(弹道×4)
+│   │                                 shooter(开火判据) classifier(数字分类)
 │   │                     （⚠️ W121 删除 controller/：`Controller::to_command()` 是死代码，
 │   │                        详见 docs/16；只保留 controller_debug.hpp 调试字段）
 │   └── auto_buff/        detector solver target planner
